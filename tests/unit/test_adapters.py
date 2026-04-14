@@ -4,6 +4,7 @@ from pathlib import Path
 
 from llm_wiki.adapters.base import AdapterRegistry, SourceAdapter
 from llm_wiki.adapters.markdown import MarkdownAdapter
+from llm_wiki.adapters.text import TextAdapter
 
 
 class TestMarkdownAdapter:
@@ -194,3 +195,115 @@ class TestAdapterRegistry:
 
         # Should have both
         assert len(registry.get_all_adapters()) == 2
+
+
+class TestTextAdapter:
+    """Tests for TextAdapter."""
+
+    def test_can_parse_txt_file(self):
+        """Test can_parse recognizes .txt files."""
+        assert TextAdapter.can_parse(Path("test.txt"))
+        assert TextAdapter.can_parse(Path("document.TXT"))
+
+    def test_can_parse_rejects_other_files(self):
+        """Test can_parse rejects non-text files."""
+        assert not TextAdapter.can_parse(Path("test.md"))
+        assert not TextAdapter.can_parse(Path("document.pdf"))
+        assert not TextAdapter.can_parse(Path("file.html"))
+
+    def test_extract_metadata_from_first_line(self, temp_dir: Path):
+        """Test extracting title from first line."""
+        adapter = TextAdapter()
+        filepath = temp_dir / "test.txt"
+        content = """My Great Title
+This is the body content.
+It has multiple lines."""
+
+        metadata = adapter.extract_metadata(filepath, content)
+
+        assert metadata["title"] == "My Great Title"
+        assert metadata["source_type"] == "text"
+        assert metadata["source_path"] == str(filepath)
+
+    def test_extract_metadata_from_filename(self, temp_dir: Path):
+        """Test falling back to filename for title."""
+        adapter = TextAdapter()
+        filepath = temp_dir / "my-document-name.txt"
+        # First line looks like body text (ends with period)
+        content = """This is a sentence that looks like body content.
+More content here."""
+
+        metadata = adapter.extract_metadata(filepath, content)
+
+        assert metadata["title"] == "My Document Name"
+
+    def test_extract_metadata_empty_file(self, temp_dir: Path):
+        """Test extracting metadata from empty file."""
+        adapter = TextAdapter()
+        filepath = temp_dir / "empty-file.txt"
+        content = ""
+
+        metadata = adapter.extract_metadata(filepath, content)
+
+        assert metadata["title"] == "Empty File"
+        assert metadata["source_type"] == "text"
+
+    def test_normalize_with_title_first_line(self, temp_dir: Path):
+        """Test normalizing text with title in first line."""
+        adapter = TextAdapter()
+        filepath = temp_dir / "test.txt"
+        content = """Document Title
+This is the content.
+More content here."""
+
+        result = adapter.normalize_to_markdown(filepath, content)
+
+        assert result.startswith("# Document Title")
+        assert "This is the content." in result
+        assert "More content here." in result
+
+    def test_normalize_without_title_first_line(self, temp_dir: Path):
+        """Test normalizing text when first line is not a title."""
+        adapter = TextAdapter()
+        filepath = temp_dir / "my-test.txt"
+        content = """This is the first sentence of content.
+And here is more."""
+
+        result = adapter.normalize_to_markdown(filepath, content)
+
+        # Should use filename as title
+        assert result.startswith("# My Test")
+        # Should include all content
+        assert "This is the first sentence of content." in result
+        assert "And here is more." in result
+
+    def test_normalize_empty_file(self, temp_dir: Path):
+        """Test normalizing empty file."""
+        adapter = TextAdapter()
+        filepath = temp_dir / "empty.txt"
+        content = ""
+
+        result = adapter.normalize_to_markdown(filepath, content)
+
+        # Empty file still gets a title from filename
+        assert result.startswith("# Empty")
+
+    def test_process_full_workflow(self, temp_dir: Path):
+        """Test complete processing workflow."""
+        adapter = TextAdapter()
+        filepath = temp_dir / "my-notes.txt"
+        filepath.write_text("""My Notes
+These are my notes.
+They have multiple lines.
+And paragraphs.""")
+
+        metadata, markdown = adapter.process(filepath)
+
+        # Check metadata
+        assert metadata["title"] == "My Notes"
+        assert metadata["source_type"] == "text"
+
+        # Check markdown
+        assert markdown.startswith("# My Notes")
+        assert "These are my notes." in markdown
+        assert "They have multiple lines." in markdown
