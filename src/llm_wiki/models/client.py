@@ -1,10 +1,21 @@
 """Model client abstraction for LLM providers."""
 
+import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, cast
+
+from openai import APIError, APITimeoutError, OpenAI, RateLimitError
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from llm_wiki.models.config import ModelProviderConfig
+
+logger = logging.getLogger(__name__)
 
 
 class ModelClientError(Exception):
@@ -79,6 +90,13 @@ class OpenAICompatibleClient(ModelClient):
         self.api_key = self._get_api_key()
         self.base_url = self._get_base_url()
 
+        # Initialize OpenAI client
+        self.client = OpenAI(
+            api_key=self.api_key or "dummy-key",  # Local providers don't need real key
+            base_url=self.base_url,
+            timeout=self.timeout,
+        )
+
     def _get_api_key(self) -> str | None:
         """Get API key from environment.
 
@@ -110,6 +128,63 @@ class OpenAICompatibleClient(ModelClient):
         }
         return base_urls.get(self.provider, os.environ.get("LLM_BASE_URL", ""))
 
+    @retry(
+        retry=retry_if_exception_type((RateLimitError, APITimeoutError, APIError)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True,
+    )
+    def _make_api_call(
+        self,
+        messages: list[dict[str, Any]],
+        response_format: dict[str, Any] | None = None,
+    ) -> str:
+        """Make API call with retries.
+
+        Args:
+            messages: List of message dicts
+            response_format: Optional response format
+
+        Returns:
+            Model response content
+
+        Raises:
+            ModelClientError: If request fails after retries
+        """
+        try:
+            logger.debug(f"Calling {self.provider} model {self.model}")
+
+            # Build request parameters
+            params: dict[str, Any] = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": self.temperature,
+                "max_tokens": self.max_tokens,
+            }
+
+            if response_format:
+                params["response_format"] = response_format
+
+            # Make API call
+            response = self.client.chat.completions.create(**params)
+
+            # Extract content from response
+            if not response.choices:
+                raise ModelClientError("No choices in response")
+
+            content = response.choices[0].message.content
+            if content is None:
+                raise ModelClientError("No content in response")
+
+            logger.debug(f"Received response: {len(content)} characters")
+            return cast(str, content)
+
+        except (RateLimitError, APITimeoutError, APIError) as e:
+            logger.warning(f"Retriable API error: {e}")
+            raise  # Will be retried by tenacity
+        except Exception as e:
+            raise ModelClientError(f"API request failed: {e}") from e
+
     def chat_completion(
         self,
         messages: list[dict[str, str]],
@@ -125,12 +200,9 @@ class OpenAICompatibleClient(ModelClient):
             Model response content
 
         Raises:
-            ModelClientError: If request fails or dependencies missing
+            ModelClientError: If request fails after retries
         """
-        raise NotImplementedError(
-            "OpenAI client implementation requires openai package. "
-            "This will be implemented when needed for extraction features."
-        )
+        return cast(str, self._make_api_call(messages, response_format))
 
     def validate_config(self) -> None:
         """Validate configuration.
