@@ -32,10 +32,11 @@ pip install -e .
 ### 3. Initialize Wiki Structure
 
 ```bash
-# Creates wiki_system/ with default structure
-mkdir -p wiki_system/{inbox,domains,index,exports,reports}
-mkdir -p wiki_system/domains/{general,tech}/pages
+# Use the CLI to create wiki_system/ with all required directories
+uv run llm-wiki init
 ```
+
+This creates the wiki structure based on your `config/domains.yaml`.
 
 ### 4. Configure Domains
 
@@ -43,13 +44,17 @@ Edit `config/domains.yaml` to define your domains:
 
 ```yaml
 domains:
-  general:
-    description: General knowledge and uncategorized content
-    model_override: null
+  - id: vulpine-solutions
+    title: Vulpine Solutions
+    description: MSP, operations, sales, security, client delivery
+    owners: [user]
+    promote_to_shared: true
 
-  tech:
-    description: Technology, programming, development
-    model_override: null
+  - id: general
+    title: General
+    description: Fallback bucket for unclassified content
+    owners: [system]
+    promote_to_shared: false
 
   # Add your custom domains here
 ```
@@ -92,11 +97,17 @@ Or use the ingest skill:
 
 ### Query Wiki
 
+Using CLI:
+```bash
+uv run llm-wiki search query "python"
+```
+
 Using Python:
 ```python
 from llm_wiki.query.search import WikiQuery
+from pathlib import Path
 
-wiki = WikiQuery()
+wiki = WikiQuery(wiki_base=Path("wiki_system"))
 results = wiki.search("python")
 
 for r in results:
@@ -110,14 +121,9 @@ Using the skill:
 
 ### Run Governance
 
-Check wiki quality:
+Check wiki quality using CLI:
 ```bash
-uv run python -c "
-from llm_wiki.daemon.jobs.governance import run_governance_check
-stats = run_governance_check()
-print(f'Lint issues: {stats[\"lint_issues\"]}')
-print(f'Stale pages: {stats[\"stale_pages\"]}')
-"
+uv run llm-wiki govern check
 ```
 
 Or use the skill:
@@ -125,20 +131,42 @@ Or use the skill:
 /govern
 ```
 
+Using Python:
+```python
+from llm_wiki.daemon.jobs.governance import GovernanceJob
+from pathlib import Path
+
+job = GovernanceJob(wiki_base=Path("wiki_system"))
+stats = job.execute()
+print(f'Lint issues: {stats["lint_issues"]}')
+print(f'Stale pages: {stats["stale_pages"]}')
+```
+
 ### Export Content
 
-Generate exports:
+Generate exports using CLI:
 ```bash
-uv run python -c "
-from llm_wiki.daemon.jobs.export import run_export_job
-stats = run_export_job()
-print(f'Exported to: {stats[\"llmstxt_path\"]}')
-"
+# Export all formats
+uv run llm-wiki export all
+
+# Export specific format
+uv run llm-wiki export llmstxt
+uv run llm-wiki export graph
 ```
 
 Or use the skill:
 ```bash
 /export
+```
+
+Using Python:
+```python
+from llm_wiki.daemon.jobs.export import ExportJob
+from pathlib import Path
+
+job = ExportJob(wiki_base=Path("wiki_system"))
+stats = job.execute()
+print(f'Exported to: {stats["llmstxt_path"]}')
 ```
 
 ## Configuration
@@ -260,12 +288,18 @@ uv run pytest --cache-clear
 
 ### Issue: Stale indexes
 
-**Solution**: Rebuild indexes:
+**Solution**: Rebuild indexes using CLI:
 ```bash
-uv run python -c "
-from llm_wiki.daemon.jobs.index_rebuild import run_index_rebuild
-run_index_rebuild()
-"
+uv run llm-wiki govern rebuild-index
+```
+
+Or using Python:
+```python
+from llm_wiki.daemon.jobs.index_rebuild import IndexRebuildJob
+from pathlib import Path
+
+job = IndexRebuildJob(wiki_base=Path("wiki_system"))
+job.execute()
 ```
 
 ## Agent Integration
@@ -286,13 +320,16 @@ Use the Python API directly:
 ```python
 from llm_wiki.query.search import WikiQuery
 from llm_wiki.export.llmstxt import LLMSTxtExporter
+from pathlib import Path
+
+wiki_base = Path("wiki_system")
 
 # Query
-wiki = WikiQuery()
+wiki = WikiQuery(wiki_base=wiki_base)
 results = wiki.search("topic")
 
 # Export for agent context
-exporter = LLMSTxtExporter()
+exporter = LLMSTxtExporter(wiki_base=wiki_base)
 llmstxt_path = exporter.export_all()
 ```
 

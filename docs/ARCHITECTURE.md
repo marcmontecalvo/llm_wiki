@@ -16,7 +16,7 @@ System architecture and design overview.
 │       ▼               ▼                 ▼               ▼        │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │              Federated Wiki Storage                      │  │
-│  │  (domains/general/, domains/tech/, domains/homelab/)     │  │
+│  │  (domains configured in config/domains.yaml)             │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                                   │
 │  ┌──────────────────────────────────────────────────────────┐  │
@@ -187,11 +187,20 @@ queue/ → extract metadata → extract entities/concepts → enrich → pages/
 ```
 wiki_system/
 ├── inbox/              # Drop zone for new files
-├── domains/            # Domain-specific wikis
-│   ├── general/
+├── domains/            # Domain-specific wikis (configured in config/domains.yaml)
+│   ├── vulpine-solutions/
 │   │   ├── queue/      # Pending extraction
 │   │   └── pages/      # Active wiki pages
-│   └── tech/
+│   ├── home-assistant/
+│   │   ├── queue/
+│   │   └── pages/
+│   ├── homelab/
+│   │   ├── queue/
+│   │   └── pages/
+│   ├── personal/
+│   │   ├── queue/
+│   │   └── pages/
+│   └── general/
 │       ├── queue/
 │       └── pages/
 ├── index/              # Search indexes
@@ -201,8 +210,10 @@ wiki_system/
 │   ├── llms.txt
 │   ├── graph.json
 │   └── sitemap.xml
-└── reports/            # Governance reports
-    └── governance_*.md
+├── reports/            # Governance reports
+│   └── governance_*.md
+├── logs/               # Daemon logs
+└── state/              # System state
 ```
 
 ## Configuration
@@ -348,9 +359,10 @@ class CustomExporter:
 ## Future Enhancements
 
 See `IMPLEMENTATION_STATUS.md` for planned features:
-- Daemon scheduler (#51)
-- Contradiction detection (#52)
-- Review queue (#53)
-- Claims/relationships extraction
-- Backlink tracking
-- Promotion logic
+- Enhanced daemon scheduler (#82)
+- Contradiction detection (#70)
+- Review queue (#71)
+- Claims extraction (#66)
+- Relationships extraction (#67)
+- Backlink tracking (#69)
+- Promotion logic (#68)
