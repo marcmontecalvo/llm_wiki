@@ -1,5 +1,9 @@
 # Agent Boot Report
 
+> **⚠️ HISTORICAL DOCUMENT**
+> This document was generated during initial project bootstrap.
+> See [ARCHITECTURE.md](ARCHITECTURE.md) for current system architecture.
+
 Generated: 2026-04-13
 
 ## Architecture Summary

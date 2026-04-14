@@ -1,5 +1,9 @@
 # Repo Review Notes
 
+> **⚠️ HISTORICAL DOCUMENT**
+> This document contains initial research notes from project planning.
+> The system has since been implemented. See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for current status.
+
 These are the short takeaways that drove this plan.
 
 ## Labhund/llm-wiki
