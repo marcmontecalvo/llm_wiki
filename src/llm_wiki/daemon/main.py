@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from llm_wiki.config.loader import load_config
+from llm_wiki.daemon.logging_config import setup_logging
 from llm_wiki.daemon.scheduler import JobScheduler
 from llm_wiki.daemon.workers import WorkerPool
 
@@ -160,19 +161,14 @@ def run_daemon(config_dir: Path | str = "config") -> NoReturn:
     Raises:
         SystemExit: On shutdown
     """
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-
     logger.info("Initializing wiki daemon...")
 
     try:
         daemon = WikiDaemon(config_dir)
+
+        # Configure logging with daemon config
+        setup_logging(daemon.config.daemon.daemon)
+
         daemon.start()
         daemon.run()
 

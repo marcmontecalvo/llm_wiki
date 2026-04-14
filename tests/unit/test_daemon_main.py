@@ -171,12 +171,21 @@ class TestRunDaemon:
 
     def test_run_daemon_basic_logging(self, temp_config_dir: Path, caplog):
         """Test run_daemon configures logging."""
+        from llm_wiki.models.config import DaemonConfig, DaemonYAML
+
         caplog.set_level(logging.INFO)
 
         with patch("llm_wiki.daemon.main.WikiDaemon") as mock_daemon_class:
             mock_daemon = Mock()
             mock_daemon_class.return_value = mock_daemon
             mock_daemon.start.return_value = None
+
+            # Mock config structure properly
+            daemon_config = DaemonConfig(log_level="INFO")
+            daemon_yaml = DaemonYAML(daemon=daemon_config)
+            wiki_config = Mock()
+            wiki_config.daemon = daemon_yaml
+            mock_daemon.config = wiki_config
 
             # Mock run to exit with SystemExit(0)
             def mock_run():
