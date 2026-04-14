@@ -103,18 +103,6 @@ class TestOpenAICompatibleClient:
             with pytest.raises(ModelClientError, match="No base URL"):
                 client.validate_config()
 
-    def test_chat_completion_not_implemented(self):
-        """Test chat_completion raises NotImplementedError for v1."""
-        config = ModelProviderConfig(
-            provider="ollama",
-            model="llama2",
-            temperature=0.1,
-        )
-        client = OpenAICompatibleClient(config)
-
-        with pytest.raises(NotImplementedError, match="openai package"):
-            client.chat_completion([{"role": "user", "content": "test"}])
-
     def test_config_properties(self):
         """Test client properly stores config properties."""
         config = ModelProviderConfig(
