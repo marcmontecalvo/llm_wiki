@@ -1,10 +1,11 @@
 """Normalization pipeline for source file ingestion."""
 
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from llm_wiki.adapters.base import AdapterRegistry
 from llm_wiki.config.loader import load_config
+from llm_wiki.ingest.router import DomainRouter
 from llm_wiki.utils.frontmatter import write_frontmatter
 from llm_wiki.utils.id_gen import generate_page_id
 
@@ -25,6 +26,7 @@ class NormalizationPipeline:
         """
         self.adapter_registry = adapter_registry
         self.config = load_config(config_dir or Path("config"))
+        self.router = DomainRouter(self.config)
 
     def _determine_domain(self, metadata: dict[str, Any]) -> str:
         """Determine target domain for content.
@@ -35,22 +37,7 @@ class NormalizationPipeline:
         Returns:
             Domain ID to route content to
         """
-        # Check for explicit domain override in frontmatter
-        if "domain" in metadata:
-            domain = cast(str, metadata["domain"])
-            # Validate it exists in configured domains
-            valid_domains = {d.id for d in self.config.domains.domains}
-            if domain in valid_domains:
-                return domain
-
-        # Check source_path against routing rules
-        source_path = metadata.get("source_path", "")
-        for rule in self.config.routing.routing.source_rules:
-            if rule.match in source_path:
-                return rule.default_domain
-
-        # Fall back to configured fallback domain
-        return self.config.routing.routing.fallback_domain
+        return self.router.route(metadata)
 
     def process_file(self, filepath: Path) -> Path:
         """Process a source file through normalization pipeline.
