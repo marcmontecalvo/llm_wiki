@@ -1,6 +1,7 @@
 """Command-line interface for llm-wiki."""
 
 import click
+
 from llm_wiki import __version__
 
 
