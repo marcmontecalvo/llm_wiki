@@ -1,5 +1,7 @@
 """Command-line interface for llm-wiki."""
 
+from pathlib import Path
+
 import click
 
 from llm_wiki import __version__
@@ -20,10 +22,18 @@ def init():
 
 
 @main.command()
-def daemon():
+@click.option(
+    "--config-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default="config",
+    help="Path to configuration directory",
+)
+def daemon(config_dir: Path):
     """Start the wiki daemon."""
-    click.echo("Starting daemon...")
-    click.echo("Not yet implemented - coming in Epic 4")
+    from llm_wiki.daemon.main import run_daemon
+
+    click.echo(f"Starting daemon with config from {config_dir}...")
+    run_daemon(config_dir)
 
 
 if __name__ == "__main__":
