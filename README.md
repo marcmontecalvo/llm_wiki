@@ -62,8 +62,9 @@ src/
 wiki_system/
   inbox/          # raw unclassified inputs
   domains/        # per-domain wiki spaces
-  shared/         # shared concepts/entities/policies
-  exports/        # llms.txt, json, graph, rss, sitemap
+  index/          # search indexes (metadata, fulltext)
+  exports/        # llms.txt, json, graph, sitemap
+  reports/        # governance reports
   logs/           # daemon logs, ingest logs, decisions
   state/          # queue state, checkpoints, worker state
 config/
@@ -101,15 +102,45 @@ Recommended initial domains:
 
 Do **not** start with 20 domains. Start with 4-6.
 
-## Build order
+## Current Status
+
+**✅ v0.1.0 - Core system complete!**
+
+See `docs/IMPLEMENTATION_STATUS.md` for detailed status.
+
+- 534 tests (93% coverage)
+- Full CLI interface (`llm-wiki --help`)
+- Complete ingestion, search, governance, and export pipeline
+- CI/CD with GitHub Actions
+
+## Getting Started
+
+```bash
+# Install dependencies
+uv sync
+
+# Initialize wiki
+uv run llm-wiki init
+
+# Run tests
+uv run pytest
+
+# Start daemon
+uv run llm-wiki daemon
+```
+
+See `docs/SETUP.md` for detailed setup instructions.
+
+## Build order (for understanding architecture)
 
 Read these in order:
-1. `overview.md`
-2. `roadmap.md`
-3. `implementation_step_1.md`
-4. `implementation_step_2.md`
-5. `implementation_step_3.md`
-6. `implementation_step_4.md`
+1. `docs/overview.md`
+2. `docs/roadmap.md`
+3. `docs/implementation_step_1.md`
+4. `docs/implementation_step_2.md`
+5. `docs/implementation_step_3.md`
+6. `docs/implementation_step_4.md`
+7. `docs/IMPLEMENTATION_STATUS.md` (current state)
 
 ## Non-goals for v1
 

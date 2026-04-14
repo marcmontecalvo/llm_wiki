@@ -26,7 +26,7 @@ Example: See [[python-programming]] for details.
 ### Cross-Domain Links
 ```markdown
 Links work across domains automatically.
-[[tech/api-design]] and [[api-design]] both work if ID is unique.
+[[vulpine-solutions/api-design]] and [[api-design]] both work if ID is unique.
 ```
 
 ### Backlinks
@@ -41,7 +41,7 @@ Links work across domains automatically.
 ---
 id: page-id              # Unique identifier
 title: Page Title        # Human-readable title
-domain: domain-name      # Domain (general, tech, etc.)
+domain: domain-name      # Domain (see config/domains.yaml)
 ---
 ```
 
@@ -74,11 +74,12 @@ related_pages:           # Explicit relationships
 ## Domain Boundaries
 
 ### Domain Purpose
-- **general**: Default, uncategorized content
-- **tech**: Technology, programming, development
-- **homelab**: Infrastructure, self-hosting
-- **personal**: Private notes, tasks
-- **{custom}**: Domain-specific content
+See `config/domains.yaml` for complete list. Example domains:
+- **vulpine-solutions**: MSP, operations, sales, security, client delivery
+- **home-assistant**: Automation, voice assistant, ESP32, local AI, sensors
+- **homelab**: Proxmox, k3s, storage, networking, GPUs, services
+- **personal**: Family logistics, hobbies, plans, notes
+- **general**: Fallback bucket for unclassified or low-confidence content
 
 ### Routing Rules
 1. Explicit domain in frontmatter (highest priority)
@@ -192,9 +193,9 @@ Content goes here...
 ```python
 results = wiki.search(
     query="search terms",
-    domain="tech",       # Optional filter
-    kind="entity",       # Optional filter
-    tags=["python"],     # Optional filter
+    domain="vulpine-solutions",  # Optional filter
+    kind="entity",               # Optional filter
+    tags=["python"],             # Optional filter
     limit=10
 )
 ```
@@ -208,7 +209,7 @@ pages = wiki.find_by_tag("python")
 entities = wiki.find_by_kind("entity")
 
 # By domain
-tech_pages = wiki.find_by_domain("tech")
+tech_pages = wiki.find_by_domain("vulpine-solutions")
 
 # Get specific page
 page = wiki.get_page("page-id")
