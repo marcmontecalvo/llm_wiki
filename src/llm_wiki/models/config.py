@@ -1,7 +1,9 @@
 """Configuration schemas using Pydantic."""
 
+from pathlib import Path
 from typing import Literal
 
+import yaml
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -135,6 +137,22 @@ class ModelsYAML(BaseModel):
         default_factory=ContractsConfig, description="Validation contracts"
     )
 
+    def get_provider(self, purpose: str = "extraction") -> ModelProviderConfig:
+        """Get model provider config for a specific purpose.
+
+        Args:
+            purpose: Model purpose (extraction, integration, lint, etc.)
+
+        Returns:
+            Model provider config
+
+        Raises:
+            KeyError: If purpose not found in config
+        """
+        if purpose not in self.models:
+            raise KeyError(f"No model configured for purpose: {purpose}")
+        return self.models[purpose]
+
 
 class WikiConfig(BaseModel):
     """Complete wiki configuration loaded from all YAML files."""
@@ -143,3 +161,25 @@ class WikiConfig(BaseModel):
     daemon: DaemonYAML
     routing: RoutingYAML
     models: ModelsYAML
+
+
+def load_models_config(filepath: Path) -> ModelsYAML:
+    """Load models configuration from YAML file.
+
+    Args:
+        filepath: Path to models.yaml
+
+    Returns:
+        Parsed models configuration
+
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        ValueError: If YAML is invalid
+    """
+    if not filepath.exists():
+        raise FileNotFoundError(f"Models config not found: {filepath}")
+
+    with filepath.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    return ModelsYAML.model_validate(data)
