@@ -1,6 +1,60 @@
 """Extraction schemas for model-generated structured data."""
 
+from dataclasses import dataclass, field
+
 from pydantic import BaseModel, Field
+
+
+@dataclass
+class Claim:
+    """Simple claim representation for page storage.
+
+    This is a lighter-weight version of ClaimExtraction for storing in page metadata.
+    """
+
+    text: str  # The claim statement
+    source_ref: str  # Where in content this came from (e.g., "section 2, paragraph 1")
+    confidence: float  # 0.0-1.0 confidence score
+    page_id: str  # Which page this claim is on
+    evidence: str | None = None  # Supporting evidence/context
+    temporal_context: str | None = None  # When this claim is/was true
+    qualifiers: list[str] = field(default_factory=list)  # Conditions on the claim
+
+    def to_dict(self) -> dict:
+        """Convert claim to dictionary for YAML serialization.
+
+        Returns:
+            Dictionary representation of the claim
+        """
+        return {
+            "text": self.text,
+            "source_ref": self.source_ref,
+            "confidence": self.confidence,
+            "page_id": self.page_id,
+            "evidence": self.evidence,
+            "temporal_context": self.temporal_context,
+            "qualifiers": self.qualifiers,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Claim":
+        """Create claim from dictionary.
+
+        Args:
+            data: Dictionary with claim data
+
+        Returns:
+            Claim instance
+        """
+        return cls(
+            text=data["text"],
+            source_ref=data["source_ref"],
+            confidence=data["confidence"],
+            page_id=data["page_id"],
+            evidence=data.get("evidence"),
+            temporal_context=data.get("temporal_context"),
+            qualifiers=data.get("qualifiers", []),
+        )
 
 
 class EntityExtraction(BaseModel):
