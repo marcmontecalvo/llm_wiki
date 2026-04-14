@@ -1,0 +1,10 @@
+daemon:
+  inbox_poll_seconds: 15
+  retry_failed_ingests_every_minutes: 30
+  rebuild_index_every_minutes: 30
+  lint_every_minutes: 60
+  stale_check_every_hours: 24
+  export_every_minutes: 60
+  max_parallel_jobs: 2
+  log_level: INFO
+  review_queue_enabled: true

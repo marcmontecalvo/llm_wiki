@@ -1,0 +1,16 @@
+models:
+  extraction:
+    provider: local
+    model: CHANGE_ME
+    temperature: 0.1
+  integration:
+    provider: local
+    model: CHANGE_ME
+    temperature: 0.1
+  lint:
+    provider: local
+    model: CHANGE_ME
+    temperature: 0.0
+contracts:
+  require_schema_validation: true
+  allow_freeform_page_writes: false

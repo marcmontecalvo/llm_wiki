@@ -1,0 +1,15 @@
+routing:
+  fallback_domain: general
+  confidence_threshold: 0.75
+  explicit_override_frontmatter_key: domain
+  source_rules:
+    - match: ".claude"
+      default_domain: general
+    - match: ".codex"
+      default_domain: general
+    - match: "home-assistant"
+      default_domain: home-assistant
+    - match: "vulpine"
+      default_domain: vulpine-solutions
+    - match: "proxmox"
+      default_domain: homelab

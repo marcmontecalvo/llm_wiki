@@ -1,0 +1,26 @@
+domains:
+  - id: vulpine-solutions
+    title: Vulpine Solutions
+    description: MSP, operations, sales, security, client delivery
+    owners: [user]
+    promote_to_shared: true
+  - id: home-assistant
+    title: Home Assistant
+    description: automation, voice assistant, ESP32, local AI, sensors
+    owners: [user]
+    promote_to_shared: true
+  - id: homelab
+    title: Homelab
+    description: proxmox, k3s, storage, networking, GPUs, services
+    owners: [user]
+    promote_to_shared: true
+  - id: personal
+    title: Personal
+    description: family logistics, hobbies, plans, notes
+    owners: [user]
+    promote_to_shared: false
+  - id: general
+    title: General
+    description: fallback bucket for unclassified or low-confidence content
+    owners: [system]
+    promote_to_shared: false
