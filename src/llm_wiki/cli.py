@@ -393,6 +393,66 @@ def govern_contradictions(wiki_base: Path, min_confidence: float, output: Path |
         raise click.Abort() from e
 
 
+@govern.command("duplicates")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+@click.option(
+    "--min-score",
+    type=float,
+    default=0.3,
+    help="Minimum duplicate score threshold (0.0-1.0)",
+)
+@click.option(
+    "--output",
+    type=click.Path(path_type=Path),
+    help="Output file for report (defaults to wiki_system/reports/)",
+)
+def govern_duplicates(wiki_base: Path, min_score: float, output: Path | None):
+    """Detect and report duplicate entity pages."""
+    from llm_wiki.governance.duplicates import DuplicateDetector
+
+    click.echo("Detecting duplicate entities in wiki...")
+
+    try:
+        detector = DuplicateDetector(min_score=min_score, wiki_base=wiki_base)
+        report = detector.analyze_all_pages(wiki_base)
+
+        click.echo(f"\n✓ Detected {report.total_candidates} potential duplicates")
+        click.echo(f"  - High confidence: {len(report.high_confidence)}")
+        click.echo(f"  - Medium confidence: {len(report.medium_confidence)}")
+        click.echo(f"  - Low confidence: {len(report.low_confidence)}")
+
+        # Generate report
+        if output:
+            report_path = output
+        else:
+            from datetime import UTC, datetime
+
+            timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+            report_path = wiki_base / "reports" / f"duplicates_{timestamp}.md"
+
+        detector.generate_report(report, report_path)
+
+        click.echo(f"\n✓ Report saved: {report_path}")
+
+        # Print high confidence duplicates
+        if report.high_confidence:
+            click.echo("\nHigh Confidence Duplicates:")
+            for candidate in report.high_confidence[:10]:
+                click.echo(f"\n  {candidate.page_1} ↔ {candidate.page_2}")
+                click.echo(f"    Score: {candidate.duplicate_score:.3f}")
+                click.echo(f"    Action: {candidate.suggested_action}")
+                click.echo(f"    Reasons: {', '.join(candidate.reasons[:2])}")
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort() from e
+
+
 @govern.command("rebuild-index")
 @click.option(
     "--wiki-base",
