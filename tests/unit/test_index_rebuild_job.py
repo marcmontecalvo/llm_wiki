@@ -200,3 +200,46 @@ Content
         assert result["status"] == "success"
         assert result["metadata_count"] == 0
         assert result["fulltext_count"] == 0
+        assert result["backlink_count"] == 0
+
+    def test_execute_rebuilds_backlink_index(self, job: IndexRebuildJob, wiki_base: Path):
+        """Test that execute rebuilds the backlink index."""
+        pages_dir = wiki_base / "domains" / "general" / "pages"
+
+        page1 = pages_dir / "page1.md"
+        page1.write_text("---\nid: page1\ntitle: Page 1\n---\n\nLinks to [[page2]].\n")
+
+        page2 = pages_dir / "page2.md"
+        page2.write_text("---\nid: page2\ntitle: Page 2\n---\n\nLinks to [[page1]].\n")
+
+        result = job.execute()
+
+        assert result["status"] == "success"
+        assert result["backlink_count"] == 2
+
+        # Verify backlinks were written to disk
+        index_file = wiki_base / "index" / "backlinks.json"
+        assert index_file.exists()
+
+        # Verify content is correct
+        assert "page2" in job.backlink_index.get_forward_links("page1")
+        assert "page1" in job.backlink_index.get_backlinks("page2")
+
+    def test_execute_returns_backlink_count(self, job: IndexRebuildJob, wiki_base: Path):
+        """Test that execute returns backlink_count in result."""
+        result = job.execute()
+
+        assert "backlink_count" in result
+
+    def test_execute_with_broken_links(self, job: IndexRebuildJob, wiki_base: Path):
+        """Test that rebuild detects broken links."""
+        pages_dir = wiki_base / "domains" / "general" / "pages"
+
+        page = pages_dir / "page.md"
+        page.write_text("---\nid: page\ntitle: Page\n---\n\nLinks to [[nonexistent]].\n")
+
+        result = job.execute()
+
+        assert result["status"] == "success"
+        broken = job.backlink_index.get_broken_links("page")
+        assert "nonexistent" in broken

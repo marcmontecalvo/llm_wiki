@@ -9,6 +9,7 @@ from llm_wiki.extraction.enrichment import PageEnricher
 from llm_wiki.extraction.entities import EntityExtractor
 from llm_wiki.extraction.relationships import RelationshipExtractor
 from llm_wiki.extraction.service import ContentExtractor
+from llm_wiki.index.backlinks import BacklinkIndex
 from llm_wiki.models.client import ModelClient, create_model_client
 from llm_wiki.models.config import load_models_config
 
@@ -46,6 +47,10 @@ class ExtractionPipeline:
         self.concept_extractor = ConceptExtractor(client)
         self.relationship_extractor = RelationshipExtractor(client)
         self.enricher = PageEnricher()
+
+        # Initialize backlink index
+        self.backlinks = BacklinkIndex(index_dir=self.wiki_base / "index")
+        self.backlinks.load()
 
     def process_queue(self, domain: str) -> dict[str, int]:
         """Process all files in a domain's queue.
@@ -124,6 +129,11 @@ class ExtractionPipeline:
         shutil.move(str(filepath), str(target_path))
 
         logger.info(f"Moved {filepath.name} to {domain}/pages/")
+
+        # Update backlink index
+        page_id = metadata.get("id", filepath.stem)
+        self.backlinks.add_page_links(page_id, body)
+        self.backlinks.save()
 
     def process_all_queues(self) -> dict[str, dict[str, int]]:
         """Process all domain queues.

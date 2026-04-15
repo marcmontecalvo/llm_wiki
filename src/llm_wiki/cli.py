@@ -183,6 +183,50 @@ def search_get(page_id: str, wiki_base: Path):
         click.echo(f"Source: {page['source']}")
 
 
+@search.command("backlinks")
+@click.argument("page_id")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def search_backlinks(page_id: str, wiki_base: Path):
+    """Show all pages that link to a given page."""
+    from llm_wiki.index.backlinks import BacklinkIndex
+
+    index = BacklinkIndex(index_dir=wiki_base / "index")
+    index.load()
+
+    if page_id not in index.index:
+        click.echo(f"Page '{page_id}' not found in backlink index.")
+        click.echo("Run 'llm-wiki govern rebuild-index' to refresh the index.")
+        return
+
+    backlinks = index.get_backlinks(page_id)
+    forward_links = index.get_forward_links(page_id)
+    broken_links = index.get_broken_links(page_id)
+
+    click.echo(f"Link information for: {page_id}\n")
+
+    if backlinks:
+        click.echo(f"Backlinks ({len(backlinks)} pages link here):")
+        for src in backlinks:
+            click.echo(f"  <- {src}")
+    else:
+        click.echo("Backlinks: none (orphan page)")
+
+    if forward_links:
+        click.echo(f"\nForward links ({len(forward_links)} outgoing):")
+        for tgt in forward_links:
+            click.echo(f"  -> {tgt}")
+
+    if broken_links:
+        click.echo(f"\nBroken links ({len(broken_links)} unresolved):")
+        for broken in broken_links:
+            click.echo(f"  !! {broken}")
+
+
 @main.group()
 def ingest():
     """Ingest content into the wiki."""
@@ -473,8 +517,9 @@ def govern_rebuild_index(wiki_base: Path):
     job = IndexRebuildJob(wiki_base=wiki_base)
     stats = job.execute()
 
-    click.echo(f"\n✓ Metadata index: {stats.get('metadata_pages', 0)} pages")
-    click.echo(f"✓ Fulltext index: {stats.get('fulltext_documents', 0)} documents")
+    click.echo(f"\n✓ Metadata index: {stats.get('metadata_count', 0)} pages")
+    click.echo(f"✓ Fulltext index: {stats.get('fulltext_count', 0)} documents")
+    click.echo(f"✓ Backlink index: {stats.get('backlink_count', 0)} pages")
 
 
 @main.group()

@@ -176,3 +176,63 @@ kind: page
 
         assert "concepts:" in content
         assert "Service independence" in content
+
+    def test_process_file_updates_backlink_index(
+        self, pipeline: ExtractionPipeline, mock_client: Mock, temp_dir: Path
+    ):
+        """Test that processing a file updates the backlink index."""
+        queue_dir = temp_dir / "wiki_system/domains/general/queue"
+        queue_dir.mkdir(parents=True)
+
+        test_file = queue_dir / "my-page.md"
+        test_file.write_text(
+            """---
+id: my-page
+title: My Page
+---
+
+Links to [[other-page]] and [[another-page]].
+"""
+        )
+
+        mock_client.chat_completion.side_effect = [
+            "page",
+            '["test"]',
+            "A test page",
+        ]
+
+        pipeline.process_queue("general")
+
+        # Backlink index should have the forward links recorded
+        forward_links = pipeline.backlinks.get_forward_links("my-page")
+        assert "other-page" in forward_links
+        assert "another-page" in forward_links
+
+        # Targets should have my-page as a backlink
+        assert "my-page" in pipeline.backlinks.get_backlinks("other-page")
+        assert "my-page" in pipeline.backlinks.get_backlinks("another-page")
+
+    def test_process_file_saves_backlink_index(
+        self, pipeline: ExtractionPipeline, mock_client: Mock, temp_dir: Path
+    ):
+        """Test that backlink index is persisted after processing."""
+        queue_dir = temp_dir / "wiki_system/domains/general/queue"
+        queue_dir.mkdir(parents=True)
+
+        test_file = queue_dir / "page-a.md"
+        test_file.write_text("---\nid: page-a\ntitle: Page A\n---\n\nLinks to [[page-b]].\n")
+
+        mock_client.chat_completion.side_effect = ["page", '["test"]', "Summary"]
+
+        pipeline.process_queue("general")
+
+        # Index file should be written to disk
+        index_file = temp_dir / "wiki_system" / "index" / "backlinks.json"
+        assert index_file.exists()
+
+        # Load a fresh index and verify data persisted
+        from llm_wiki.index.backlinks import BacklinkIndex
+
+        fresh_index = BacklinkIndex(index_dir=temp_dir / "wiki_system" / "index")
+        fresh_index.load()
+        assert "page-b" in fresh_index.get_forward_links("page-a")
