@@ -7,6 +7,7 @@ from pathlib import Path
 from llm_wiki.extraction.concepts import ConceptExtractor
 from llm_wiki.extraction.enrichment import PageEnricher
 from llm_wiki.extraction.entities import EntityExtractor
+from llm_wiki.extraction.relationships import RelationshipExtractor
 from llm_wiki.extraction.service import ContentExtractor
 from llm_wiki.models.client import ModelClient, create_model_client
 from llm_wiki.models.config import load_models_config
@@ -43,6 +44,7 @@ class ExtractionPipeline:
         self.content_extractor = ContentExtractor(client, self.config_dir)
         self.entity_extractor = EntityExtractor(client)
         self.concept_extractor = ConceptExtractor(client)
+        self.relationship_extractor = RelationshipExtractor(client)
         self.enricher = PageEnricher()
 
     def process_queue(self, domain: str) -> dict[str, int]:
@@ -96,18 +98,23 @@ class ExtractionPipeline:
         # Extract metadata
         extracted_metadata = self.content_extractor.extract_metadata(filepath)
 
-        # Extract entities and concepts (only for entity/concept pages)
+        # Extract entities, concepts, and relationships (only for entity/concept pages)
         entities = None
         concepts = None
+        relationships = None
 
         page_kind = extracted_metadata.get("kind", "page")
         if page_kind == "entity":
             entities = self.entity_extractor.extract_entities(body, metadata)
+            relationships = self.relationship_extractor.extract_relationships_with_context(
+                body, metadata, entities
+            )
         elif page_kind == "concept":
             concepts = self.concept_extractor.extract_concepts(body, metadata)
+            relationships = self.relationship_extractor.extract_relationships(body, metadata)
 
         # Enrich the page
-        self.enricher.enrich_page(filepath, extracted_metadata, entities, concepts)
+        self.enricher.enrich_page(filepath, extracted_metadata, entities, concepts, relationships)
 
         # Move to active wiki
         active_dir = self.wiki_base / "domains" / domain / "pages"

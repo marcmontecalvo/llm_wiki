@@ -18,6 +18,7 @@ class PageEnricher:
         extracted_metadata: dict[str, Any],
         entities: list[dict[str, Any]] | None = None,
         concepts: list[dict[str, Any]] | None = None,
+        relationships: list[dict[str, Any]] | None = None,
     ) -> Path:
         """Enrich a page with extracted metadata.
 
@@ -26,6 +27,7 @@ class PageEnricher:
             extracted_metadata: Metadata from ContentExtractor
             entities: Extracted entities (optional)
             concepts: Extracted concepts (optional)
+            relationships: Extracted relationships (optional)
 
         Returns:
             Path to enriched page
@@ -40,7 +42,7 @@ class PageEnricher:
 
             # Merge metadata (existing takes precedence for most fields)
             enriched_metadata = self._merge_metadata(
-                existing_metadata, extracted_metadata, entities, concepts
+                existing_metadata, extracted_metadata, entities, concepts, relationships
             )
 
             # Write enriched page
@@ -60,6 +62,7 @@ class PageEnricher:
         extracted: dict[str, Any],
         entities: list[dict[str, Any]] | None,
         concepts: list[dict[str, Any]] | None,
+        relationships: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Merge existing and extracted metadata.
 
@@ -68,6 +71,7 @@ class PageEnricher:
             extracted: Extracted metadata
             entities: Extracted entities
             concepts: Extracted concepts
+            relationships: Extracted relationships
 
         Returns:
             Merged metadata dictionary
@@ -95,6 +99,10 @@ class PageEnricher:
         # Add concepts if extracted
         if concepts:
             merged["concepts"] = concepts
+
+        # Add relationships if extracted
+        if relationships:
+            merged["relationships"] = relationships
 
         # Update status
         merged["status"] = "enriched"
