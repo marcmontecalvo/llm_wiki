@@ -276,13 +276,34 @@ def govern():
     default="wiki_system",
     help="Path to wiki base directory",
 )
-def govern_check(wiki_base: Path):
+@click.option(
+    "--with-contradictions",
+    is_flag=True,
+    help="Include contradiction detection (requires LLM client)",
+)
+def govern_check(wiki_base: Path, with_contradictions: bool):
     """Run governance checks and generate report."""
     from llm_wiki.daemon.jobs.governance import GovernanceJob
 
     click.echo("Running governance checks...")
 
-    job = GovernanceJob(wiki_base=wiki_base)
+    client = None
+    if with_contradictions:
+        try:
+            from llm_wiki.models.client import create_model_client
+            from llm_wiki.models.config import ModelProviderConfig
+
+            # Create default config for local LLM
+            config = ModelProviderConfig(
+                provider="ollama",
+                model="llama3.2:3b",
+            )
+            client = create_model_client(config)
+            click.echo("Using LLM client for contradiction detection...")
+        except Exception as e:
+            click.echo(f"Warning: Could not initialize LLM client: {e}", err=True)
+
+    job = GovernanceJob(wiki_base=wiki_base, client=client)
     stats = job.execute()
 
     click.echo("\n" + "=" * 60)
@@ -295,8 +316,81 @@ def govern_check(wiki_base: Path):
     click.echo(f"Stale pages: {stats.get('stale_pages', 0)}")
     click.echo(f"Low quality pages: {stats.get('low_quality_pages', 0)}")
 
+    if stats.get("contradictions", 0) > 0:
+        click.echo(f"Contradictions found: {stats['contradictions']}")
+
     if "report_path" in stats:
         click.echo(f"\n✓ Full report: {stats['report_path']}")
+
+
+@govern.command("contradictions")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+@click.option(
+    "--min-confidence",
+    type=float,
+    default=0.6,
+    help="Minimum confidence threshold (0.0-1.0)",
+)
+@click.option(
+    "--output",
+    type=click.Path(path_type=Path),
+    help="Output file for report (defaults to wiki_system/reports/)",
+)
+def govern_contradictions(wiki_base: Path, min_confidence: float, output: Path | None):
+    """Detect and report contradictions across pages."""
+    from llm_wiki.governance.contradictions import ContradictionDetector
+    from llm_wiki.models.client import create_model_client
+    from llm_wiki.models.config import ModelProviderConfig
+
+    click.echo("Detecting contradictions in wiki...")
+
+    try:
+        # Create default config for local LLM
+        config = ModelProviderConfig(
+            provider="ollama",
+            model="llama3.2:3b",
+        )
+        client = create_model_client(config)
+        detector = ContradictionDetector(client=client, min_confidence=min_confidence)
+
+        report = detector.analyze_all_pages(wiki_base)
+
+        click.echo(f"\n✓ Detected {report.total_contradictions} potential contradictions")
+        click.echo(f"  - High confidence: {len(report.high_confidence)}")
+        click.echo(f"  - Medium confidence: {len(report.medium_confidence)}")
+        click.echo(f"  - Low confidence: {len(report.low_confidence)}")
+
+        # Generate report
+        if output:
+            report_path = output
+        else:
+            from datetime import UTC, datetime
+
+            timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+            report_path = wiki_base / "reports" / f"contradictions_{timestamp}.md"
+
+        detector.generate_report(report, report_path)
+
+        click.echo(f"\n✓ Report saved: {report_path}")
+
+        # Print high confidence contradictions
+        if report.high_confidence:
+            click.echo("\nHigh Confidence Contradictions:")
+            for contradiction in report.high_confidence[:10]:
+                click.echo(f"\n  {contradiction.page_id_1} vs {contradiction.page_id_2}")
+                click.echo(f"    Confidence: {contradiction.confidence:.2f}")
+                click.echo(f"    Type: {contradiction.contradiction_type}")
+                click.echo(f"    Claim 1: {contradiction.claim_1.claim[:60]}...")
+                click.echo(f"    Claim 2: {contradiction.claim_2.claim[:60]}...")
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort() from e
 
 
 @govern.command("rebuild-index")
@@ -386,6 +480,83 @@ def export_llmstxt(output: Path | None, wiki_base: Path):
     click.echo(f"✓ Exported to: {result}")
 
 
+@export.command("llmsfull")
+@click.option(
+    "--output",
+    type=click.Path(path_type=Path),
+    help="Output file path (default: wiki_system/exports/llms-full.txt)",
+)
+@click.option(
+    "--domain",
+    type=str,
+    help="Export specific domain only",
+)
+@click.option(
+    "--min-quality",
+    type=float,
+    default=0.0,
+    help="Minimum quality/confidence score to include (0.0-1.0)",
+)
+@click.option(
+    "--max-pages",
+    type=int,
+    help="Maximum number of pages to export",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def export_llmsfull(
+    output: Path | None,
+    domain: str | None,
+    min_quality: float,
+    max_pages: int | None,
+    wiki_base: Path,
+):
+    """Export to llms-full.txt format with comprehensive page data."""
+    from llm_wiki.export.llmsfull import LLMSFullExporter
+
+    exporter = LLMSFullExporter(wiki_base=wiki_base)
+
+    # Show stats
+    stats = exporter.get_export_stats()
+    click.echo(
+        f"Wiki contains {stats['total_pages']} pages across {stats['total_domains']} domains"
+    )
+    click.echo(f"  - {stats['pages_with_extractions']} pages have extracted data")
+    click.echo(f"  - {stats['pages_with_backlinks']} pages have backlinks")
+    click.echo()
+
+    # Determine output file
+    if not output:
+        exports_dir = wiki_base / "exports"
+        exports_dir.mkdir(parents=True, exist_ok=True)
+        if domain:
+            output = exports_dir / f"{domain}_llms-full.txt"
+        else:
+            output = exports_dir / "llms-full.txt"
+
+    # Execute export
+    if domain:
+        click.echo(f"Exporting domain '{domain}'...")
+        result = exporter.export_domain(
+            domain, output_file=output, min_quality=min_quality, max_pages=max_pages
+        )
+    else:
+        click.echo("Exporting all domains...")
+        result = exporter.export_all(
+            output_file=output, min_quality=min_quality, max_pages=max_pages
+        )
+
+    # Show results
+    file_size = result.stat().st_size
+    file_size_mb = file_size / (1024 * 1024)
+    click.echo(f"✓ Exported to: {result}")
+    click.echo(f"  File size: {file_size_mb:.2f} MB ({file_size:,} bytes)")
+
+
 @export.command("graph")
 @click.option(
     "--output",
@@ -412,6 +583,169 @@ def export_graph(output: Path | None, wiki_base: Path):
         result = exporter.export_json(output_file=exports_dir / "graph.json")
 
     click.echo(f"✓ Exported to: {result}")
+
+
+@main.group()
+def promote():
+    """Manage page promotion to shared space."""
+    pass
+
+
+@promote.command("check")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def promote_check(wiki_base: Path):
+    """Check for pages eligible for promotion."""
+    from llm_wiki.promotion.engine import PromotionEngine
+
+    click.echo("Scanning for promotion candidates...")
+
+    engine = PromotionEngine(wiki_base=wiki_base)
+    candidates = engine.find_candidates()
+
+    click.echo(f"\nFound {len(candidates)} promotion candidates:")
+    click.echo("=" * 80)
+
+    if not candidates:
+        click.echo("No candidates found.")
+        return
+
+    for i, candidate in enumerate(candidates[:20], 1):
+        click.echo(f"\n{i}. {candidate.title} (ID: {candidate.page_id})")
+        click.echo(f"   Domain: {candidate.domain}")
+        click.echo(f"   Score: {candidate.promotion_score:.2f}")
+        click.echo(f"   Cross-domain refs: {candidate.cross_domain_references}")
+        click.echo(f"   Referring domains: {', '.join(sorted(candidate.referring_domains))}")
+        click.echo(f"   Quality: {candidate.quality_score:.2f}")
+        click.echo("   Status: ", nl=False)
+
+        if candidate.should_auto_promote:
+            click.echo("Ready for auto-promotion")
+        elif candidate.should_suggest_promote:
+            click.echo("Eligible for review")
+        else:
+            click.echo("Below threshold")
+
+    if len(candidates) > 20:
+        click.echo(f"\n... and {len(candidates) - 20} more")
+
+    click.echo(f"\nTotal: {len(candidates)} candidates")
+
+
+@promote.command("process")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Simulate promotion without making changes",
+)
+def promote_process(wiki_base: Path, dry_run: bool):
+    """Process all promotion candidates."""
+    from llm_wiki.promotion.engine import PromotionEngine
+
+    mode = "Simulating" if dry_run else "Processing"
+    click.echo(f"{mode} promotion candidates...")
+
+    engine = PromotionEngine(wiki_base=wiki_base)
+    report = engine.process_candidates()
+
+    click.echo("\n" + "=" * 60)
+    click.echo("PROMOTION REPORT")
+    click.echo("=" * 60)
+
+    click.echo(f"\nTotal candidates: {report.total_candidates}")
+    click.echo(f"Auto-promoted: {report.auto_promoted}")
+    click.echo(f"Suggested for review: {report.suggested_for_review}")
+
+    if report.promotion_results:
+        click.echo("\nPromoted pages:")
+        for result in report.promotion_results:
+            status = "✓" if result.success else "✗"
+            click.echo(f"  {status} {result.page_id}: {result.message}")
+
+    click.echo("\n✓ Report saved to wiki_system/reports/")
+
+
+@promote.command("promote")
+@click.argument("page_id")
+@click.option(
+    "--domain",
+    required=True,
+    help="Source domain of the page",
+)
+@click.option(
+    "--update-refs",
+    is_flag=True,
+    default=True,
+    help="Update all references to point to shared",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Simulate promotion without making changes",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def promote_page(page_id: str, domain: str, update_refs: bool, dry_run: bool, wiki_base: Path):
+    """Promote a specific page to shared."""
+    from llm_wiki.promotion.engine import PromotionEngine
+
+    click.echo(f"Promoting {page_id} from {domain}...")
+
+    engine = PromotionEngine(wiki_base=wiki_base)
+    result = engine.promote_page(page_id, domain, update_references=update_refs, dry_run=dry_run)
+
+    if result.success:
+        click.echo(f"✓ {result.message}")
+        if result.shared_location:
+            click.echo(f"  Location: {result.shared_location}")
+        if result.references_updated > 0:
+            click.echo(f"  Updated {result.references_updated} references")
+    else:
+        click.echo(f"✗ {result.message}", err=True)
+
+
+@promote.command("unpromote")
+@click.argument("page_id")
+@click.option(
+    "--domain",
+    required=True,
+    help="Target domain to move page back to",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def unpromote_page(page_id: str, domain: str, wiki_base: Path):
+    """Un-promote a page from shared back to domain-local."""
+    from llm_wiki.promotion.engine import PromotionEngine
+
+    click.echo(f"Un-promoting {page_id} back to {domain}...")
+
+    engine = PromotionEngine(wiki_base=wiki_base)
+    result = engine.unpromote_page(page_id, domain)
+
+    if result.success:
+        click.echo(f"✓ {result.message}")
+        if result.shared_location:
+            click.echo(f"  Location: {result.shared_location}")
+    else:
+        click.echo(f"✗ {result.message}", err=True)
 
 
 if __name__ == "__main__":

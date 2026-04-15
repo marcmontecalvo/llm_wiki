@@ -46,6 +46,27 @@ class DomainsYAML(BaseModel):
         return v
 
 
+class PromotionConfig(BaseModel):
+    """Configuration for page promotion."""
+
+    enabled: bool = Field(default=True, description="Enable promotion job")
+    auto_promote_threshold: float = Field(
+        default=10.0, ge=0.0, description="Promotion score threshold for auto-promotion"
+    )
+    suggest_promote_threshold: float = Field(
+        default=5.0, ge=0.0, description="Promotion score threshold for suggesting review"
+    )
+    min_quality_score: float = Field(
+        default=0.6, ge=0.0, le=1.0, description="Minimum quality score for promotion eligibility"
+    )
+    min_cross_domain_refs: int = Field(
+        default=2, ge=1, description="Minimum cross-domain references for promotion consideration"
+    )
+    require_approval: bool = Field(
+        default=True, description="Whether promotion requires manual approval via review queue"
+    )
+
+
 class DaemonConfig(BaseModel):
     """Configuration for the wiki daemon."""
 
@@ -61,12 +82,18 @@ class DaemonConfig(BaseModel):
         default=24, ge=1, description="Hours between stale page checks"
     )
     export_every_minutes: int = Field(default=60, ge=1, description="Minutes between export runs")
+    promotion_every_hours: int = Field(
+        default=24, ge=1, description="Hours between promotion checks"
+    )
     max_parallel_jobs: int = Field(default=2, ge=1, le=32, description="Maximum concurrent jobs")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO", description="Logging level"
     )
     review_queue_enabled: bool = Field(
         default=True, description="Enable review queue for low-confidence content"
+    )
+    promotion: PromotionConfig = Field(
+        default_factory=PromotionConfig, description="Promotion configuration"
     )
 
 

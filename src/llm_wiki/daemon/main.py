@@ -67,13 +67,30 @@ class WikiDaemon:
         self.worker_pool.start()
         logger.info("Worker pool started")
 
-        # Register jobs (placeholder - actual jobs added later)
-        # Example:
-        # self.scheduler.add_job(
-        #     func=self._example_job,
-        #     job_name="example",
-        #     interval_seconds=60,
-        # )
+        # Register jobs
+        wiki_base = Path("wiki_system")
+
+        # Register governance job
+        from llm_wiki.daemon.jobs.governance import run_governance_check
+
+        self.scheduler.add_job(
+            func=run_governance_check,
+            job_name="governance_check",
+            interval_seconds=self.config.daemon.daemon.lint_every_minutes * 60,
+            wiki_base=wiki_base,
+        )
+
+        # Register promotion job
+        if self.config.daemon.daemon.promotion.enabled:
+            from llm_wiki.daemon.jobs.promotion import run_promotion_check
+
+            self.scheduler.add_job(
+                func=run_promotion_check,
+                job_name="promotion_check",
+                interval_seconds=self.config.daemon.daemon.promotion_every_hours * 3600,
+                wiki_base=wiki_base,
+                config=self.config.daemon.daemon.promotion,
+            )
 
         # Start scheduler
         self.scheduler.start()
