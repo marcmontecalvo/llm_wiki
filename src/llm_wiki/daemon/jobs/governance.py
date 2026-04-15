@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from llm_wiki.governance.contradictions import ContradictionDetector
+from llm_wiki.governance.duplicates import DuplicateDetector
 from llm_wiki.governance.linter import LintSeverity, MetadataLinter
 from llm_wiki.governance.quality import QualityScorer
 from llm_wiki.governance.staleness import StalenessDetector
@@ -36,6 +37,7 @@ class GovernanceJob:
         self.linter = MetadataLinter(metadata_index=metadata_index)
         self.staleness_detector = StalenessDetector()
         self.quality_scorer = QualityScorer()
+        self.duplicate_detector = DuplicateDetector(min_score=0.3, wiki_base=wiki_base)
         self.contradiction_detector = ContradictionDetector(client) if client else None
 
     def execute(self) -> dict[str, Any]:
@@ -56,6 +58,11 @@ class GovernanceJob:
             lint_errors = sum(1 for i in lint_issues if i.severity == LintSeverity.ERROR)
             lint_warnings = sum(1 for i in lint_issues if i.severity == LintSeverity.WARNING)
 
+            # Run duplicate detection
+            logger.info("Running duplicate detection")
+            duplicate_report = self.duplicate_detector.analyze_all_pages(self.wiki_base)
+            logger.info(f"Found {duplicate_report.total_candidates} potential duplicate pairs")
+
             # Run contradiction detection if client is available
             contradiction_report = None
             if self.contradiction_detector:
@@ -67,7 +74,11 @@ class GovernanceJob:
 
             # Generate report
             report_path = self._generate_report(
-                lint_issues, staleness_reports, quality_reports, contradiction_report
+                lint_issues,
+                staleness_reports,
+                quality_reports,
+                duplicate_report,
+                contradiction_report,
             )
 
             stats = {
@@ -77,6 +88,7 @@ class GovernanceJob:
                 "lint_warnings": lint_warnings,
                 "stale_pages": len(staleness_reports),
                 "low_quality_pages": len(quality_reports),
+                "duplicates": duplicate_report.total_candidates,
                 "contradictions": contradiction_report.total_contradictions
                 if contradiction_report
                 else 0,
@@ -95,6 +107,7 @@ class GovernanceJob:
                 "lint_issues": 0,
                 "stale_pages": 0,
                 "low_quality_pages": 0,
+                "duplicates": 0,
                 "contradictions": 0,
             }
 
@@ -103,6 +116,7 @@ class GovernanceJob:
         lint_issues: list,
         staleness_reports: list,
         quality_reports: list,
+        duplicate_report: Any,
         contradiction_report: Any = None,
     ) -> Path:
         """Generate governance report markdown.
@@ -111,6 +125,7 @@ class GovernanceJob:
             lint_issues: List of lint issues
             staleness_reports: List of staleness reports
             quality_reports: List of quality reports
+            duplicate_report: Duplicate detection report
             contradiction_report: Optional contradiction report
 
         Returns:
@@ -142,6 +157,7 @@ class GovernanceJob:
             f"- Lint issues: {len(lint_issues)}",
             f"- Stale pages: {len(staleness_reports)}",
             f"- Low-quality pages: {len(quality_reports)}",
+            f"- Duplicate candidates: {duplicate_report.total_candidates}",
         ]
 
         if contradiction_report:
@@ -194,6 +210,35 @@ class GovernanceJob:
                 lines.append(f"### {report.page_id} (score: {report.score:.2f})")
                 for issue in report.issues:
                     lines.append(f"- {issue}")
+                lines.append("")
+
+        # Duplicates section
+        if duplicate_report.total_candidates > 0:
+            lines.append("## Detected Duplicates")
+            lines.append("")
+
+            if duplicate_report.high_confidence:
+                lines.append("### High Confidence Duplicates (score > 0.8)")
+                lines.append("")
+                for candidate in duplicate_report.high_confidence[:10]:
+                    lines.append(
+                        f"- **{candidate.page_1}** ↔ **{candidate.page_2}** "
+                        f"(score: {candidate.duplicate_score:.3f})"
+                    )
+                    lines.append(f"  - Action: {candidate.suggested_action}")
+                    lines.append(f"  - Primary: {candidate.primary_page}")
+                    for reason in candidate.reasons[:2]:
+                        lines.append(f"  - {reason}")
+                lines.append("")
+
+            if duplicate_report.medium_confidence:
+                lines.append("### Medium Confidence Duplicates (score 0.5-0.8)")
+                lines.append("")
+                for candidate in duplicate_report.medium_confidence[:5]:
+                    lines.append(
+                        f"- **{candidate.page_1}** ↔ **{candidate.page_2}** "
+                        f"(score: {candidate.duplicate_score:.3f})"
+                    )
                 lines.append("")
 
         # Contradictions section

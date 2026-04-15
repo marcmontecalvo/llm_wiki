@@ -84,7 +84,7 @@ class DuplicateDetector:
         if wiki_base is None:
             wiki_base = self.wiki_base
         if wiki_base is None:
-            raise ValueError("wiki_base must be provided")
+            wiki_base = Path("wiki_system")
 
         # Collect all pages
         pages_metadata: dict[str, tuple[dict, str]] = {}  # page_id -> (metadata, body)
@@ -110,6 +110,11 @@ class DuplicateDetector:
 
                     # Skip source pages (don't detect source doc duplicates)
                     if metadata.get("kind") == "source":
+                        logger.debug(f"Skipping source page: {page_id}")
+                        continue
+
+                    if page_id in pages_metadata:
+                        logger.warning(f"Duplicate page ID '{page_id}' in {page_file}; skipping")
                         continue
 
                     pages_metadata[page_id] = (metadata, body)
@@ -144,19 +149,22 @@ class DuplicateDetector:
                         suggested_action = "keep_both"
 
                     # Determine primary page (more backlinks, longer content, or alphabetically first)
-                    backlinks_1 = len(metadata_1.get("backlinks", []))
-                    backlinks_2 = len(metadata_2.get("backlinks", []))
+                    raw_backlinks_1 = metadata_1.get("backlinks", [])
+                    raw_backlinks_2 = metadata_2.get("backlinks", [])
+                    backlinks_1 = len(raw_backlinks_1) if isinstance(raw_backlinks_1, list) else 0
+                    backlinks_2 = len(raw_backlinks_2) if isinstance(raw_backlinks_2, list) else 0
 
                     if backlinks_1 > backlinks_2:
                         primary_page = page_id_1
                     elif backlinks_2 > backlinks_1:
                         primary_page = page_id_2
+                    elif len(body_1) > len(body_2):
+                        primary_page = page_id_1
+                    elif len(body_2) > len(body_1):
+                        primary_page = page_id_2
                     else:
-                        # If equal, use longer content
-                        if len(body_1) >= len(body_2):
-                            primary_page = page_id_1
-                        else:
-                            primary_page = page_id_2
+                        # Deterministic alphabetical fallback
+                        primary_page = page_id_1 if page_id_1 <= page_id_2 else page_id_2
 
                     candidate = DuplicateCandidate(
                         page_1=page_id_1,

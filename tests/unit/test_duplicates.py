@@ -351,36 +351,67 @@ Python content
 
         assert report.total_candidates >= 1
 
-    def test_suggested_action_high_confidence(self, detector: DuplicateDetector):
-        """Test suggested action is 'merge' for high confidence (>0.8)."""
-        meta1 = {"title": "Page A", "source_url": "http://same.com"}
-        meta2 = {"title": "page a", "source_url": "http://same.com"}
+    def test_suggested_action_high_confidence(self, tmp_path: Path, detector: DuplicateDetector):
+        """Test suggested_action is 'merge' for score > 0.8."""
+        wiki_base = tmp_path / "wiki"
+        domain_dir = wiki_base / "domains" / "test" / "pages"
+        domain_dir.mkdir(parents=True)
 
-        score, _ = detector._score_pair(meta1, meta2, "c1", "c2")
+        # name match (0.4) + alias match (0.3) + source_url match (0.2) = 0.9 > 0.8
+        # Page A has "Python" in its own alias list, so alias_match triggers for page B's name
+        (domain_dir / "a.md").write_text(
+            "---\nid: a\ntitle: Python\nkind: page\nsource_url: http://same.com\naliases:\n  - Python\n---\ncontent\n"
+        )
+        (domain_dir / "b.md").write_text(
+            "---\nid: b\ntitle: Python\nkind: page\nsource_url: http://same.com\n---\ncontent\n"
+        )
 
-        # Should be >= 0.8 based on name and source match
-        if score > 0.8:
-            assert True  # We'd set suggested_action to "merge"
+        report = detector.analyze_all_pages(wiki_base)
 
-    def test_suggested_action_medium_confidence(self, detector: DuplicateDetector):
-        """Test suggested action is 'redirect' for medium confidence (0.5-0.8)."""
-        meta1 = {"title": "Python", "tags": ["lang"]}
-        meta2 = {"title": "python", "tags": ["lang"]}
+        assert report.high_confidence, "Expected at least one high-confidence candidate"
+        assert report.high_confidence[0].suggested_action == "merge"
 
-        score, _ = detector._score_pair(meta1, meta2, "c1", "c2")
+    def test_suggested_action_medium_confidence(self, tmp_path: Path, detector: DuplicateDetector):
+        """Test suggested_action is 'redirect' for score 0.5-0.8."""
+        wiki_base = tmp_path / "wiki"
+        domain_dir = wiki_base / "domains" / "test" / "pages"
+        domain_dir.mkdir(parents=True)
 
-        # Should be 0.4 based on name similarity alone (0.4 * 0.4 = ..., wait no)
-        # name_similarity would be 1.0, so score = 1.0 * 0.4 = 0.4
-        # That's < 0.5, so just testing the logic exists
+        # name match (0.4) + source_url match (0.2) = 0.6, medium
+        (domain_dir / "a.md").write_text(
+            "---\nid: a\ntitle: Unique Title X\nkind: page\nsource_url: http://same.com\n---\ncontent\n"
+        )
+        (domain_dir / "b.md").write_text(
+            "---\nid: b\ntitle: unique title x\nkind: page\nsource_url: http://same.com\n---\ncontent\n"
+        )
 
-    def test_suggested_action_low_confidence(self, detector: DuplicateDetector):
-        """Test suggested action is 'keep_both' for low confidence."""
-        meta1 = {"title": "Python"}
-        meta2 = {"title": "JavaScript"}
+        report = detector.analyze_all_pages(wiki_base)
 
-        score, _ = detector._score_pair(meta1, meta2, "c1", "c2")
+        all_candidates = report.high_confidence + report.medium_confidence + report.low_confidence
+        medium_or_higher = [c for c in all_candidates if c.duplicate_score >= 0.5]
+        assert medium_or_higher, "Expected medium+ confidence candidate"
+        for c in medium_or_higher:
+            assert c.suggested_action in ("redirect", "merge")
 
-        assert score == 0.0
+    def test_suggested_action_low_confidence(self, tmp_path: Path, detector: DuplicateDetector):
+        """Test suggested_action is 'keep_both' for score 0.3-0.5."""
+        wiki_base = tmp_path / "wiki"
+        domain_dir = wiki_base / "domains" / "test" / "pages"
+        domain_dir.mkdir(parents=True)
+
+        # source_url match only (0.2) + 3 tag overlap (0.1) = 0.3, low confidence
+        (domain_dir / "a.md").write_text(
+            "---\nid: a\ntitle: Alpha\nkind: page\nsource_url: http://same.com\ntags:\n  - x\n  - y\n  - z\n---\ncontent\n"
+        )
+        (domain_dir / "b.md").write_text(
+            "---\nid: b\ntitle: Beta\nkind: page\nsource_url: http://same.com\ntags:\n  - x\n  - y\n  - z\n---\ncontent\n"
+        )
+
+        report = detector.analyze_all_pages(wiki_base)
+
+        low = report.low_confidence
+        assert low, "Expected a low-confidence candidate"
+        assert low[0].suggested_action == "keep_both"
 
     def test_primary_page_selection_by_backlinks(self, tmp_path: Path, detector: DuplicateDetector):
         """Test primary page selected by backlink count."""

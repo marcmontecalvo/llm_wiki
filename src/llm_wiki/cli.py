@@ -415,6 +415,10 @@ def govern_duplicates(wiki_base: Path, min_score: float, output: Path | None):
     """Detect and report duplicate entity pages."""
     from llm_wiki.governance.duplicates import DuplicateDetector
 
+    if not 0.0 <= min_score <= 1.0:
+        click.echo("Error: --min-score must be between 0.0 and 1.0", err=True)
+        raise click.Abort()
+
     click.echo("Detecting duplicate entities in wiki...")
 
     try:

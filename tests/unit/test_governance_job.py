@@ -72,6 +72,7 @@ Content from 2024."""
         assert job.linter is not None
         assert job.staleness_detector is not None
         assert job.quality_scorer is not None
+        assert job.duplicate_detector is not None
 
     def test_execute_success(self, job: GovernanceJob):
         """Test successful execution."""
@@ -81,6 +82,7 @@ Content from 2024."""
         assert result["lint_issues"] >= 0
         assert result["stale_pages"] >= 0
         assert result["low_quality_pages"] >= 0
+        assert result["duplicates"] >= 0
         assert "report_path" in result
 
     def test_execute_generates_report(self, job: GovernanceJob, wiki_base: Path):
@@ -129,6 +131,7 @@ Content from 2024."""
         assert "# Governance Report" in content
         assert "## Summary" in content
         assert "Pages scanned:" in content
+        assert "Duplicate candidates:" in content or "## Detected Duplicates" in content
 
     def test_run_governance_check_function(self, wiki_base: Path):
         """Test the run_governance_check function."""
