@@ -7,6 +7,7 @@ from pathlib import Path
 from llm_wiki.adapters.base import AdapterRegistry
 from llm_wiki.adapters.markdown import MarkdownAdapter
 from llm_wiki.adapters.text import TextAdapter
+from llm_wiki.ingest.failed import FailedIngestionsTracker, FailureReason
 from llm_wiki.ingest.normalizer import NormalizationPipeline
 
 logger = logging.getLogger(__name__)
@@ -19,12 +20,14 @@ class InboxWatcher:
         self,
         inbox_dir: Path | None = None,
         config_dir: Path | None = None,
+        failed_tracker: FailedIngestionsTracker | None = None,
     ):
         """Initialize inbox watcher.
 
         Args:
             inbox_dir: Base inbox directory (defaults to wiki_system/inbox)
             config_dir: Config directory (defaults to config/)
+            failed_tracker: Optional tracker for failed ingestions
         """
         self.inbox_dir = inbox_dir or Path("wiki_system/inbox")
         self.new_dir = self.inbox_dir / "new"
@@ -35,6 +38,13 @@ class InboxWatcher:
         # Ensure directories exist
         for directory in [self.new_dir, self.processing_dir, self.done_dir, self.failed_dir]:
             directory.mkdir(parents=True, exist_ok=True)
+
+        # Set up failed ingestion tracker
+        if failed_tracker is None:
+            wiki_base = self.inbox_dir.parent  # Go up from inbox/ to wiki_system/
+            state_dir = wiki_base / "state"
+            failed_tracker = FailedIngestionsTracker(state_dir=state_dir)
+        self.failed_tracker = failed_tracker
 
         # Set up normalization pipeline
         registry = AdapterRegistry()
@@ -119,4 +129,52 @@ class InboxWatcher:
         error_log = failed_path.with_suffix(failed_path.suffix + ".error")
         error_log.write_text(error, encoding="utf-8")
 
+        # Record failure in tracker
+        failure_reason = self._determine_failure_reason(error)
+        self.failed_tracker.record_failure(
+            file_path=failed_path,
+            reason=failure_reason,
+            error_message=error,
+        )
+
         logger.info(f"Moved to failed: {filepath.name}")
+
+    def _determine_failure_reason(self, error: str) -> FailureReason:
+        """Determine the failure reason from error message.
+
+        Args:
+            error: Error message string
+
+        Returns:
+            FailureReason enum value
+        """
+        error_lower = error.lower()
+
+        # Check for transient failures
+        if "timeout" in error_lower:
+            return FailureReason.LLM_TIMEOUT
+        if "network" in error_lower or "connection" in error_lower:
+            return FailureReason.NETWORK_ERROR
+        if "temporary" in error_lower or "try again" in error_lower:
+            return FailureReason.TEMPORARY_ERROR
+
+        # Check for permanent failures
+        if "invalid" in error_lower or "format" in error_lower:
+            return FailureReason.INVALID_FORMAT
+        if "corrupt" in error_lower:
+            return FailureReason.CORRUPTED_FILE
+        if "unsupported" in error_lower or "type" in error_lower:
+            return FailureReason.UNSUPPORTED_TYPE
+        if "permission" in error_lower:
+            return FailureReason.PERMISSION_DENIED
+
+        # Check for recoverable failures
+        if "metadata" in error_lower:
+            return FailureReason.MISSING_METADATA
+        if "schema" in error_lower or "validation" in error_lower:
+            return FailureReason.SCHEMA_VALIDATION_FAILED
+        if "config" in error_lower:
+            return FailureReason.CONFIG_ERROR
+
+        # Default to unknown
+        return FailureReason.UNKNOWN

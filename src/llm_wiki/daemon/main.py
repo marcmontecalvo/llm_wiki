@@ -92,6 +92,16 @@ class WikiDaemon:
                 config=self.config.daemon.daemon.promotion,
             )
 
+        # Register retry failed ingests job
+        from llm_wiki.daemon.jobs.retry_failed_ingests import run_retry_failed_ingests
+
+        self.scheduler.add_job(
+            func=run_retry_failed_ingests,
+            job_name="retry_failed_ingests",
+            interval_seconds=self.config.daemon.daemon.retry_failed_ingests_every_minutes * 60,
+            wiki_base=wiki_base,
+        )
+
         # Start scheduler
         self.scheduler.start()
         logger.info("Scheduler started")

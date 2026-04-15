@@ -2,6 +2,7 @@
 
 import logging
 import random
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -181,8 +182,8 @@ class RetryableFunction:
                     f"retrying in {delay:.1f}s: {e}"
                 )
 
-                # Note: In real implementation, would sleep here
-                # For now, just continue to next attempt
+                # Sleep before retrying
+                time.sleep(delay)
 
         # All retries exhausted
         if last_exception:
