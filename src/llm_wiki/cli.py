@@ -520,6 +520,7 @@ def govern_rebuild_index(wiki_base: Path):
     click.echo(f"\n✓ Metadata index: {stats.get('metadata_count', 0)} pages")
     click.echo(f"✓ Fulltext index: {stats.get('fulltext_count', 0)} documents")
     click.echo(f"✓ Backlink index: {stats.get('backlink_count', 0)} pages")
+    click.echo(f"✓ Graph edge index: {stats.get('graph_edge_count', 0)} pages")
 
 
 @main.group()
@@ -1036,6 +1037,155 @@ def unpromote_page(page_id: str, domain: str, wiki_base: Path):
             click.echo(f"  Location: {result.shared_location}")
     else:
         click.echo(f"✗ {result.message}", err=True)
+
+
+@main.group()
+def graph():
+    """Query the graph edge index."""
+    pass
+
+
+@graph.command("edges")
+@click.argument("node")
+@click.option("--direction", type=click.Choice(["from", "to", "both"]), default="both")
+@click.option("--type", "edge_type", default=None, help="Filter by edge type")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def graph_edges(node: str, direction: str, edge_type: str | None, wiki_base: Path):
+    """Show edges from/to a node in the graph."""
+    from llm_wiki.index.graph_edges import GraphEdgeIndex
+
+    index = GraphEdgeIndex(index_dir=Path(wiki_base) / "index")
+    index.load()
+
+    out = index.find_outgoing(node, edge_type) if direction in ("from", "both") else []
+    inc = index.find_incoming(node, edge_type) if direction in ("to", "both") else []
+
+    if not out and not inc:
+        click.echo(f"No edges found for node '{node}'.")
+        click.echo("Run 'llm-wiki govern rebuild-index' to refresh.")
+        return
+
+    click.echo(f"Graph edges for: {node}\n")
+    if out:
+        click.echo(f"Outgoing ({len(out)}):")
+        for e in out:
+            click.echo(f"  -> [{e['type']}] {e['target']}  (weight: {e['weight']:.2f})")
+    if inc:
+        click.echo(f"\nIncoming ({len(inc)}):")
+        for e in inc:
+            click.echo(f"  <- [{e['type']}] {e['source']}  (weight: {e['weight']:.2f})")
+
+
+@graph.command("path")
+@click.argument("source")
+@click.argument("target")
+@click.option("--max-depth", default=3, help="Maximum path length (edges)")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def graph_path(source: str, target: str, max_depth: int, wiki_base: Path):
+    """Find directed paths between two nodes."""
+    from llm_wiki.index.graph_edges import GraphEdgeIndex
+
+    index = GraphEdgeIndex(index_dir=Path(wiki_base) / "index")
+    index.load()
+
+    paths = index.find_path(source, target, max_depth=max_depth)
+
+    if not paths:
+        click.echo(f"No path found from '{source}' to '{target}' within {max_depth} hops.")
+        return
+
+    click.echo(f"Paths from '{source}' to '{target}' ({len(paths)} found):\n")
+    for i, path in enumerate(paths, 1):
+        if not path:
+            click.echo(f"  {i}. (same node)")
+            continue
+        parts = [path[0]["source"]]
+        for edge in path:
+            parts.append(f"--[{edge['type']}]-->")
+            parts.append(edge["target"])
+        click.echo(f"  {i}. {' '.join(parts)}")
+
+
+@graph.command("neighbors")
+@click.argument("node")
+@click.option("--depth", default=1, help="Number of hops")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def graph_neighbors(node: str, depth: int, wiki_base: Path):
+    """Find all nodes reachable within N hops."""
+    from llm_wiki.index.graph_edges import GraphEdgeIndex
+
+    index = GraphEdgeIndex(index_dir=Path(wiki_base) / "index")
+    index.load()
+
+    neighbours = index.find_neighbors(node, depth=depth)
+
+    if not neighbours:
+        click.echo(f"No neighbours found for '{node}' within {depth} hop(s).")
+        return
+
+    click.echo(f"Neighbours of '{node}' within {depth} hop(s): {len(neighbours)}\n")
+    for n in sorted(neighbours):
+        click.echo(f"  {n}")
+
+
+@graph.command("subgraph")
+@click.argument("nodes", nargs=-1, required=True)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def graph_subgraph(nodes: tuple[str, ...], wiki_base: Path):
+    """Extract the subgraph containing the given nodes."""
+    from llm_wiki.index.graph_edges import GraphEdgeIndex
+
+    index = GraphEdgeIndex(index_dir=Path(wiki_base) / "index")
+    index.load()
+
+    sub = index.get_subgraph(set(nodes))
+    click.echo(f"Subgraph: {len(sub['nodes'])} nodes, {len(sub['edges'])} edges\n")
+    for e in sub["edges"]:
+        click.echo(f"  {e['source']} --[{e['type']}]--> {e['target']}  (weight: {e['weight']:.2f})")
+
+
+@graph.command("stats")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def graph_stats(wiki_base: Path):
+    """Show graph edge index statistics."""
+    from llm_wiki.index.graph_edges import GraphEdgeIndex
+
+    index = GraphEdgeIndex(index_dir=Path(wiki_base) / "index")
+    index.load()
+
+    stats = index.get_stats()
+    click.echo("Graph edge index statistics:")
+    click.echo(f"  Total edges: {stats['total_edges']}")
+    click.echo(f"  Total nodes: {stats['total_nodes']}")
+    if stats["edges_by_type"]:
+        click.echo("\n  Edges by type:")
+        for etype, cnt in sorted(stats["edges_by_type"].items()):
+            click.echo(f"    {etype}: {cnt}")
 
 
 if __name__ == "__main__":

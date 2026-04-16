@@ -11,6 +11,7 @@ from llm_wiki.extraction.entities import EntityExtractor
 from llm_wiki.extraction.relationships import RelationshipExtractor
 from llm_wiki.extraction.service import ContentExtractor
 from llm_wiki.index.backlinks import BacklinkIndex
+from llm_wiki.index.graph_edges import GraphEdgeIndex
 from llm_wiki.models.client import ModelClient, create_model_client
 from llm_wiki.models.config import load_models_config
 
@@ -53,6 +54,10 @@ class ExtractionPipeline:
         # Initialize backlink index
         self.backlinks = BacklinkIndex(index_dir=self.wiki_base / "index")
         self.backlinks.load()
+
+        # Initialize graph edge index
+        self.graph_edges = GraphEdgeIndex(index_dir=self.wiki_base / "index")
+        self.graph_edges.load()
 
     def process_queue(self, domain: str) -> dict[str, int]:
         """Process all files in a domain's queue.
@@ -155,6 +160,15 @@ class ExtractionPipeline:
         page_id = metadata.get("id", filepath.stem)
         self.backlinks.add_page_links(page_id, body)
         self.backlinks.save()
+
+        # Update graph edge index
+        import re
+
+        links = re.findall(r"\[\[([^\]]+)\]\]", body)
+        self.graph_edges.update_page_links(page_id, links)
+        if relationships:
+            self.graph_edges.update_page_relationships(page_id, relationships)
+        self.graph_edges.save()
 
     def process_all_queues(self) -> dict[str, dict[str, int]]:
         """Process all domain queues.
