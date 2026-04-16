@@ -364,6 +364,46 @@ No links here.
                 # Each backlink should have a corresponding forward link
                 assert page_id in index.index[source]["forward_links"]
 
+    def test_update_page_links_returns_diff_on_add(self, index: BacklinkIndex):
+        """Test update_page_links returns added links when new links appear."""
+        index.add_page_links("page1", "Links to [[old1]].")
+        diff = index.update_page_links("page1", "Links to [[old1]] and [[new1]].")
+
+        assert diff["added"] == ["new1"]
+        assert diff["removed"] == []
+
+    def test_update_page_links_returns_diff_on_remove(self, index: BacklinkIndex):
+        """Test update_page_links returns removed links when links are dropped."""
+        index.add_page_links("page1", "Links to [[a]] and [[b]].")
+        diff = index.update_page_links("page1", "Links to [[a]].")
+
+        assert diff["added"] == []
+        assert diff["removed"] == ["b"]
+
+    def test_update_page_links_no_change_returns_empty_diff(self, index: BacklinkIndex):
+        """Test update_page_links returns empty diff when links unchanged."""
+        index.add_page_links("page1", "Links to [[target1]].")
+        diff = index.update_page_links("page1", "Links to [[target1]].")
+
+        assert diff["added"] == []
+        assert diff["removed"] == []
+
+    def test_update_page_links_updates_backlinks_on_remove(self, index: BacklinkIndex):
+        """Test that removed links clean up backlinks on target pages."""
+        index.add_page_links("page1", "Links to [[a]] and [[b]].")
+        index.update_page_links("page1", "Links to [[a]].")
+
+        assert "page1" not in index.index["b"]["backlinks"]
+        assert "page1" in index.index["a"]["backlinks"]
+
+    def test_update_page_links_new_page(self, index: BacklinkIndex):
+        """Test update_page_links on a page not yet in the index."""
+        diff = index.update_page_links("new-page", "Links to [[target]].")
+
+        assert diff["added"] == ["target"]
+        assert diff["removed"] == []
+        assert "new-page" in index.index
+
     def test_deduplication_of_links(self, index: BacklinkIndex):
         """Test that duplicate links are deduplicated."""
         content = "Links to [[page2]], [[page2]], and [[page2]]."
@@ -406,3 +446,38 @@ No links here.
         # page4 didn't link to page2, it just lost a backlink
         assert "page2" not in index.index["page4"]["broken_links"]
         assert "page2" not in index.index["page4"]["backlinks"]
+
+    def test_update_page_links_adds_links_and_updates_target_backlinks(self, index: BacklinkIndex):
+        """Test that update_page_links adds links and correctly updates target backlinks."""
+        # Initialize with page1 having no links
+        index.add_page_links("page1", "No links here.")
+        index.add_page_links("page2", "Existing page.")
+
+        # Update page1 to add links to page2 and page3
+        diff = index.update_page_links("page1", "Links to [[page2]] and [[page3]].")
+
+        # Verify diff is correct
+        assert set(diff["added"]) == {"page2", "page3"}
+        assert diff["removed"] == []
+
+        # Verify page1's forward links updated
+        assert set(index.get_forward_links("page1")) == {"page2", "page3"}
+
+        # Verify backlinks for target pages updated
+        assert "page1" in index.get_backlinks("page2")
+        assert "page1" in index.get_backlinks("page3")
+
+    def test_update_page_links_with_duplicate_links_in_content(self, index: BacklinkIndex):
+        """Test that update_page_links handles duplicate links in content correctly."""
+        # Content with duplicate links
+        content = "Links to [[target]], [[target]], and [[target]]."
+
+        diff = index.update_page_links("page1", content)
+
+        # Diff should contain target only once
+        assert diff["added"] == ["target"]
+        assert diff["removed"] == []
+
+        # Index should also have only one entry for target
+        assert index.get_forward_links("page1") == ["target"]
+        assert index.get_backlinks("target") == ["page1"]

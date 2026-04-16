@@ -25,3 +25,5 @@ repos:
       - id: mypy
         additional_dependencies: [types-pyyaml, pydantic]
         args: [--ignore-missing-imports]
+        files: ^src/
+        exclude: ^examples/

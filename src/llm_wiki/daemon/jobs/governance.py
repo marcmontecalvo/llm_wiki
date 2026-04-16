@@ -10,8 +10,10 @@ from llm_wiki.governance.duplicates import DuplicateDetector
 from llm_wiki.governance.linter import LintSeverity, MetadataLinter
 from llm_wiki.governance.quality import QualityScorer
 from llm_wiki.governance.staleness import StalenessDetector
+from llm_wiki.index.backlinks import BacklinkIndex
 from llm_wiki.index.metadata import MetadataIndex
 from llm_wiki.models.client import ModelClient
+from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,7 @@ class GovernanceJob:
         self.quality_scorer = QualityScorer()
         self.duplicate_detector = DuplicateDetector(min_score=0.3, wiki_base=wiki_base)
         self.contradiction_detector = ContradictionDetector(client) if client else None
+        self.backlink_index = BacklinkIndex(index_dir=index_dir)
 
     def execute(self) -> dict[str, Any]:
         """Execute governance checks.
@@ -58,6 +61,37 @@ class GovernanceJob:
             lint_errors = sum(1 for i in lint_issues if i.severity == LintSeverity.ERROR)
             lint_warnings = sum(1 for i in lint_issues if i.severity == LintSeverity.WARNING)
 
+            # Count pages scanned and collect all page IDs
+            domains_dir = self.wiki_base / "domains"
+            pages_scanned = 0
+            all_page_ids: set[str] = set()
+            if domains_dir.exists():
+                for domain_dir in domains_dir.iterdir():
+                    if domain_dir.is_dir():
+                        pages_dir = domain_dir / "pages"
+                        if pages_dir.exists():
+                            for pf in pages_dir.glob("*.md"):
+                                try:
+                                    content = pf.read_text(encoding="utf-8")
+                                    metadata, _ = parse_frontmatter(content)
+                                    page_id = metadata.get("id", pf.stem)
+                                    all_page_ids.add(page_id)
+                                    pages_scanned += 1
+                                except Exception as e:
+                                    logger.error(f"Failed to read {pf}: {e}")
+
+            # Run link health checks
+            logger.info("Running link health checks")
+            self.backlink_index.load()
+            broken_link_stats = self.backlink_index.update_broken_links(all_page_ids)
+            orphan_pages = self.backlink_index.get_orphan_pages(all_page_ids)
+
+            # Collect pages with broken links for the report
+            pages_with_broken: dict[str, list[str]] = {}
+            for pid, pdata in self.backlink_index.index.items():
+                if pdata["broken_links"]:
+                    pages_with_broken[pid] = sorted(pdata["broken_links"])
+
             # Run duplicate detection
             logger.info("Running duplicate detection")
             duplicate_report = self.duplicate_detector.analyze_all_pages(self.wiki_base)
@@ -72,16 +106,6 @@ class GovernanceJob:
                     f"Found {contradiction_report.total_contradictions} potential contradictions"
                 )
 
-            # Count pages scanned
-            domains_dir = self.wiki_base / "domains"
-            pages_scanned = 0
-            if domains_dir.exists():
-                for domain_dir in domains_dir.iterdir():
-                    if domain_dir.is_dir():
-                        pages_dir = domain_dir / "pages"
-                        if pages_dir.exists():
-                            pages_scanned += len(list(pages_dir.glob("*.md")))
-
             # Generate report
             report_path = self._generate_report(
                 lint_issues,
@@ -90,6 +114,8 @@ class GovernanceJob:
                 duplicate_report,
                 contradiction_report,
                 pages_scanned=pages_scanned,
+                pages_with_broken=pages_with_broken,
+                orphan_pages=orphan_pages,
             )
 
             stats = {
@@ -104,6 +130,8 @@ class GovernanceJob:
                 "contradictions": contradiction_report.total_contradictions
                 if contradiction_report
                 else 0,
+                "broken_links": broken_link_stats["total_broken_links"],
+                "orphan_pages": len(orphan_pages),
                 "report_path": str(report_path),
             }
 
@@ -131,6 +159,8 @@ class GovernanceJob:
         duplicate_report: Any,
         contradiction_report: Any = None,
         pages_scanned: int = 0,
+        pages_with_broken: dict[str, list[str]] | None = None,
+        orphan_pages: list[str] | None = None,
     ) -> Path:
         """Generate governance report markdown.
 
@@ -150,6 +180,10 @@ class GovernanceJob:
         timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         report_path = reports_dir / f"governance_{timestamp}.md"
 
+        pages_with_broken = pages_with_broken or {}
+        orphan_pages = orphan_pages or []
+        total_broken = sum(len(v) for v in pages_with_broken.values())
+
         # Generate report content
         lines = [
             "# Wiki Governance Report",
@@ -161,6 +195,8 @@ class GovernanceJob:
             f"- Stale pages: {len(staleness_reports)}",
             f"- Low-quality pages: {len(quality_reports)}",
             f"- Duplicate candidates: {duplicate_report.total_candidates}",
+            f"- Broken links: {total_broken} across {len(pages_with_broken)} pages",
+            f"- Orphan pages (no backlinks): {len(orphan_pages)}",
         ]
 
         if contradiction_report:
@@ -214,6 +250,30 @@ class GovernanceJob:
                 for issue in report.issues:
                     lines.append(f"- {issue}")
                 lines.append("")
+
+        # Broken links section
+        if pages_with_broken:
+            lines.append("## Broken Links")
+            lines.append("")
+            lines.append("Pages with links to non-existent targets:")
+            lines.append("")
+            for pid in sorted(pages_with_broken.keys()):
+                lines.append(f"### {pid}")
+                for broken in pages_with_broken[pid]:
+                    lines.append(f"- !! [[{broken}]] (target not found)")
+                lines.append("")
+
+        # Orphan pages section
+        if orphan_pages:
+            lines.append("## Orphan Pages")
+            lines.append("")
+            lines.append("Pages with no backlinks (nothing links here):")
+            lines.append("")
+            for pid in orphan_pages[:50]:
+                lines.append(f"- {pid}")
+            if len(orphan_pages) > 50:
+                lines.append(f"- ... and {len(orphan_pages) - 50} more")
+            lines.append("")
 
         # Duplicates section
         if duplicate_report.total_candidates > 0:

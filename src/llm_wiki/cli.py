@@ -663,6 +663,8 @@ def govern_check(wiki_base: Path, with_contradictions: bool):
     click.echo(f"  - Errors: {stats.get('lint_errors', 0)}")
     click.echo(f"Stale pages: {stats.get('stale_pages', 0)}")
     click.echo(f"Low quality pages: {stats.get('low_quality_pages', 0)}")
+    click.echo(f"Broken links: {stats.get('broken_links', 0)}")
+    click.echo(f"Orphan pages: {stats.get('orphan_pages', 0)}")
 
     if stats.get("contradictions", 0) > 0:
         click.echo(f"Contradictions found: {stats['contradictions']}")
@@ -825,6 +827,105 @@ def govern_rebuild_index(wiki_base: Path):
     click.echo(f"✓ Fulltext index: {stats.get('fulltext_count', 0)} documents")
     click.echo(f"✓ Backlink index: {stats.get('backlink_count', 0)} pages")
     click.echo(f"✓ Graph edge index: {stats.get('graph_edge_count', 0)} pages")
+
+
+@govern.command("update-backlinks")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+@click.option("--page-id", help="Update backlinks for a specific page ID only")
+@click.option("--all", "update_all", is_flag=True, help="Rebuild all backlinks from disk")
+def govern_update_backlinks(wiki_base: Path, page_id: str | None, update_all: bool):
+    """Update backlink index for changed pages.
+
+    Use --page-id to re-index a single page, or --all to rebuild the full index.
+    Without flags, detects and updates pages whose content has changed since last index.
+    """
+    from llm_wiki.index.backlinks import BacklinkIndex
+    from llm_wiki.utils.frontmatter import parse_frontmatter
+
+    index = BacklinkIndex(index_dir=wiki_base / "index")
+    index.load()
+
+    if update_all:
+        click.echo("Rebuilding full backlink index from disk...")
+        count = index.rebuild_from_pages(wiki_base)
+        index.save()
+        stats = index.get_link_stats()
+        click.echo(f"\n✓ Indexed {count} pages")
+        click.echo(f"  Forward links: {stats['total_forward_links']}")
+        click.echo(f"  Broken links:  {stats['total_broken_links']}")
+        return
+
+    if page_id:
+        # Find the page file
+        domains_dir = wiki_base / "domains"
+        if not domains_dir.exists():
+            click.echo(f"Error: Domains directory not found at {domains_dir}", err=True)
+            raise click.Abort()
+        page_file = None
+        for domain_dir in domains_dir.iterdir():
+            if not domain_dir.is_dir():
+                continue
+            candidate = domain_dir / "pages" / f"{page_id}.md"
+            if candidate.exists():
+                page_file = candidate
+                break
+
+        if not page_file:
+            click.echo(f"Error: Page '{page_id}' not found in any domain", err=True)
+            raise click.Abort()
+
+        content = page_file.read_text(encoding="utf-8")
+        _, body = parse_frontmatter(content)
+        diff = index.update_page_links(page_id, body)
+        index.save()
+
+        click.echo(f"Updated backlinks for: {page_id}")
+        if diff["added"]:
+            click.echo(f"  Links added:   {', '.join(diff['added'])}")
+        if diff["removed"]:
+            click.echo(f"  Links removed: {', '.join(diff['removed'])}")
+        if not diff["added"] and not diff["removed"]:
+            click.echo("  No changes detected.")
+        return
+
+    # No flags: scan all pages and update stale entries
+    click.echo("Scanning for pages with changed links...")
+    domains_dir = wiki_base / "domains"
+    if not domains_dir.exists():
+        click.echo(f"Error: Domains directory not found at {domains_dir}", err=True)
+        raise click.Abort()
+    updated = 0
+    total_added = 0
+    total_removed = 0
+
+    for domain_dir in sorted(domains_dir.iterdir()):
+        if not domain_dir.is_dir():
+            continue
+        pages_dir = domain_dir / "pages"
+        if not pages_dir.exists():
+            continue
+        for page_file in sorted(pages_dir.glob("*.md")):
+            try:
+                content = page_file.read_text(encoding="utf-8")
+                metadata, body = parse_frontmatter(content)
+                pid = metadata.get("id", page_file.stem)
+                diff = index.update_page_links(pid, body)
+                if diff["added"] or diff["removed"]:
+                    updated += 1
+                    total_added += len(diff["added"])
+                    total_removed += len(diff["removed"])
+            except Exception as e:
+                click.echo(f"  Warning: could not process {page_file.name}: {e}", err=True)
+
+    index.save()
+    click.echo(f"\n✓ Pages with changes: {updated}")
+    click.echo(f"  Links added:   {total_added}")
+    click.echo(f"  Links removed: {total_removed}")
 
 
 @govern.command("routing-mistakes")
