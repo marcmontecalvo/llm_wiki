@@ -554,9 +554,19 @@ All references should be updated to point to the shared version.
             # Remove from shared
             shared_path.unlink()
 
-            # Update index
+            # Remove from promoted_pages.json index
+            self._remove_from_promoted_index(page_id)
+
+            # Update backlinks
             self.backlinks.add_page_links(page_id, content)
             self.backlinks.save()
+
+            # Note: References in other pages still point to [[shared/page-id]]
+            # This is by design - manual cleanup needed if desired
+            logger.warning(
+                f"Un-promoted {page_id}, but other pages may still reference "
+                f"[[shared/{page_id}]]. Manual cleanup may be needed."
+            )
 
             logger.info(f"Un-promoted {page_id} from shared to {target_domain}")
 
@@ -574,3 +584,30 @@ All references should be updated to point to the shared version.
                 success=False,
                 message=f"Un-promotion failed: {e}",
             )
+
+    def _remove_from_promoted_index(self, page_id: str) -> None:
+        """Remove page from promoted_pages.json index.
+
+        Args:
+            page_id: Page ID to remove
+        """
+        try:
+            import json
+
+            promoted_index = self.wiki_base / "index" / "promoted_pages.json"
+            if not promoted_index.exists():
+                return
+
+            with promoted_index.open("r", encoding="utf-8") as f:
+                promoted_data = json.load(f)
+
+            if page_id in promoted_data:
+                del promoted_data[page_id]
+
+                with promoted_index.open("w", encoding="utf-8") as f:
+                    json.dump(promoted_data, f, indent=2)
+
+                logger.info(f"Removed {page_id} from promoted pages index")
+
+        except Exception as e:
+            logger.warning(f"Failed to remove from promoted index: {e}")
