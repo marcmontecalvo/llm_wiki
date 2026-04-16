@@ -37,10 +37,11 @@ class BacklinkIndex:
             content: Page content
 
         Returns:
-            List of linked page IDs (from [[page-id]] syntax)
+            List of linked page IDs (from [[page-id]] or [[page-id|display]] syntax)
         """
-        # Extract [[page-id]] style links
-        links = re.findall(r"\[\[([^\]]+)\]\]", content)
+        # Extract [[page-id]] or [[page-id|display]] style links
+        # Handles aliased links by capturing only the page ID (before pipe)
+        links = re.findall(r"\[\[([^|\]]+)(?:\|[^\]]+)?\]\]", content)
         return links
 
     def add_page_links(self, page_id: str, content: str) -> list[str]:
@@ -167,6 +168,76 @@ class BacklinkIndex:
                 self.index[target_id]["backlinks"].add(new_id)
 
         logger.debug(f"Renamed page {old_id} to {new_id}")
+
+    def detect_renames(self, all_page_ids: set[str]) -> dict[str, str]:
+        """Detect pages that may have been renamed based on index vs filesystem.
+
+        Looks for pages in the index that no longer exist on disk but
+        have backlinks from existing pages - these may have been renamed.
+
+        Args:
+            all_page_ids: Set of all valid page IDs currently on disk
+
+        Returns:
+            Dict mapping old page IDs (in index) to suggested new IDs
+        """
+        # This is a simple heuristic: if a page in the index has backlinks
+        # from existing pages but the page_id itself is not in all_page_ids,
+        # it might have been renamed
+        suggestions = {}
+
+        for page_id in list(self.index.keys()):
+            if page_id in all_page_ids:
+                continue  # Page still exists
+
+            # Check if any existing page links to this
+            has_incoming = False
+            for pid in all_page_ids:
+                if page_id in self.index.get(pid, {}).get("forward_links", set()):
+                    has_incoming = True
+                    break
+
+            # Check if there's a similar-named page that might be the rename
+            if has_incoming:
+                # Heuristic: look for pages with similar base name
+                import difflib
+
+                best_match = None
+                best_score = 0
+                for candidate in all_page_ids:
+                    # Simple similarity: same prefix or high edit similarity
+                    if candidate.startswith(page_id[:3]) or candidate.endswith(page_id[-3:]):
+                        score = difflib.SequenceMatcher(None, page_id, candidate).ratio()
+                        if score > 0.6 and score > best_score:
+                            best_score = score
+                            best_match = candidate
+
+                if best_match:
+                    suggestions[page_id] = best_match
+
+        if suggestions:
+            logger.info(f"Detected {len(suggestions)} potential page renames: {suggestions}")
+
+        return suggestions
+
+    def apply_rename(self, old_id: str, new_id: str) -> bool:
+        """Apply a detected rename to the index.
+
+        Args:
+            old_id: Old page ID in the index
+            new_id: New page ID that exists on disk
+
+        Returns:
+            True if rename was applied, False if old_id not in index
+        """
+        if old_id not in self.index:
+            logger.warning(f"Cannot rename: {old_id} not in index")
+            return False
+
+        # Use the existing rename_page method
+        self.rename_page(old_id, new_id)
+        logger.info(f"Applied rename: {old_id} -> {new_id}")
+        return True
 
     def get_backlinks(self, page_id: str) -> list[str]:
         """Get all pages that link to the given page.
@@ -330,6 +401,9 @@ class BacklinkIndex:
     def rebuild_from_pages(self, wiki_base: Path | None = None) -> int:
         """Rebuild index from all wiki pages.
 
+        Optimized single-pass rebuild: reads each file once and extracts
+        both page IDs and links in a single iteration.
+
         Args:
             wiki_base: Base wiki directory (defaults to wiki_system/)
 
@@ -341,34 +415,16 @@ class BacklinkIndex:
         # Clear existing index
         self.index.clear()
 
-        # Scan all domains
+        # Scan all domains - single pass to collect IDs and extract links
         domains_dir = wiki_base / "domains"
         if not domains_dir.exists():
             logger.warning(f"Domains directory not found: {domains_dir}")
             return 0
 
         count = 0
-        page_ids = set()
+        all_page_ids: set[str] = set()
 
-        # First pass: collect all page IDs
-        for domain_dir in domains_dir.iterdir():
-            if not domain_dir.is_dir():
-                continue
-
-            pages_dir = domain_dir / "pages"
-            if not pages_dir.exists():
-                continue
-
-            for page_file in pages_dir.glob("*.md"):
-                try:
-                    content = page_file.read_text(encoding="utf-8")
-                    metadata, _ = parse_frontmatter(content)
-                    page_id = metadata.get("id", page_file.stem)
-                    page_ids.add(page_id)
-                except Exception as e:
-                    logger.error(f"Failed to read {page_file}: {e}")
-
-        # Second pass: extract links
+        # Single pass: read each file once, extract page_id and links
         for domain_dir in domains_dir.iterdir():
             if not domain_dir.is_dir():
                 continue
@@ -381,16 +437,17 @@ class BacklinkIndex:
                 try:
                     content = page_file.read_text(encoding="utf-8")
                     metadata, body = parse_frontmatter(content)
-
                     page_id = metadata.get("id", page_file.stem)
+                    all_page_ids.add(page_id)
+
+                    # Extract and add links in the same pass
                     self.add_page_links(page_id, body)
                     count += 1
-
                 except Exception as e:
                     logger.error(f"Failed to index {page_file}: {e}")
 
-        # Update broken links
-        self.update_broken_links(page_ids)
+        # Update broken links using collected page IDs
+        self.update_broken_links(all_page_ids)
 
         logger.info(f"Rebuilt backlink index: {count} pages")
         return count

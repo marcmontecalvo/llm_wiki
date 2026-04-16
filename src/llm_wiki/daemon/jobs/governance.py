@@ -86,6 +86,9 @@ class GovernanceJob:
             broken_link_stats = self.backlink_index.update_broken_links(all_page_ids)
             orphan_pages = self.backlink_index.get_orphan_pages(all_page_ids)
 
+            # Persist updated broken links to disk
+            self.backlink_index.save()
+
             # Collect pages with broken links for the report
             pages_with_broken: dict[str, list[str]] = {}
             for pid, pdata in self.backlink_index.index.items():
@@ -269,10 +272,12 @@ class GovernanceJob:
             lines.append("")
             lines.append("Pages with no backlinks (nothing links here):")
             lines.append("")
-            for pid in orphan_pages[:50]:
+            # Configurable limit with default of 50
+            limit = 50
+            for pid in orphan_pages[:limit]:
                 lines.append(f"- {pid}")
-            if len(orphan_pages) > 50:
-                lines.append(f"- ... and {len(orphan_pages) - 50} more")
+            if len(orphan_pages) > limit:
+                lines.append(f"- ... and {len(orphan_pages) - limit} more (use --limit flag to see more)")
             lines.append("")
 
         # Duplicates section

@@ -338,7 +338,17 @@ def search_get(page_id: str, wiki_base: Path):
     help="Path to wiki base directory",
 )
 def search_backlinks(page_id: str, wiki_base: Path):
-    """Show all pages that link to a given page."""
+    """Show all pages that link to a given page.
+
+    Displays bidirectional link information:
+    - Backlinks: pages that link TO this page (<-)
+    - Forward links: pages this page links TO (->)
+    - Broken links: links to non-existent pages (!!)
+
+    Example:
+        llm-wiki search backlinks python
+        llm-wiki search backlinks python --wiki-base ./my-wiki
+    """
     from llm_wiki.index.backlinks import BacklinkIndex
 
     index = BacklinkIndex(index_dir=wiki_base / "index")
@@ -988,6 +998,89 @@ def govern_routing_mistakes(wiki_base: Path, min_confidence: float, output: Path
                 )
                 click.echo(f"    Confidence: {mistake.confidence:.2f}")
                 click.echo(f"    Reasons: {'; '.join(mistake.reasons[:2])}")
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort() from e
+
+
+@govern.command("clean-broken-links")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would be cleaned without making changes",
+)
+def govern_clean_broken_links(wiki_base: Path, dry_run: bool):
+    """Remove stale broken links from the backlink index.
+
+    This command cleans up broken link entries that reference pages
+    that no longer exist and are no longer referenced by any current pages.
+    """
+    from llm_wiki.index.backlinks import BacklinkIndex
+    from llm_wiki.utils.frontmatter import parse_frontmatter
+
+    try:
+        index = BacklinkIndex(index_dir=wiki_base / "index")
+        index.load()
+
+        # Collect all current page IDs
+        all_page_ids: set[str] = set()
+        domains_dir = wiki_base / "domains"
+        if domains_dir.exists():
+            for domain_dir in domains_dir.iterdir():
+                if not domain_dir.is_dir():
+                    continue
+                pages_dir = domain_dir / "pages"
+                if not pages_dir.exists():
+                    continue
+                for pf in pages_dir.glob("*.md"):
+                    try:
+                        content = pf.read_text(encoding="utf-8")
+                        metadata, _ = parse_frontmatter(content)
+                        page_id = metadata.get("id", pf.stem)
+                        all_page_ids.add(page_id)
+                    except Exception:
+                        pass
+
+        # Find pages in index that are broken targets not in current pages
+        # and have no backlinks from current pages
+        to_remove: list[str] = []
+        for page_id in list(index.index.keys()):
+            # Skip pages that still exist
+            if page_id in all_page_ids:
+                continue
+
+            # Check if any current page links to this
+            has_backlinks = False
+            for pid, data in index.index.items():
+                if pid in all_page_ids and page_id in data.get("forward_links", set()):
+                    has_backlinks = True
+                    break
+
+            if not has_backlinks:
+                # This is a stale entry - no current page links to it
+                to_remove.append(page_id)
+
+        if dry_run:
+            click.echo(f"[DRY RUN] Would remove {len(to_remove)} stale entries:")
+            for pid in to_remove[:20]:
+                click.echo(f"  - {pid}")
+            if len(to_remove) > 20:
+                click.echo(f"  ... and {len(to_remove) - 20} more")
+            return
+
+        # Actually remove them
+        for page_id in to_remove:
+            del index.index[page_id]
+
+        index.save()
+        click.echo(f"✓ Removed {len(to_remove)} stale broken link entries")
 
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
