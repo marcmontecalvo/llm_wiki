@@ -523,6 +523,72 @@ def govern_rebuild_index(wiki_base: Path):
     click.echo(f"✓ Graph edge index: {stats.get('graph_edge_count', 0)} pages")
 
 
+@govern.command("routing-mistakes")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+@click.option(
+    "--min-confidence",
+    type=float,
+    default=0.3,
+    help="Minimum confidence threshold (0.0-1.0)",
+)
+@click.option(
+    "--output",
+    type=click.Path(path_type=Path),
+    help="Output file for report (defaults to wiki_system/reports/)",
+)
+def govern_routing_mistakes(wiki_base: Path, min_confidence: float, output: Path | None):
+    """Detect pages that may be routed to the wrong domain."""
+    from llm_wiki.governance.routing_mistakes import RoutingMistakeDetector
+
+    if not 0.0 <= min_confidence <= 1.0:
+        click.echo("Error: --min-confidence must be between 0.0 and 1.0", err=True)
+        raise click.Abort()
+
+    click.echo("Detecting routing mistakes in wiki...")
+
+    try:
+        detector = RoutingMistakeDetector(min_confidence=min_confidence, wiki_base=wiki_base)
+        report = detector.analyze_all_pages(wiki_base)
+
+        click.echo(f"\n✓ Scanned {report.total_pages_scanned} pages")
+        click.echo(f"✓ Detected {report.total_mistakes} potential routing mistakes")
+        click.echo(f"  - High confidence: {len(report.high_confidence)}")
+        click.echo(f"  - Medium confidence: {len(report.medium_confidence)}")
+        click.echo(f"  - Low confidence: {len(report.low_confidence)}")
+
+        # Generate report
+        if output:
+            report_path = output
+        else:
+            from datetime import UTC, datetime
+
+            timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+            report_path = wiki_base / "reports" / f"routing_mistakes_{timestamp}.md"
+
+        detector.generate_report(report, report_path)
+        click.echo(f"\n✓ Report saved: {report_path}")
+
+        # Print high confidence mistakes inline
+        if report.high_confidence:
+            click.echo("\nHigh Confidence Routing Mistakes:")
+            for mistake in report.high_confidence[:10]:
+                click.echo(f"\n  {mistake.page_id}")
+                click.echo(
+                    f"    Current: {mistake.current_domain} -> Suggested: {mistake.suggested_domain}"
+                )
+                click.echo(f"    Confidence: {mistake.confidence:.2f}")
+                click.echo(f"    Reasons: {'; '.join(mistake.reasons[:2])}")
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort() from e
+
+
 @main.group()
 def claims():
     """Extract and query factual claims from wiki pages."""
