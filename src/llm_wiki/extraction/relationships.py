@@ -99,9 +99,13 @@ For each relationship, provide:
 - source_entity: Name of source entity
 - relationship_type: One of the types listed above, or a custom type
 - target_entity: Name of target entity
+- source_reference: Location in content where this was found (e.g., "paragraph 2", "section: Features")
 - description: Brief description of the relationship (optional)
 - confidence: Confidence score 0.0-1.0 based on how clearly stated it is
 - bidirectional: true if relationship goes both ways, false otherwise
+
+Also identify multi-hop relationships (A -> B -> C chains):
+- For chains, create a direct relationship between A and C with "chain" metadata
 
 Title: {title}
 {entity_context}
@@ -110,7 +114,7 @@ Content:
 {content[:3000]}
 
 Respond with JSON object:
-{{"relationships": [{{"source_entity": "...", "relationship_type": "...", "target_entity": "...", "description": "...", "confidence": 0.9, "bidirectional": false}}]}}"""
+{{"relationships": [{{"source_entity": "...", "relationship_type": "...", "target_entity": "...", "source_reference": "paragraph 1", "description": "...", "confidence": 0.9, "bidirectional": false}}]}}"""
 
         try:
             messages = [{"role": "user", "content": prompt}]
@@ -142,10 +146,16 @@ Respond with JSON object:
                         "source_entity": str(rel["source_entity"]).strip(),
                         "relationship_type": str(rel["relationship_type"]).strip().lower(),
                         "target_entity": str(rel["target_entity"]).strip(),
+                        "source_reference": str(rel.get("source_reference", "")).strip() or None,
                         "description": str(rel.get("description", "")).strip() or None,
                         "confidence": float(rel.get("confidence", 0.9)),
                         "bidirectional": bool(rel.get("bidirectional", False)),
                     }
+
+                    # Handle multi-hop chain metadata
+                    chain_info = rel.get("chain")
+                    if chain_info:
+                        validated_rel["chain"] = str(chain_info)
 
                     # Validate confidence is in range
                     conf = validated_rel["confidence"]

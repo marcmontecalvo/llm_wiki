@@ -142,6 +142,14 @@ class ExtractionPipeline:
                 for c in claim_extractions
             ]
 
+        # Extract relationships from the content
+        relationships = self.relationship_extractor.extract_relationships_with_context(
+            body, metadata, entities
+        )
+        if relationships:
+            extracted_metadata["relationships"] = relationships
+            logger.info(f"Extracted {len(relationships)} relationships from {filepath.name}")
+
         # Enrich the page
         self.enricher.enrich_page(
             filepath, extracted_metadata, entities, concepts, relationships, claims

@@ -104,9 +104,22 @@ class PageEnricher:
         if concepts:
             merged["concepts"] = concepts
 
-        # Add relationships if extracted
+        # Merge relationships (combine existing and extracted with deduplication)
         if relationships:
-            merged["relationships"] = relationships
+            existing_rels = merged.get("relationships", [])
+            # Deduplicate by source/target/relationship_type
+            seen = set()
+            all_rels = list(existing_rels)
+            for rel in relationships:
+                key = (
+                    rel.get("source_entity", ""),
+                    rel.get("relationship_type", ""),
+                    rel.get("target_entity", ""),
+                )
+                if key not in seen:
+                    seen.add(key)
+                    all_rels.append(rel)
+            merged["relationships"] = all_rels[:15]  # Max 15 relationships
 
         # Add claims if extracted
         if claims:

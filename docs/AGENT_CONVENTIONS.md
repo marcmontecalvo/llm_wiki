@@ -203,6 +203,117 @@ Content goes here...
 }
 ```
 
+### Relationship Edges
+The graph export includes extracted relationships as edges with type `relationship`:
+
+```json
+{
+  "edges": [
+    {
+      "source": "Python",
+      "target": "Docker",
+      "type": "relationship",
+      "label": "uses",
+      "confidence": 0.9,
+      "source_page": "python-programming"
+    }
+  ]
+}
+```
+
+Relationship edge fields:
+- `source`: Source entity name
+- `target`: Target entity name  
+- `type`: Always "relationship" for relationship edges
+- `label`: Relationship type (e.g., "uses", "depends_on", "part_of")
+- `confidence`: Extraction confidence (0.0-1.0)
+- `source_page`: Page ID where the relationship was found
+
+## Relationships
+
+### Relationships Field
+Extracted relationships are stored in the page frontmatter:
+
+```yaml
+---
+id: python-programming
+title: Python Programming
+domain: tech
+relationships:
+  - source_entity: Python
+    relationship_type: uses
+    target_entity: Docker
+    confidence: 0.9
+    bidirectional: false
+    description: Python uses Docker for containerization
+  - source_entity: Python
+    relationship_type: depends_on
+    target_entity: CPython
+    confidence: 0.95
+    bidirectional: true
+---
+```
+
+Relationship fields:
+- `source_entity`: Subject of the relationship
+- `relationship_type`: Type of relationship (see Relationship Types below)
+- `target_entity`: Object of the relationship
+- `confidence`: Extraction confidence (0.0-1.0)
+- `bidirectional`: Whether relationship goes both ways
+- `description`: Optional description of the relationship
+
+### Relationship Types
+Standard relationship types supported:
+
+**Technical:**
+- `uses`: A uses B (direct dependency or application)
+- `depends_on`: A depends on B (requires B to function)
+- `implements`: A implements B (concrete implementation of abstraction)
+- `extends`: A extends B (builds upon or adds to B)
+- `integrates_with`: A integrates with B (works together)
+
+**Organizational:**
+- `works_for`: A works for B (employment relationship)
+- `manages`: A manages B (has authority over B)
+- `collaborates_with`: A collaborates with B (works together)
+
+**Structural:**
+- `part_of`: A is part of B (component relationship)
+- `contains`: A contains B (has B as component)
+- `located_in`: A is located in B
+
+**Generic:**
+- `related_to`: A is related to B (general connection)
+- `cites`: A cites B (references or quotes B)
+
+### Querying Relationships
+Use the CLI to query relationships:
+
+```bash
+# Query relationships for an entity
+llm-wiki query relationships "Python"
+
+# Filter by relationship type
+llm-wiki query relationships "Python" --type uses
+
+# Filter by minimum confidence
+llm-wiki query relationships "Python" --min-confidence 0.7
+
+# Show relationship index statistics
+llm-wiki query relationships
+
+# Rebuild relationship index from all pages
+llm-wiki query rebuild-relationships
+```
+
+### Relationship Index
+The system maintains a relationship index for fast bidirectional lookups:
+- `llm-wiki query relationships [entity]` - Find all relationships involving entity
+- Forward lookup: "what does X use?"
+- Reverse lookup: "what uses X?"
+
+The index is stored in `wiki_system/index/relationships.json` and can be rebuilt with `llm-wiki query rebuild-relationships`.
+
 ## Search & Query
 
 ### Fulltext Search

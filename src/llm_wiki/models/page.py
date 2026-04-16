@@ -1,7 +1,7 @@
 """Page frontmatter schemas for wiki pages."""
 
 from datetime import datetime
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -22,6 +22,9 @@ class PageFrontmatter(BaseModel):
     updated_at: datetime = Field(..., description="Last update timestamp")
     created_at: datetime | None = Field(default=None, description="Creation timestamp")
     tags: list[str] = Field(default_factory=list, description="Tags")
+    relationships: list[dict[str, Any]] = Field(
+        default_factory=list, description="Relationships to other pages/entities"
+    )
 
     @field_validator("id")
     @classmethod

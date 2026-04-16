@@ -88,11 +88,68 @@ class GraphExporter:
                             }
                         )
 
+                    # Add edges for extracted relationships
+                    relationships = metadata.get("relationships", [])
+                    for rel in relationships:
+                        source_entity = rel.get("source_entity", "")
+                        target_entity = rel.get("target_entity", "")
+                        rel_type = rel.get("relationship_type", "related_to")
+
+                        if source_entity and target_entity:
+                            edges.append(
+                                {
+                                    "source": source_entity,
+                                    "target": target_entity,
+                                    "type": "relationship",
+                                    "label": rel_type,
+                                    "confidence": rel.get("confidence", 0.9),
+                                    "source_page": page_id,
+                                }
+                            )
+
                 except Exception as e:
                     logger.error(f"Failed to process {page_file}: {e}")
 
-        # Filter edges to only valid targets
-        edges = [e for e in edges if e["target"] in page_ids]
+        # Also process shared pages
+        shared_dir = self.wiki_base / "shared" / "pages"
+        if shared_dir.exists():
+            for page_file in shared_dir.glob("*.md"):
+                try:
+                    content = page_file.read_text(encoding="utf-8")
+                    metadata, body = parse_frontmatter(content)
+
+                    page_id = metadata.get("id", page_file.stem)
+                    page_ids.add(page_id)
+
+                    nodes.append(
+                        {
+                            "id": page_id,
+                            "label": metadata.get("title", page_id),
+                            "domain": "shared",
+                            "kind": metadata.get("kind", "page"),
+                            "tags": metadata.get("tags", []),
+                        }
+                    )
+
+                    # Add edges for extracted relationships
+                    relationships = metadata.get("relationships", [])
+                    for rel in relationships:
+                        edges.append(
+                            {
+                                "source": rel.get("source_entity", ""),
+                                "target": rel.get("target_entity", ""),
+                                "type": "relationship",
+                                "label": rel.get("relationship_type", "related_to"),
+                                "confidence": rel.get("confidence", 0.9),
+                                "source_page": page_id,
+                            }
+                        )
+
+                except Exception as e:
+                    logger.error(f"Failed to process shared page {page_file}: {e}")
+
+        # Filter edges to only valid targets (for link edges)
+        edges = [e for e in edges if e["type"] == "link" or e.get("source") and e.get("target")]
 
         # Determine output path
         if not output_file:

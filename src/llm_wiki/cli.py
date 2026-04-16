@@ -1255,6 +1255,92 @@ def claims_list(page_id: str, wiki_base: Path):
 
 
 @main.group()
+def query():
+    """Query and search the wiki."""
+    pass
+
+
+@query.command("relationships")
+@click.argument("entity", required=False)
+@click.option("--type", "rel_type", help="Filter by relationship type")
+@click.option("--min-confidence", type=float, default=0.0, help="Minimum confidence threshold")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def query_relationships(
+    entity: str | None,
+    rel_type: str | None,
+    min_confidence: float,
+    wiki_base: Path,
+):
+    """Query relationships in the wiki.
+
+    If ENTITY is provided, shows all relationships involving that entity.
+    Without ENTITY, shows relationship index statistics.
+    """
+    from llm_wiki.index.relationships import RelationshipIndex
+
+    index = RelationshipIndex(index_dir=wiki_base / "index")
+    index.load()
+
+    if not entity:
+        # Show statistics
+        stats = index.get_stats()
+        click.echo("Relationship Index Statistics:")
+        click.echo(f"  Unique subjects: {stats['unique_subjects']}")
+        click.echo(f"  Unique targets: {stats['unique_targets']}")
+        click.echo(f"  Unique relationship types: {stats['unique_types']}")
+        click.echo(f"  Total relationships: {stats['total_relationships']}")
+        return
+
+    # Find related entities
+    results = index.find_related(entity, rel_type=rel_type, min_confidence=min_confidence)
+
+    if not results:
+        click.echo(f"No relationships found for: {entity}")
+        return
+
+    click.echo(f"Relationships involving '{entity}':\n")
+
+    for rel in results:
+        direction = rel.get("direction", "unknown")
+        if direction == "outgoing":
+            click.echo(
+                f"  → {rel['relationship_type']} → {rel.get('target', 'unknown')}"
+            )
+        else:
+            click.echo(
+                f"  ← {rel['relationship_type']} ← {rel.get('subject', 'unknown')}"
+            )
+        click.echo(f"    Source page: {rel.get('source_page', 'unknown')}")
+        click.echo(f"    Confidence: {rel.get('confidence', 0.9):.2f}")
+        if rel.get("description"):
+            click.echo(f"    Description: {rel['description']}")
+        click.echo()
+
+
+@query.command("rebuild-relationships")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def rebuild_relationships(wiki_base: Path):
+    """Rebuild the relationship index from all wiki pages."""
+    from llm_wiki.index.relationships import RelationshipIndex
+
+    index = RelationshipIndex(index_dir=wiki_base / "index")
+    count = index.rebuild_from_pages(wiki_base=wiki_base)
+    index.save()
+
+    click.echo(f"✓ Built relationship index: {count} relationships")
+
+
+@main.group()
 def export():
     """Export wiki content in various formats."""
     pass
