@@ -114,11 +114,9 @@ Do **not** start with 20 domains. Start with 4-6.
 
 **✅ v0.1.0 - Core system complete!**
 
-See `docs/IMPLEMENTATION_STATUS.md` for detailed status.
-
 - 534 tests (93% coverage)
 - Full CLI interface (`llm-wiki --help`)
-- Complete ingestion, search, governance, and export pipeline
+- Complete ingestion, search, governance, export, and contradiction detection pipeline
 - CI/CD with GitHub Actions
 
 ## Getting Started
@@ -156,16 +154,19 @@ The wiki supports multiple AI agents and IDEs:
 
 See `docs/CURSOR_SETUP.md` for detailed Cursor IDE setup.
 
-## Build order (for understanding architecture)
+## Documentation
 
-Read these in order:
-1. `docs/overview.md`
-2. `docs/roadmap.md`
-3. `docs/implementation_step_1.md`
-4. `docs/implementation_step_2.md`
-5. `docs/implementation_step_3.md`
-6. `docs/implementation_step_4.md`
-7. `docs/IMPLEMENTATION_STATUS.md` (current state)
+- `docs/ARCHITECTURE.md` — system design and component overview
+- `docs/SETUP.md` — installation and configuration
+- `docs/CLI.md` — full CLI reference
+- `docs/CONFIG.md` — config file reference
+- `docs/GOVERNANCE.md` — governance and maintenance
+- `docs/EXPORTS.md` — export formats
+- `docs/PROMOTION.md` — page promotion system
+- `docs/CONTRADICTION_DETECTION.md` — contradiction detection
+- `docs/AGENT_CONVENTIONS.md` — agent integration conventions
+- `docs/AGENT_SUPPORT_MATRIX.md` — supported agents and IDEs
+- `docs/decisions/` — architecture decision records
 
 ## Non-goals for v1
 

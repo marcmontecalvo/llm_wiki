@@ -168,87 +168,31 @@ These are **enhancements** beyond the core system. The wiki is fully functional 
 - **#67:** Relationship extraction (entity relationships)
 
 ### Promotion & Sharing
-- **#68:** Promotion logic (shared vs domain-local pages)
+- **#68:** Promotion logic ✅ Complete — see `docs/PROMOTION.md`
 - **#69:** Backlink tracking (bidirectional links, broken link detection)
 
 ### Advanced Governance
-- **#70:** Contradiction detection (conflicting claims)
+- **#70:** Contradiction detection ✅ Complete — see `docs/CONTRADICTION_DETECTION.md`
 - **#71:** Review queue system (manual review workflow)
 - **#72:** Duplicate entity detection (deduplication)
 - **#74:** Retry failed ingests (automatic retry with backoff)
 - **#75:** Routing mistake detection (domain mismatch)
 
 ### Export & Visualization
-- **#73:** llms-full.txt export (comprehensive with all data)
+- **#73:** llms-full.txt export ✅ Complete — see `docs/export/llms-full-txt.md`
 - **#79:** Graph edge index (fast relationship queries)
 
 ### Integration & History
-- **#80:** Deterministic integration (conflict-aware merging)
+- **#80:** Deterministic integration ✅ Complete
 - **#81:** Change log and diff tracking (audit trail)
 
 ### Developer Experience
-- **#76:** Cursor IDE bootstrap ✅ Complete
-- **#77:** GitHub Copilot integration
+- **#76:** Cursor IDE bootstrap ✅ Complete — see `docs/CURSOR_SETUP.md`
+- **#77:** GitHub Copilot integration ✅ Complete — see `docs/COPILOT_SETUP.md`
 - **#78:** Obsidian vault import adapter ✅ Complete
 
 ### Infrastructure
 - **#82:** Enhanced daemon scheduler (cron, prioritization, retry)
-
----
-
-## 📋 Implementation Step Completion
-
-### Step 1: Foundation ✅ Complete
-- ✅ Folder structure
-- ✅ Config files (domains, routing, models, daemon)
-- ✅ Pydantic schemas (domain, page, extraction, config)
-- ✅ Page templates and frontmatter
-- ✅ Basic logging
-
-### Step 2: Ingest & Routing ✅ Complete
-- ✅ Inbox watcher
-- ✅ Source adapters (markdown, text)
-- ✅ Domain router
-- ✅ Frontmatter normalization
-- ✅ Queue management
-
-### Step 3: Extraction & Integration ⚠️ Partial
-**Complete:**
-- ✅ Entity extraction
-- ✅ Concept extraction
-- ✅ Content extraction (title, tags, summary)
-- ✅ Metadata index
-- ✅ Fulltext index
-
-**Enhancement Features** (tracked separately):
-- Enhancement: Claims extraction (#66)
-- Enhancement: Relationships extraction (#67)
-- Enhancement: Deterministic integration (#80)
-- Enhancement: Promotion logic (#68)
-- Enhancement: Graph edge index (#79)
-- Enhancement: Backlink tracking (#69)
-
-### Step 4: Governance & Daemon ⚠️ Partial
-**Complete:**
-- ✅ Metadata linter
-- ✅ Staleness detector
-- ✅ Quality scorer
-- ✅ Governance job and reports
-- ✅ Index rebuild job
-- ✅ Export job
-- ✅ Schema validation
-- ✅ Orphan detection
-- ✅ All export formats (llms.txt, JSON, graph, sitemap)
-
-**Enhancement Features** (tracked separately):
-- Enhancement: Advanced daemon scheduler (#82)
-- Enhancement: Recurring job wiring (#82)
-- Enhancement: Retry failed ingests (#74)
-- Enhancement: Contradiction detection (#70)
-- Enhancement: Duplicate detection (#72)
-- Enhancement: llms-full.txt (#73)
-- Enhancement: Review queue (#71)
-- Enhancement: Routing mistakes (#75)
 
 ---
 
@@ -261,16 +205,22 @@ The core LLM wiki system is **fully implemented and functional**:
 ✅ **Full CLI interface**
 ✅ **Complete documentation**
 ✅ **CI/CD pipeline**
-✅ **Agent integration (Claude Code, Cursor IDE)**
+✅ **Agent integration (Claude Code, Cursor IDE, GitHub Copilot)**
+✅ **Enhancement features: promotion (#68), contradiction detection (#70), llms-full.txt (#73), deterministic integration (#80), Obsidian import (#78)**
 
-## 🚀 Future Enhancements
+## 🚀 Open Enhancements
 
-All remaining work is **enhancement features** tracked in issues #66-#82. These add advanced capabilities but are not required for core functionality.
+Remaining work tracked in GitHub issues:
 
-**Priority groups:**
-- **High:** #69 (backlinks), #80 (integration), #82 (scheduler)
-- **Medium:** #66-67 (claims/relationships), #71 (review queue), #74 (retry)
-- **Enhancement:** #70, #72-73, #75, #77-79 (advanced features, IDE integrations)
+- **#66-67:** Claims and relationship extraction
+- **#69:** Backlink tracking
+- **#71:** Review queue system
+- **#72:** Duplicate entity detection
+- **#74:** Retry failed ingests
+- **#75:** Routing mistake detection
+- **#79:** Graph edge index
+- **#81:** Change log and diff tracking
+- **#82:** Enhanced daemon scheduler
 
 ---
 
@@ -278,5 +228,10 @@ All remaining work is **enhancement features** tracked in issues #66-#82. These 
 
 - **Setup:** `docs/SETUP.md`
 - **Architecture:** `docs/ARCHITECTURE.md`
+- **CLI Reference:** `docs/CLI.md`
 - **Agent Conventions:** `docs/AGENT_CONVENTIONS.md`
+- **Governance:** `docs/GOVERNANCE.md`
+- **Exports:** `docs/EXPORTS.md`
+- **Promotion:** `docs/PROMOTION.md`
+- **Contradiction Detection:** `docs/CONTRADICTION_DETECTION.md`
 - **Examples:** `examples/README.md`
