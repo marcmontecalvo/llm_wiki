@@ -1,0 +1,27 @@
+# Contradiction Detection Configuration
+# Issue #70 - Configuration for contradiction detector
+
+contradictions:
+  # Enable or disable contradiction detection
+  enabled: true
+
+  # How often to run contradiction detection (in seconds)
+  # 86400 = daily
+  # 604800 = weekly
+  detection_interval: 86400
+
+  # Minimum similarity threshold to consider claims for comparison
+  min_similarity_threshold: 0.8
+
+  # Minimum confidence required to report a contradiction
+  min_contradiction_confidence: 0.7
+
+  # Automatically resolve low-confidence contradictions
+  # Only applies when one claim is significantly more recent
+  auto_resolve: false
+
+  # Add detected contradictions to review queue for human review
+  add_to_review_queue: true
+
+  # Maximum number of contradictions to include in a single report
+  max_report_items: 100

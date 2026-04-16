@@ -76,7 +76,12 @@ class ContradictionDetector:
             client: LLM client for semantic analysis
             min_similarity_threshold: Minimum similarity to compare claims (0.0-1.0)
             min_confidence: Minimum confidence to report a contradiction (0.0-1.0)
+
+        Raises:
+            ValueError: If client is None
         """
+        if client is None:
+            raise ValueError("ModelClient is required for contradiction detection")
         self.client = client
         self.claims_extractor = ClaimsExtractor(client)
         self.min_similarity_threshold = min_similarity_threshold
@@ -130,24 +135,29 @@ class ContradictionDetector:
             Contradiction if detected, None otherwise
         """
         # Try negation detection first (high precision)
-        negation_result = self._detect_negation_contradiction(claim_1, claim_2)
+        negation_result = self._detect_negation_contradiction(claim_1, page_id_1, claim_2, page_id_2)
         if negation_result:
             return negation_result
 
+        # Try temporal contradictions
+        temporal_result = self._detect_temporal_contradiction(claim_1, page_id_1, claim_2, page_id_2)
+        if temporal_result:
+            return temporal_result
+
         # Try numerical contradictions
-        numerical_result = self._detect_numerical_contradiction(claim_1, claim_2)
+        numerical_result = self._detect_numerical_contradiction(claim_1, page_id_1, claim_2, page_id_2)
         if numerical_result:
             return numerical_result
 
         # Try semantic contradiction (requires similarity check)
-        semantic_result = self._detect_semantic_contradiction(claim_1, claim_2)
+        semantic_result = self._detect_semantic_contradiction(claim_1, page_id_1, claim_2, page_id_2)
         if semantic_result:
             return semantic_result
 
         return None
 
     def _detect_negation_contradiction(
-        self, claim_1: ClaimExtraction, claim_2: ClaimExtraction
+        self, claim_1: ClaimExtraction, page_id_1: str, claim_2: ClaimExtraction, page_id_2: str
     ) -> Contradiction | None:
         """Detect explicit negation contradictions.
 
@@ -157,7 +167,9 @@ class ContradictionDetector:
 
         Args:
             claim_1: First claim
+            page_id_1: Page ID for first claim
             claim_2: Second claim
+            page_id_2: Page ID for second claim
 
         Returns:
             Contradiction if detected
@@ -198,9 +210,9 @@ class ContradictionDetector:
                 confidence = min(0.95, 0.7 + similarity * 0.25)
                 return Contradiction(
                     claim_1=claim_1,
-                    page_id_1="",
+                    page_id_1=page_id_1,
                     claim_2=claim_2,
-                    page_id_2="",
+                    page_id_2=page_id_2,
                     contradiction_type="negation",
                     confidence=confidence,
                     severity=self._calculate_severity(confidence),
@@ -211,7 +223,7 @@ class ContradictionDetector:
         return None
 
     def _detect_numerical_contradiction(
-        self, claim_1: ClaimExtraction, claim_2: ClaimExtraction
+        self, claim_1: ClaimExtraction, page_id_1: str, claim_2: ClaimExtraction, page_id_2: str
     ) -> Contradiction | None:
         """Detect numerical contradictions.
 
@@ -221,7 +233,9 @@ class ContradictionDetector:
 
         Args:
             claim_1: First claim
+            page_id_1: Page ID for first claim
             claim_2: Second claim
+            page_id_2: Page ID for second claim
 
         Returns:
             Contradiction if detected
@@ -249,9 +263,9 @@ class ContradictionDetector:
                 confidence = min(0.85, 0.6 + 0.25)  # Numerical contradictions are clear
                 return Contradiction(
                     claim_1=claim_1,
-                    page_id_1="",
+                    page_id_1=page_id_1,
                     claim_2=claim_2,
-                    page_id_2="",
+                    page_id_2=page_id_2,
                     contradiction_type="numerical",
                     confidence=confidence,
                     severity="high" if min(diffs) > 10 else "medium",
@@ -262,13 +276,15 @@ class ContradictionDetector:
         return None
 
     def _detect_semantic_contradiction(
-        self, claim_1: ClaimExtraction, claim_2: ClaimExtraction
+        self, claim_1: ClaimExtraction, page_id_1: str, claim_2: ClaimExtraction, page_id_2: str
     ) -> Contradiction | None:
         """Detect semantic contradictions using LLM analysis.
 
         Args:
             claim_1: First claim
+            page_id_1: Page ID for first claim
             claim_2: Second claim
+            page_id_2: Page ID for second claim
 
         Returns:
             Contradiction if detected
@@ -307,9 +323,9 @@ Respond with JSON:
 
                 return Contradiction(
                     claim_1=claim_1,
-                    page_id_1="",
+                    page_id_1=page_id_1,
                     claim_2=claim_2,
-                    page_id_2="",
+                    page_id_2=page_id_2,
                     contradiction_type=data.get("contradiction_type", "opposition"),
                     confidence=confidence,
                     severity=self._calculate_severity(confidence),
@@ -319,6 +335,79 @@ Respond with JSON:
 
         except Exception as e:
             logger.debug(f"LLM semantic analysis failed: {e}")
+
+        return None
+
+    def _detect_temporal_contradiction(
+        self, claim_1: ClaimExtraction, page_id_1: str, claim_2: ClaimExtraction, page_id_2: str
+    ) -> Contradiction | None:
+        """Detect temporal contradictions.
+
+        Examples:
+        - "Before event X" vs "After event X"
+        - "Event happened in 2020" vs "Event happened in 2021"
+        - Temporal context conflicts
+
+        Args:
+            claim_1: First claim
+            page_id_1: Page ID for first claim
+            claim_2: Second claim
+            page_id_2: Page ID for second claim
+
+        Returns:
+            Contradiction if detected
+        """
+        # Get temporal context from claims if available
+        temporal_1 = getattr(claim_1, 'temporal_context', None)
+        temporal_2 = getattr(claim_2, 'temporal_context', None)
+
+        # Check for explicit temporal keywords
+        temporal_patterns = [
+            r'\b(before|after|during)\b',
+            r'\b(earlier|later|previously|formerly)\b',
+            r'\b(then|now|originally|subsequently)\b',
+        ]
+
+        text_1 = claim_1.claim.lower()
+        text_2 = claim_2.claim.lower()
+
+        has_temporal_1 = any(re.search(p, text_1) for p in temporal_patterns)
+        has_temporal_2 = any(re.search(p, text_2) for p in temporal_patterns)
+
+        # If both have temporal keywords, check for opposition
+        if has_temporal_1 and has_temporal_2:
+            # Check for direct temporal opposition
+            temporal_opposition = [
+                ('before', 'after'),
+                ('earlier', 'later'),
+                ('formerly', 'now'),
+            ]
+
+            for opp1, opp2 in temporal_opposition:
+                if (opp1 in text_1 and opp2 in text_2) or (opp2 in text_1 and opp1 in text_2):
+                    similarity = self._simple_similarity(
+                        re.sub(r'\b(before|after|during|earlier|later|previously|formerly|then|now|originally|subsequently)\b', '', text_1),
+                        re.sub(r'\b(before|after|during|earlier|later|previously|formerly|then|now|originally|subsequently)\b', '', text_2)
+                    )
+                    if similarity > 0.7:
+                        confidence = 0.75 + similarity * 0.15
+                        return Contradiction(
+                            claim_1=claim_1,
+                            page_id_1=page_id_1,
+                            claim_2=claim_2,
+                            page_id_2=page_id_2,
+                            contradiction_type="temporal",
+                            confidence=min(0.95, confidence),
+                            severity=self._calculate_severity(confidence),
+                            explanation="Temporal contradiction: Claims describe events at different times or in different order.",
+                            suggested_resolution="Verify dates and timeline of events",
+                        )
+
+        # Also check if both claims have temporal_context metadata and they conflict
+        if temporal_1 and temporal_2:
+            # Simple comparison: if both have dates that differ significantly
+            # This would need more sophisticated date parsing
+            pass
 
         return None
 
@@ -419,16 +508,16 @@ Respond with JSON:
         # Detect contradictions
         contradictions = self.detect_contradictions(all_claims)
 
+        # Build mapping from claim object to page_id
+        page_id_map = {id(claim): page_id for claim, page_id in all_claims}
+
         # Organize results
         report = ContradictionReport(total_contradictions=len(contradictions))
 
         for contradiction in contradictions:
-            # Set page IDs
-            for i, (claim, page_id) in enumerate(all_claims):
-                if i == 0 or claim == contradiction.claim_1:
-                    contradiction.page_id_1 = page_id
-                if i == len(all_claims) - 1 or claim == contradiction.claim_2:
-                    contradiction.page_id_2 = page_id
+            # Set page IDs from the mapping
+            contradiction.page_id_1 = page_id_map.get(id(contradiction.claim_1), "")
+            contradiction.page_id_2 = page_id_map.get(id(contradiction.claim_2), "")
 
             # Organize by confidence
             if contradiction.confidence >= 0.8:

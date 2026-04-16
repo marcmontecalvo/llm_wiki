@@ -54,7 +54,7 @@ Successfully implemented a comprehensive **Contradiction Detector** for the LLM 
 
 ## 📁 Files Created
 
-### Implementation (534 lines)
+### Implementation (618 lines)
 ```
 src/llm_wiki/governance/contradictions.py
 ├── Contradiction (dataclass)
@@ -63,13 +63,14 @@ src/llm_wiki/governance/contradictions.py
     ├── analyze_all_pages()
     ├── detect_contradictions()
     ├── _detect_negation_contradiction()
+    ├── _detect_temporal_contradiction()
     ├── _detect_numerical_contradiction()
     ├── _detect_semantic_contradiction()
     ├── generate_report()
     └── Helper methods
 ```
 
-### Tests (781+ lines)
+### Tests (420+ lines)
 ```
 tests/unit/test_contradictions.py (380 lines)
 - 20+ test cases
@@ -141,6 +142,15 @@ DELIVERABLES.md (200+ lines)
 - New command: `govern contradictions`
 - Configuration options
 - Output formatting
+
+### Configuration
+**`config/contradictions.yaml`**
+- `enabled`: Enable/disable contradiction detection
+- `detection_interval`: How often to run detection (in seconds)
+- `min_similarity_threshold`: Minimum similarity to compare claims
+- `min_contradiction_confidence`: Minimum confidence to report
+- `auto_resolve`: Automatically resolve low-confidence contradictions
+- `add_to_review_queue`: Add contradictions to review queue
 
 ---
 

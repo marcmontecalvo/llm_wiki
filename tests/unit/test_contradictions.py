@@ -98,7 +98,7 @@ class TestContradictionDetector:
     ):
         """Test detection of negation contradictions."""
         contradiction = detector._detect_negation_contradiction(
-            sample_negation_1, sample_negation_2
+            sample_negation_1, "page1", sample_negation_2, "page2"
         )
 
         assert contradiction is not None
@@ -113,7 +113,9 @@ class TestContradictionDetector:
         sample_claim_2: ClaimExtraction,
     ):
         """Test detection of numerical contradictions."""
-        contradiction = detector._detect_numerical_contradiction(sample_claim_1, sample_claim_2)
+        contradiction = detector._detect_numerical_contradiction(
+            sample_claim_1, "page1", sample_claim_2, "page2"
+        )
 
         assert contradiction is not None
         assert contradiction.contradiction_type == "numerical"
@@ -124,7 +126,9 @@ class TestContradictionDetector:
         self, detector: ContradictionDetector, sample_claim_1: ClaimExtraction
     ):
         """Test that identical claims are not flagged as contradictions."""
-        _contradiction = detector._detect_numerical_contradiction(sample_claim_1, sample_claim_1)
+        _contradiction = detector._detect_numerical_contradiction(
+            sample_claim_1, "page1", sample_claim_1, "page1"
+        )
 
         # Identical claims might be detected as contradiction, but with same structure
         # This is expected behavior - only if values are different
@@ -200,7 +204,9 @@ class TestContradictionDetector:
             }
         )
 
-        contradiction = detector._detect_semantic_contradiction(sample_claim_1, sample_claim_2)
+        contradiction = detector._detect_semantic_contradiction(
+            sample_claim_1, "page1", sample_claim_2, "page2"
+        )
 
         assert contradiction is not None
         assert contradiction.contradiction_type == "opposition"
@@ -223,7 +229,9 @@ class TestContradictionDetector:
             }
         )
 
-        contradiction = detector._detect_semantic_contradiction(sample_claim_1, sample_claim_2)
+        contradiction = detector._detect_semantic_contradiction(
+            sample_claim_1, "page1", sample_claim_2, "page2"
+        )
 
         assert contradiction is None
 
@@ -352,7 +360,9 @@ class TestContradictionEdgeCases:
             source_reference="section 2",
         )
 
-        contradiction = detector._detect_negation_contradiction(claim_1, claim_2)
+        contradiction = detector._detect_negation_contradiction(
+            claim_1, "page1", claim_2, "page2"
+        )
 
         assert contradiction is not None
 
@@ -369,7 +379,9 @@ class TestContradictionEdgeCases:
             source_reference="section 2",
         )
 
-        contradiction = detector._detect_negation_contradiction(claim_1, claim_2)
+        contradiction = detector._detect_negation_contradiction(
+            claim_1, "page1", claim_2, "page2"
+        )
 
         assert contradiction is not None
 
@@ -388,7 +400,9 @@ class TestContradictionEdgeCases:
             temporal_context="as of 2023",
         )
 
-        _contradiction = detector._detect_numerical_contradiction(claim_1, claim_2)
+        _contradiction = detector._detect_numerical_contradiction(
+            claim_1, "page1", claim_2, "page2"
+        )
 
         # Both claims have temporal context that could resolve the contradiction
         # This is intentional - we report it and let humans decide
