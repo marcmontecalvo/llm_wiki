@@ -33,8 +33,8 @@ class TestIndexRebuildJob:
         result = job.execute()
 
         assert result["status"] == "success"
-        assert result["metadata_count"] == 0
-        assert result["fulltext_count"] == 0
+        assert result["metadata_pages"] == 0
+        assert result["fulltext_documents"] == 0
 
     def test_execute_with_pages(self, job: IndexRebuildJob, wiki_base: Path):
         """Test executing rebuild with wiki pages."""
@@ -69,8 +69,8 @@ Content
         result = job.execute()
 
         assert result["status"] == "success"
-        assert result["metadata_count"] == 2
-        assert result["fulltext_count"] == 2
+        assert result["metadata_pages"] == 2
+        assert result["fulltext_documents"] == 2
 
     def test_execute_with_multiple_domains(self, job: IndexRebuildJob, wiki_base: Path):
         """Test executing rebuild with multiple domains."""
@@ -90,8 +90,8 @@ Content
         result = job.execute()
 
         assert result["status"] == "success"
-        assert result["metadata_count"] == 2
-        assert result["fulltext_count"] == 2
+        assert result["metadata_pages"] == 2
+        assert result["fulltext_documents"] == 2
 
     def test_execute_handles_errors(self, job: IndexRebuildJob, wiki_base: Path):
         """Test that execute handles errors gracefully."""
@@ -105,7 +105,7 @@ Content
 
         assert result["status"] == "success"
         # Invalid page should be skipped
-        assert result["metadata_count"] == 0
+        assert result["metadata_pages"] == 0
 
     def test_execute_rebuilds_indexes(self, job: IndexRebuildJob, wiki_base: Path):
         """Test that execute actually rebuilds the indexes."""
@@ -149,8 +149,8 @@ Content
         result = run_index_rebuild(wiki_base=wiki_base)
 
         assert result["status"] == "success"
-        assert result["metadata_count"] == 1
-        assert result["fulltext_count"] == 1
+        assert result["metadata_pages"] == 1
+        assert result["fulltext_documents"] == 1
 
     def test_execute_with_missing_id(self, job: IndexRebuildJob, wiki_base: Path):
         """Test handling pages without explicit ID."""
@@ -161,7 +161,7 @@ Content
         result = job.execute()
 
         assert result["status"] == "success"
-        assert result["metadata_count"] == 1
+        assert result["metadata_pages"] == 1
 
         # Should use filename as ID
         page_data = job.wiki_query.get_page("test_page")
@@ -176,14 +176,14 @@ Content
         page1.write_text("---\nid: page1\ntitle: Page 1\n---\nContent")
 
         result1 = job.execute()
-        assert result1["metadata_count"] == 1
+        assert result1["metadata_pages"] == 1
 
         # Add another page and rebuild
         page2 = pages_dir / "page2.md"
         page2.write_text("---\nid: page2\ntitle: Page 2\n---\nContent")
 
         result2 = job.execute()
-        assert result2["metadata_count"] == 2
+        assert result2["metadata_pages"] == 2
 
         # Both pages should be in index
         assert job.wiki_query.get_page("page1") is not None
@@ -198,8 +198,8 @@ Content
 
         # Should succeed with zero count
         assert result["status"] == "success"
-        assert result["metadata_count"] == 0
-        assert result["fulltext_count"] == 0
+        assert result["metadata_pages"] == 0
+        assert result["fulltext_documents"] == 0
         assert result["backlink_count"] == 0
 
     def test_execute_rebuilds_backlink_index(self, job: IndexRebuildJob, wiki_base: Path):

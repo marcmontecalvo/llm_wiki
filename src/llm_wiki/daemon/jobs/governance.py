@@ -72,6 +72,16 @@ class GovernanceJob:
                     f"Found {contradiction_report.total_contradictions} potential contradictions"
                 )
 
+            # Count pages scanned
+            domains_dir = self.wiki_base / "domains"
+            pages_scanned = 0
+            if domains_dir.exists():
+                for domain_dir in domains_dir.iterdir():
+                    if domain_dir.is_dir():
+                        pages_dir = domain_dir / "pages"
+                        if pages_dir.exists():
+                            pages_scanned += len(list(pages_dir.glob("*.md")))
+
             # Generate report
             report_path = self._generate_report(
                 lint_issues,
@@ -79,10 +89,12 @@ class GovernanceJob:
                 quality_reports,
                 duplicate_report,
                 contradiction_report,
+                pages_scanned=pages_scanned,
             )
 
             stats = {
                 "status": "success",
+                "total_pages": pages_scanned,
                 "lint_issues": len(lint_issues),
                 "lint_errors": lint_errors,
                 "lint_warnings": lint_warnings,
@@ -118,6 +130,7 @@ class GovernanceJob:
         quality_reports: list,
         duplicate_report: Any,
         contradiction_report: Any = None,
+        pages_scanned: int = 0,
     ) -> Path:
         """Generate governance report markdown.
 
@@ -137,19 +150,9 @@ class GovernanceJob:
         timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         report_path = reports_dir / f"governance_{timestamp}.md"
 
-        # Count pages scanned
-        domains_dir = self.wiki_base / "domains"
-        pages_scanned = 0
-        if domains_dir.exists():
-            for domain_dir in domains_dir.iterdir():
-                if domain_dir.is_dir():
-                    pages_dir = domain_dir / "pages"
-                    if pages_dir.exists():
-                        pages_scanned += len(list(pages_dir.glob("*.md")))
-
         # Generate report content
         lines = [
-            "# Governance Report",
+            "# Wiki Governance Report",
             f"Generated: {datetime.now(UTC).isoformat()}",
             "",
             "## Summary",

@@ -103,6 +103,7 @@ class WikiQuery:
 
             filtered_results.append(
                 {
+                    "id": page_id,
                     "page_id": page_id,
                     "title": metadata.get("title", page_id),
                     "domain": metadata.get("domain", "general"),

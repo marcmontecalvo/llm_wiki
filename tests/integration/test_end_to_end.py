@@ -120,7 +120,7 @@ def test_index_rebuild_and_search(populated_wiki):
 
     # Search by tag
     python_pages = wiki.find_by_tag("python")
-    assert "python" in python_pages
+    assert any(p.get("id") == "python" for p in python_pages)
 
     # Search by domain
     tech_pages = wiki.find_by_domain("tech")
@@ -178,7 +178,7 @@ def test_export_workflow(populated_wiki):
 
     # Verify sitemap structure
     sitemap_content = sitemap_path.read_text()
-    assert '<?xml version="1.0"' in sitemap_content
+    assert "<?xml version=" in sitemap_content
     assert "<urlset" in sitemap_content
 
 

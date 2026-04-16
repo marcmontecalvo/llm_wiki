@@ -3,11 +3,19 @@
 import json
 import logging
 import re
+from datetime import date, datetime
 from pathlib import Path
 
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
+
+
+class _DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj: object) -> object:
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return super().default(obj)
 
 
 class GraphExporter:
@@ -99,7 +107,7 @@ class GraphExporter:
         }
 
         with output_file.open("w", encoding="utf-8") as f:
-            json.dump(graph_data, f, indent=2)
+            json.dump(graph_data, f, indent=2, cls=_DateTimeEncoder)
 
         logger.info(f"Exported graph: {len(nodes)} nodes, {len(edges)} edges")
 

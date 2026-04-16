@@ -2,12 +2,22 @@
 
 import json
 import logging
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
+
+
+class _DateTimeEncoder(json.JSONEncoder):
+    """JSON encoder that serializes datetime/date objects as ISO 8601 strings."""
+
+    def default(self, obj: object) -> object:
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return super().default(obj)
 
 
 class MetadataIndex:
@@ -209,7 +219,7 @@ class MetadataIndex:
         }
 
         with index_file.open("w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+            json.dump(data, f, indent=2, cls=_DateTimeEncoder)
 
         logger.info(f"Saved metadata index ({len(self.pages)} pages)")
 

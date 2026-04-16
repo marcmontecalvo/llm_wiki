@@ -95,7 +95,7 @@ Content from 2024."""
 
         # Check report content
         content = report_path.read_text()
-        assert "# Governance Report" in content
+        assert "# Wiki Governance Report" in content
         assert "## Summary" in content
 
     def test_execute_detects_lint_issues(self, job: GovernanceJob):
@@ -128,7 +128,7 @@ Content from 2024."""
         assert len(reports) > 0
 
         content = reports[0].read_text()
-        assert "# Governance Report" in content
+        assert "# Wiki Governance Report" in content
         assert "## Summary" in content
         assert "Pages scanned:" in content
         assert "Duplicate candidates:" in content or "## Detected Duplicates" in content

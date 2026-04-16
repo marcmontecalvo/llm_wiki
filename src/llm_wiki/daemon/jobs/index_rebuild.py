@@ -49,8 +49,8 @@ class IndexRebuildJob:
             )
 
             return {
-                "metadata_count": metadata_count,
-                "fulltext_count": fulltext_count,
+                "metadata_pages": metadata_count,
+                "fulltext_documents": fulltext_count,
                 "backlink_count": backlink_count,
                 "graph_edge_count": graph_edge_count,
                 "status": "success",
@@ -59,9 +59,10 @@ class IndexRebuildJob:
         except Exception as e:
             logger.error(f"Index rebuild failed: {e}", exc_info=True)
             return {
-                "metadata_count": 0,
-                "fulltext_count": 0,
+                "metadata_pages": 0,
+                "fulltext_documents": 0,
                 "backlink_count": 0,
+                "graph_edge_count": 0,
                 "status": "error",
                 "error": str(e),
             }

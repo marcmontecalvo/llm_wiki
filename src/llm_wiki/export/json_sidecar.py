@@ -2,11 +2,19 @@
 
 import json
 import logging
+from datetime import date, datetime
 from pathlib import Path
 
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
+
+
+class _DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj: object) -> object:
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return super().default(obj)
 
 
 class JSONSidecarExporter:
@@ -55,7 +63,7 @@ class JSONSidecarExporter:
 
         # Write JSON
         with output_file.open("w", encoding="utf-8") as f:
-            json.dump(json_data, f, indent=2, ensure_ascii=False)
+            json.dump(json_data, f, indent=2, ensure_ascii=False, cls=_DateTimeEncoder)
 
         return output_file
 
