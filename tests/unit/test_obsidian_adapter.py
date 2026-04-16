@@ -20,10 +20,20 @@ def temp_md_file(tmp_path):
 class TestCanParse:
     """Tests for can_parse method."""
 
-    def test_can_parse_md_file(self, obsidian_adapter, temp_md_file):
-        """Should return True for .md files."""
-        temp_md_file.write_text("# Test")
+    def test_can_parse_obsidian_markdown(self, obsidian_adapter, temp_md_file):
+        """Should return True for .md files with Obsidian markers."""
+        temp_md_file.write_text("# Test\nLink to [[other-page]] and #hashtag")
         assert obsidian_adapter.can_parse(temp_md_file) is True
+
+    def test_can_parse_embedded_file(self, obsidian_adapter, temp_md_file):
+        """Should return True for .md files with embedded syntax."""
+        temp_md_file.write_text("# Test\n![[embedded-page]]")
+        assert obsidian_adapter.can_parse(temp_md_file) is True
+
+    def test_cannot_parse_plain_markdown(self, obsidian_adapter, temp_md_file):
+        """Should return False for plain markdown (no Obsidian syntax)."""
+        temp_md_file.write_text("# Test\nJust regular content.")
+        assert obsidian_adapter.can_parse(temp_md_file) is False
 
     def test_cannot_parse_other_files(self, obsidian_adapter, tmp_path):
         """Should return False for non-markdown files."""

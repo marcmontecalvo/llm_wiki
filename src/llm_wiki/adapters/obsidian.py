@@ -20,7 +20,8 @@ class ObsidianVaultAdapter(SourceAdapter):
     """
 
     # Regex for wikilinks: [[page-id]] or [[page-id|display]]
-    WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
+    # IMPORTANT: Use negative lookbehind to NOT match ![[... (embedded files)
+    WIKILINK_PATTERN = re.compile(r"(?<!!)\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 
     # Regex for embedded files: ![page-id]] or ![page-id|display]]
     # Note: Obsidian embeds use ![[page-id]] syntax
@@ -29,17 +30,43 @@ class ObsidianVaultAdapter(SourceAdapter):
     # Regex for hash tags: #tag
     HASHTAG_PATTERN = re.compile(r"(?:#)([a-zA-Z0-9_\-]+)")
 
+    # Regex patterns for Obsidian-specific markers
+    HAS_OBSIDIAN_MARKERS = re.compile(
+        r"(\[\[([^\]|]+)(?:\|[^\]]+)?\]\])|"  # wikilinks [[...]]
+        r"(!\[\[([^\]|]+)(?:\|[^\]]+)?\]\])|"  # embedded ![[...]]
+        r"(#[a-zA-Z0-9_\-]+)",  # hashtags #tag
+        re.MULTILINE
+    )
+
     @classmethod
     def can_parse(cls, filepath: Path) -> bool:
-        """Check if file is a valid Obsidian vault markdown file.
+        """Check if file appears to be from an Obsidian vault.
+
+        This checks for Obsidian-specific patterns in the file:
+        - Wikilinks [[page-id]] or [[page-id|display]]
+        - Embedded files ![[page-id]]
+        - Hashtags #tag
 
         Args:
             filepath: Path to check
 
         Returns:
-            True if file has .md extension
+            True if file contains Obsidian-specific syntax
         """
-        return filepath.suffix.lower() == ".md"
+        if filepath.suffix.lower() != ".md":
+            return False
+
+        # Try to read file content and check for Obsidian markers
+        try:
+            content = filepath.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            try:
+                content = filepath.read_text(encoding="latin-1")
+            except Exception:
+                return False
+
+        # Check if file contains any Obsidian-specific markers
+        return bool(cls.HAS_OBSIDIAN_MARKERS.search(content))
 
     def extract_metadata(self, filepath: Path, content: str) -> dict[str, Any]:
         """Extract metadata from Obsidian vault file.
