@@ -110,6 +110,7 @@ queue/ → extract metadata → extract entities/concepts → enrich → pages/
 - **Metadata Linter**: Validate frontmatter, check citations
 - **Staleness Detector**: Find outdated content
 - **Quality Scorer**: Multi-factor quality assessment
+- **Duplicate Detector**: Find duplicate entity pages across domains
 - **Governance Job**: Orchestrate checks, generate reports
 
 **Checks**:
@@ -118,13 +119,51 @@ queue/ → extract metadata → extract entities/concepts → enrich → pages/
 - Citation presence
 - Page age and updates
 - Content quality (length, structure)
+- Duplicate entity detection
 - Orphan detection
 
 **Key Files**:
 - `src/llm_wiki/governance/linter.py`
 - `src/llm_wiki/governance/staleness.py`
 - `src/llm_wiki/governance/quality.py`
+- `src/llm_wiki/governance/duplicates.py`
 - `src/llm_wiki/daemon/jobs/governance.py`
+
+### 4.1 Duplicate Entity Detection
+
+The Duplicate Detector identifies when the same entity is documented in multiple pages across domains. It uses multiple detection strategies:
+
+**Detection Strategies**:
+- **Exact Name Match**: Case-insensitive comparison of normalized titles
+- **Alias/Synonym Matching**: Check if one page's title appears in another's aliases
+- **Metadata Correlation**: Same source_url or github_url indicates duplicates
+- **Tag Overlap**: 3+ common tags suggest related content
+- **Content Similarity**: Word-based Jaccard similarity (requires 30%+ match)
+
+**Scoring Formula**:
+```
+duplicate_score = name_similarity * 0.4 + alias_match * 0.3 + metadata_overlap * 0.2 + content_similarity * 0.1
+```
+
+**Confidence Levels**:
+- **High**: score > 0.8 → likely duplicate, suggest merge
+- **Medium**: score 0.5-0.8 → possible duplicate, suggest redirect
+- **Low**: score 0.3-0.5 → review recommended, keep both
+
+**Merge Workflow**:
+1. Choose primary page (most backlinks, longest content)
+2. Merge content (secondary appended as section)
+3. Update all backlinks to point to primary
+4. Create redirect from secondary ID
+5. Archive secondary page
+6. Log merge action
+
+**Review Queue Integration**:
+High-confidence duplicates can be automatically added to the review queue for manual approval before merging.
+
+**Key Files**:
+- `src/llm_wiki/governance/duplicates.py`
+- `config/daemon.yaml` (duplicates config)
 
 ### 5. Export System
 

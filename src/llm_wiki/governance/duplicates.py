@@ -4,8 +4,11 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from llm_wiki.utils.frontmatter import parse_frontmatter
+from llm_wiki.review.queue import ReviewQueue
+from llm_wiki.review.models import ReviewItem, ReviewType, ReviewPriority, ReviewStatus
 
 logger = logging.getLogger(__name__)
 
@@ -260,10 +263,31 @@ class DuplicateDetector:
                     f"{len(common_tags)} common tags: {', '.join(sorted(common_tags)[:5])}"
                 )
 
+        # E. Content similarity (word-based Jaccard similarity)
+        content_similarity = 0.0
+        if content1 and content2:
+            words1 = set(content1.lower().split())
+            words2 = set(content2.lower().split())
+            # Remove very short words (likely stop words or noise)
+            words1 = {w for w in words1 if len(w) > 2}
+            words2 = {w for w in words2 if len(w) > 2}
+            if words1 and words2:
+                intersection = words1 & words2
+                union = words1 | words2
+                if union:
+                    jaccard = len(intersection) / len(union)
+                    # Only count as significant if at least 30% similar
+                    if jaccard >= 0.3:
+                        content_similarity = jaccard
+                        reasons.append(f"Content similarity: {jaccard:.2f}")
+
         # Calculate final score using formula:
         # duplicate_score = name_similarity * 0.4 + alias_match * 0.3 + metadata_overlap * 0.2 + tag_overlap * 0.1
         score = (
-            name_similarity * 0.4 + alias_match * 0.3 + metadata_overlap * 0.2 + tag_overlap * 0.1
+            name_similarity * 0.4
+            + alias_match * 0.3
+            + metadata_overlap * 0.2
+            + tag_overlap * 0.1
         )
 
         return score, reasons
@@ -395,3 +419,415 @@ class DuplicateDetector:
             "**Reasons**:",
             *[f"- {reason}" for reason in candidate.reasons],
         ]
+
+    def add_to_review_queue(
+        self,
+        report: DuplicateReport,
+        queue_dir: Path | None = None,
+        min_score: float = 0.5,
+    ) -> list[ReviewItem]:
+        """Add high-confidence duplicate candidates to the review queue.
+
+        Args:
+            report: DuplicateReport with detected duplicates
+            queue_dir: Optional queue directory (defaults to wiki_system/review_queue)
+            min_score: Minimum score to add to queue (default 0.5)
+
+        Returns:
+            List of created ReviewItems
+        """
+        if queue_dir is None:
+            # Use wiki_base if available, otherwise default
+            if self.wiki_base:
+                queue_dir = self.wiki_base / "review_queue"
+            else:
+                queue_dir = Path("wiki_system") / "review_queue"
+
+        queue = ReviewQueue(queue_dir=queue_dir)
+        created_items: list[ReviewItem] = []
+
+        # Get candidates above threshold
+        all_candidates = (
+            report.high_confidence
+            + report.medium_confidence
+            + report.low_confidence
+        )
+        candidates_to_add = [c for c in all_candidates if c.duplicate_score >= min_score]
+
+        for candidate in candidates_to_add:
+            # Check if this duplicate pair is already in the queue
+            existing_items = queue.list_pending(item_type=ReviewType.DUPLICATE)
+            existing_pair_ids = {
+                (item.metadata.get("page_1"), item.metadata.get("page_2"))
+                for item in existing_items
+            }
+
+            pair_key = (candidate.page_1, candidate.page_2)
+            reverse_pair = (candidate.page_2, candidate.page_1)
+
+            if pair_key in existing_pair_ids or reverse_pair in existing_pair_ids:
+                logger.debug(f"Skipping duplicate {pair_key} - already in queue")
+                continue
+
+            # Determine priority based on score
+            if candidate.duplicate_score > 0.8:
+                priority = ReviewPriority.HIGH
+            elif candidate.duplicate_score >= 0.6:
+                priority = ReviewPriority.MEDIUM
+            else:
+                priority = ReviewPriority.LOW
+
+            # Create review item
+            item_id = f"dup_{candidate.page_1}_{candidate.page_2}"
+            review_item = ReviewItem(
+                id=item_id,
+                type=ReviewType.DUPLICATE,
+                target_id=candidate.primary_page or candidate.page_1,
+                reason=f"Duplicate detected: '{candidate.page_1}' ↔ '{candidate.page_2}' (score: {candidate.duplicate_score:.2f})",
+                priority=priority,
+                metadata={
+                    "page_1": candidate.page_1,
+                    "page_2": candidate.page_2,
+                    "duplicate_score": candidate.duplicate_score,
+                    "suggested_action": candidate.suggested_action,
+                    "reasons": candidate.reasons,
+                },
+            )
+
+            try:
+                queue.create(review_item)
+                created_items.append(review_item)
+                logger.info(f"Added duplicate to review queue: {item_id}")
+            except ValueError as e:
+                # Item might already exist
+                logger.debug(f"Could not add review item: {e}")
+                continue
+
+        logger.info(f"Added {len(created_items)} duplicates to review queue")
+        return created_items
+
+    def merge_duplicate(
+        self,
+        page_1: str,
+        page_2: str,
+        primary_page: str,
+        wiki_base: Path | None = None,
+    ) -> dict[str, Any]:
+        """Merge a duplicate page into the primary page.
+
+        The merge workflow:
+        1. Load primary and secondary page content
+        2. Merge content (secondary content appended as section)
+        3. Update all backlinks that point to secondary page
+        4. Create redirect from secondary to primary
+        5. Update or delete secondary page
+
+        Args:
+            page_1: First page ID
+            page_2: Second page ID
+            primary_page: The page to keep (must be one of page_1 or page_2)
+            wiki_base: Base wiki directory (defaults to self.wiki_base)
+
+        Returns:
+            Dictionary with merge results
+        """
+        if wiki_base is None:
+            wiki_base = self.wiki_base or Path("wiki_system")
+
+        if primary_page not in (page_1, page_2):
+            raise ValueError(f"Primary page must be one of {page_1} or {page_2}")
+
+        secondary_page = page_2 if primary_page == page_1 else page_1
+
+        logger.info(f"Merging {secondary_page} into {primary_page}")
+
+        # Find the pages
+        primary_path, secondary_path = self._find_page_files(
+            primary_page, secondary_page, wiki_base
+        )
+
+        if not primary_path:
+            raise FileNotFoundError(f"Primary page not found: {primary_page}")
+        if not secondary_path:
+            raise FileNotFoundError(f"Secondary page not found: {secondary_page}")
+
+        # Read page contents
+        primary_content = primary_path.read_text(encoding="utf-8")
+        secondary_content = secondary_path.read_text(encoding="utf-8")
+
+        primary_meta, primary_body = parse_frontmatter(primary_content)
+        secondary_meta, secondary_body = parse_frontmatter(secondary_content)
+
+        # Get secondary page title for the merged section
+        secondary_title = secondary_meta.get("title", secondary_page)
+
+        # Create merged content - append secondary content as a section
+        merged_body = self._merge_content(
+            primary_body, secondary_body, secondary_title
+        )
+
+        # Update primary page metadata - merge tags, aliases
+        merged_meta = self._merge_metadata(primary_meta, secondary_meta)
+
+        # Write updated primary page
+        merged_frontmatter = self._create_frontmatter(merged_meta, merged_body)
+        primary_path.write_text(merged_frontmatter, encoding="utf-8")
+
+        # Update backlinks from other pages
+        updated_backlinks = self._update_backlinks(
+            secondary_page, primary_page, wiki_base
+        )
+
+        # Create redirect file for secondary page
+        redirect_path = secondary_path.with_suffix(".md.redirect")
+        redirect_content = f"""---
+redirect_to: {primary_page}
+redirect_from: {secondary_page}
+---
+
+# Redirect
+
+This page has been merged into [[{primary_page}]].
+"""
+        redirect_path.write_text(redirect_content, encoding="utf-8")
+
+        # Delete or archive secondary page
+        archived_path = secondary_path.with_suffix(".md.archived")
+        secondary_path.rename(archived_path)
+
+        logger.info(f"Merge complete: {secondary_page} -> {primary_page}")
+
+        return {
+            "status": "success",
+            "primary_page": primary_page,
+            "secondary_page": secondary_page,
+            "backlinks_updated": updated_backlinks,
+            "redirect_created": str(redirect_path),
+            "archived_path": str(archived_path),
+        }
+
+    def _find_page_files(
+        self, page_1: str, page_2: str, wiki_base: Path
+    ) -> tuple[Path | None, Path | None]:
+        """Find the file paths for two page IDs.
+
+        Args:
+            page_1: First page ID
+            page_2: Second page ID
+            wiki_base: Base wiki directory
+
+        Returns:
+            Tuple of (path_for_page_1, path_for_page_2)
+        """
+        path_1 = None
+        path_2 = None
+
+        domains_dir = wiki_base / "domains"
+        if not domains_dir.exists():
+            return None, None
+
+        for domain_dir in domains_dir.iterdir():
+            if not domain_dir.is_dir():
+                continue
+
+            pages_dir = domain_dir / "pages"
+            if not pages_dir.exists():
+                continue
+
+            for page_file in pages_dir.glob("*.md"):
+                try:
+                    content = page_file.read_text(encoding="utf-8")
+                    metadata, _ = parse_frontmatter(content)
+                    page_id = metadata.get("id", page_file.stem)
+
+                    if page_id == page_1 and path_1 is None:
+                        path_1 = page_file
+                    elif page_id == page_2 and path_2 is None:
+                        path_2 = page_file
+
+                    if path_1 and path_2:
+                        break
+                except Exception:
+                    continue
+
+        return path_1, path_2
+
+    def _merge_content(
+        self, primary_body: str, secondary_body: str, secondary_title: str
+    ) -> str:
+        """Merge secondary content into primary.
+
+        Args:
+            primary_body: Content of primary page
+            secondary_body: Content of secondary page
+            secondary_title: Title of secondary page for section header
+
+        Returns:
+            Merged content
+        """
+        merged = primary_body.strip()
+
+        # Add a section with the secondary content
+        if secondary_body.strip():
+            merged += f"\n\n## Content from {secondary_title}\n\n"
+            merged += secondary_body.strip()
+
+        return merged
+
+    def _merge_metadata(
+        self, primary_meta: dict, secondary_meta: dict
+    ) -> dict:
+        """Merge metadata from secondary into primary.
+
+        Args:
+            primary_meta: Metadata of primary page
+            secondary_meta: Metadata of secondary page
+
+        Returns:
+            Merged metadata
+        """
+        merged = primary_meta.copy()
+
+        # Merge tags (unique, preserve primary order then add new secondary tags)
+        primary_tags = set(primary_meta.get("tags", []) or [])
+        secondary_tags = set(secondary_meta.get("tags", []) or [])
+        merged_tags = list(primary_tags | secondary_tags)
+        if merged_tags:
+            merged["tags"] = merged_tags
+
+        # Merge aliases (unique)
+        primary_aliases = set(primary_meta.get("aliases", []) or [])
+        secondary_aliases = set(secondary_meta.get("aliases", []) or [])
+        merged_aliases = list(primary_aliases | secondary_aliases)
+        if merged_aliases:
+            merged["aliases"] = merged_aliases
+
+        # Merge external IDs (prefer primary, add any new secondary IDs)
+        if "external_ids" in secondary_meta:
+            if "external_ids" not in merged:
+                merged["external_ids"] = {}
+            merged["external_ids"].update(secondary_meta.get("external_ids", {}))
+
+        # Track merge in metadata
+        merged["merged_from"] = secondary_meta.get("id", "unknown")
+        merged["merged_at"] = datetime.now(UTC).isoformat()
+
+        return merged
+
+    def _create_frontmatter(self, metadata: dict, body: str) -> str:
+        """Create frontmatter and body for a page.
+
+        Args:
+            metadata: Page metadata dict
+            body: Page body content
+
+        Returns:
+            Complete markdown with frontmatter
+        """
+        import yaml
+
+        # Build frontmatter - put id first
+        fm_parts = []
+        if "id" in metadata:
+            fm_parts.append(f"id: {yaml.safe_dump(metadata['id']).strip()}")
+
+        for key, value in metadata.items():
+            if key == "id":
+                continue
+            if value is None:
+                continue
+            if isinstance(value, list):
+                if value:
+                    fm_parts.append(f"{key}:")
+                    for item in value:
+                        fm_parts.append(f"  - {item}")
+                else:
+                    fm_parts.append(f"{key}: []")
+            elif isinstance(value, dict):
+                fm_parts.append(f"{key}:")
+                for k, v in value.items():
+                    fm_parts.append(f"  {k}: {v}")
+            else:
+                fm_parts.append(f"{key}: {yaml.safe_dump(value).strip()}")
+
+        frontmatter = "---\n" + "\n".join(fm_parts) + "\n---\n"
+        return frontmatter + body
+
+    def _update_backlinks(
+        self, from_page: str, to_page: str, wiki_base: Path
+    ) -> int:
+        """Update all backlinks that point to from_page to instead point to to_page.
+
+        Args:
+            from_page: Page ID to redirect from
+            to_page: Page ID to redirect to
+            wiki_base: Base wiki directory
+
+        Returns:
+            Number of backlinks updated
+        """
+        updated_count = 0
+
+        domains_dir = wiki_base / "domains"
+        if not domains_dir.exists():
+            return 0
+
+        # Find all pages that link to from_page
+        for domain_dir in domains_dir.iterdir():
+            if not domain_dir.is_dir():
+                continue
+
+            pages_dir = domain_dir / "pages"
+            if not pages_dir.exists():
+                continue
+
+            for page_file in pages_dir.glob("*.md"):
+                try:
+                    content = page_file.read_text(encoding="utf-8")
+                    metadata, body = parse_frontmatter(content)
+
+                    # Check if body contains a link to from_page
+                    link_patterns = [
+                        f"[[{from_page}]]",
+                        f"[[{from_page}|",
+                        f"({from_page})",
+                    ]
+
+                    has_link = any(pattern in body for pattern in link_patterns)
+
+                    if has_link:
+                        # Replace links
+                        updated_body = body
+                        updated_body = updated_body.replace(
+                            f"[[{from_page}]]", f"[[{to_page}]]"
+                        )
+                        # Handle wiki links with alias: [[page|display]]
+                        import re
+
+                        updated_body = re.sub(
+                            rf"\[\[{re.escape(from_page)}\|",
+                            f"[[{to_page}|",
+                            updated_body,
+                        )
+
+                        if updated_body != body:
+                            # Update backlinks in metadata
+                            backlinks = metadata.get("backlinks", []) or []
+                            if from_page in backlinks:
+                                backlinks.remove(from_page)
+                                if to_page not in backlinks:
+                                    backlinks.append(to_page)
+                                metadata["backlinks"] = backlinks
+
+                            # Write updated content
+                            updated_content = self._create_frontmatter(
+                                metadata, updated_body
+                            )
+                            page_file.write_text(updated_content, encoding="utf-8")
+                            updated_count += 1
+
+                except Exception as e:
+                    logger.debug(f"Could not update {page_file}: {e}")
+                    continue
+
+        return updated_count

@@ -771,12 +771,30 @@ def govern_contradictions(wiki_base: Path, min_confidence: float, output: Path |
     type=click.Path(path_type=Path),
     help="Output file for report (defaults to wiki_system/reports/)",
 )
-def govern_duplicates(wiki_base: Path, min_score: float, output: Path | None):
+@click.option(
+    "--add-to-queue",
+    "add_to_queue",
+    is_flag=True,
+    help="Add high-confidence duplicates to review queue",
+)
+@click.option(
+    "--queue-min-score",
+    type=float,
+    default=0.5,
+    help="Minimum score to add duplicates to review queue",
+)
+def govern_duplicates(
+    wiki_base: Path, min_score: float, output: Path | None, add_to_queue: bool, queue_min_score: float
+):
     """Detect and report duplicate entity pages."""
     from llm_wiki.governance.duplicates import DuplicateDetector
 
     if not 0.0 <= min_score <= 1.0:
         click.echo("Error: --min-score must be between 0.0 and 1.0", err=True)
+        raise click.Abort()
+
+    if not 0.0 <= queue_min_score <= 1.0:
+        click.echo("Error: --queue-min-score must be between 0.0 and 1.0", err=True)
         raise click.Abort()
 
     click.echo("Detecting duplicate entities in wiki...")
@@ -803,6 +821,12 @@ def govern_duplicates(wiki_base: Path, min_score: float, output: Path | None):
 
         click.echo(f"\n✓ Report saved: {report_path}")
 
+        # Optionally add to review queue
+        if add_to_queue:
+            click.echo(f"\nAdding duplicates (score >= {queue_min_score}) to review queue...")
+            created_items = detector.add_to_review_queue(report, min_score=queue_min_score)
+            click.echo(f"✓ Added {len(created_items)} items to review queue")
+
         # Print high confidence duplicates
         if report.high_confidence:
             click.echo("\nHigh Confidence Duplicates:")
@@ -811,6 +835,56 @@ def govern_duplicates(wiki_base: Path, min_score: float, output: Path | None):
                 click.echo(f"    Score: {candidate.duplicate_score:.3f}")
                 click.echo(f"    Action: {candidate.suggested_action}")
                 click.echo(f"    Reasons: {', '.join(candidate.reasons[:2])}")
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort() from e
+
+
+@govern.command("merge-duplicate")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+@click.option(
+    "--page-1",
+    required=True,
+    help="First page ID",
+)
+@click.option(
+    "--page-2",
+    required=True,
+    help="Second page ID",
+)
+@click.option(
+    "--primary",
+    "primary_page",
+    required=True,
+    help="Primary page to keep (must be one of page-1 or page-2)",
+)
+def govern_merge_duplicate(wiki_base: Path, page_1: str, page_2: str, primary_page: str):
+    """Merge a duplicate page into the primary page.
+
+    This command merges two pages, keeping the primary page and redirecting
+    from the secondary page. All backlinks are updated automatically.
+    """
+    from llm_wiki.governance.duplicates import DuplicateDetector
+
+    click.echo(f"Merging duplicate pages: {page_1} and {page_2}")
+    click.echo(f"Primary page: {primary_page}")
+
+    try:
+        detector = DuplicateDetector(wiki_base=wiki_base)
+        result = detector.merge_duplicate(page_1, page_2, primary_page, wiki_base)
+
+        click.echo(f"\n✓ Merge complete!")
+        click.echo(f"  - Primary page: {result['primary_page']}")
+        click.echo(f"  - Secondary page: {result['secondary_page']}")
+        click.echo(f"  - Backlinks updated: {result['backlinks_updated']}")
+        click.echo(f"  - Redirect created: {result['redirect_created']}")
+        click.echo(f"  - Archived: {result['archived_path']}")
 
     except Exception as e:
         click.echo(f"Error: {e}", err=True)

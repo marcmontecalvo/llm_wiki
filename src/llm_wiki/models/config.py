@@ -67,6 +67,30 @@ class PromotionConfig(BaseModel):
     )
 
 
+class DuplicatesConfig(BaseModel):
+    """Configuration for duplicate entity detection."""
+
+    enabled: bool = Field(default=True, description="Enable duplicate detection")
+    detection_interval: int = Field(
+        default=86400, ge=1, description="Seconds between duplicate detection runs"
+    )
+    min_score_to_flag: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Minimum score to flag as duplicate"
+    )
+    auto_merge_threshold: float = Field(
+        default=0.9, ge=0.0, le=1.0, description="Score threshold for auto-merge (not implemented)"
+    )
+    require_review: bool = Field(
+        default=True, description="Whether duplicates require review before merging"
+    )
+    check_domains: list[str] = Field(
+        default_factory=lambda: ["tech", "general"], description="Domains to check for duplicates"
+    )
+    exclude_kinds: list[str] = Field(
+        default_factory=lambda: ["source"], description="Page kinds to exclude from duplicate checking"
+    )
+
+
 class DaemonConfig(BaseModel):
     """Configuration for the wiki daemon."""
 
@@ -84,6 +108,9 @@ class DaemonConfig(BaseModel):
     export_every_minutes: int = Field(default=60, ge=1, description="Minutes between export runs")
     promotion_every_hours: int = Field(
         default=24, ge=1, description="Hours between promotion checks"
+    )
+    duplicates_check_every_hours: int = Field(
+        default=24, ge=1, description="Hours between duplicate detection checks"
     )
     max_parallel_jobs: int = Field(default=2, ge=1, le=32, description="Maximum concurrent jobs")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
@@ -109,6 +136,9 @@ class DaemonConfig(BaseModel):
     )
     promotion: PromotionConfig = Field(
         default_factory=PromotionConfig, description="Promotion configuration"
+    )
+    duplicates: DuplicatesConfig = Field(
+        default_factory=DuplicatesConfig, description="Duplicate detection configuration"
     )
 
 
