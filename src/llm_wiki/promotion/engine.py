@@ -39,7 +39,7 @@ class PromotionEngine:
         self.scorer = PromotionScorer(config=config, wiki_base=wiki_base)
 
         # Review queue for managing approval workflow
-        self.review_queue = ReviewQueue(queue_dir=self.wiki_base / "review")
+        self.review_queue = ReviewQueue(queue_dir=self.wiki_base / "review_queue")
 
     def find_candidates(self) -> list[PromotionCandidate]:
         """Find all pages eligible for promotion.
