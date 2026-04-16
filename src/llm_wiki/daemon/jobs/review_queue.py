@@ -8,6 +8,7 @@ from typing import Any
 
 from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewStatus, ReviewType
 from llm_wiki.review.queue import ReviewQueue
+from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
 
@@ -101,13 +102,25 @@ class ReviewQueueJob:
 
             for page_file in pages_dir.glob("*.md"):
                 try:
-                    content = json.loads(page_file.read_text())
-                    quality = content.get("quality_score", 1.0)
+                    # Parse frontmatter format (markdown with YAML headers)
+                    content, _ = parse_frontmatter(page_file.read_text())
+                    quality = content.get("metadata", {}).get("quality_score", 1.0)
+
+                    # Also check shared/ directory
+                    if quality >= self.min_page_quality:
+                        shared_pages = self.wiki_base / "shared"
+                        if shared_pages.exists():
+                            shared_file = shared_pages / "synthesis" / f"{page_file.stem}.md"
+                            if shared_file.exists():
+                                content_s, _ = parse_frontmatter(shared_file.read_text())
+                                quality = content_s.get("metadata", {}).get("quality_score", 1.0)
 
                     if quality < self.min_page_quality:
                         page_id = page_file.stem
                         existing = self.review_queue.get(f"page-{page_id}")
                         if existing is None:
+                            title = content.get("title", page_id)
+                            domain = content.get("domain", domain_dir.name)
                             item = ReviewItem(
                                 id=f"page-{page_id}",
                                 type=ReviewType.PAGE,
@@ -118,16 +131,17 @@ class ReviewQueueJob:
                                 else ReviewPriority.HIGH,
                                 created_at=datetime.now(UTC),
                                 metadata={
-                                    "domain": domain_dir.name,
+                                    "domain": domain,
                                     "quality_score": quality,
-                                    "title": content.get("title", page_id),
+                                    "title": title,
                                 },
                             )
                             self.review_queue.create(item)
                             added += 1
                             logger.info(f"Added review item for low quality page: {page_id}")
 
-                except (json.JSONDecodeError, KeyError):
+                except Exception:
+                    # Skip files that can't be parsed
                     continue
 
         return added

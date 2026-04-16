@@ -1,7 +1,7 @@
 """Command-line interface for llm-wiki."""
 
 import subprocess
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 import click
@@ -2228,6 +2228,53 @@ def review_stats(wiki_base: Path):
     click.echo("\nPending By Type:")
     for item_type, count in sorted(stats["pending_by_type"].items()):
         click.echo(f"  {item_type}: {count}")
+
+
+@review.command("add")
+@click.argument("item-type", type=click.Choice(["page", "claim", "contradiction", "promotion", "duplicate", "routing_mistake", "sourceless_claim", "manual"]))
+@click.argument("target-id")
+@click.argument("reason")
+@click.option(
+    "--priority",
+    type=click.Choice(["low", "medium", "high", "urgent"]),
+    default="medium",
+    help="Priority level",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def review_add(item_type: str, target_id: str, reason: str, priority: str, wiki_base: Path):
+    """Manually add an item to the review queue."""
+    from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewType
+    from llm_wiki.review.queue import ReviewQueue
+
+    queue = ReviewQueue(queue_dir=Path(wiki_base) / "review_queue")
+
+    item_id = f"{item_type}-{target_id}-{datetime.now(UTC).timestamp()}"
+
+    try:
+        item = ReviewItem(
+            id=item_id,
+            type=ReviewType(item_type),
+            target_id=target_id,
+            reason=reason,
+            priority=ReviewPriority(priority),
+            created_at=datetime.now(UTC),
+            metadata={
+                "source": "manual",
+            },
+        )
+        queue.create(item)
+        click.echo(f"✓ Added review item: {item_id}")
+        click.echo(f"  Type: {item_type}")
+        click.echo(f"  Target: {target_id}")
+        click.echo(f"  Reason: {reason}")
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort()
 
 
 @review.command("cleanup")

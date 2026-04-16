@@ -92,6 +92,21 @@ class DaemonConfig(BaseModel):
     review_queue_enabled: bool = Field(
         default=True, description="Enable review queue for low-confidence content"
     )
+    review_queue_every_minutes: int = Field(
+        default=30, ge=1, description="Minutes between review queue population runs"
+    )
+    review_queue_min_page_quality: float = Field(
+        default=0.4, ge=0.0, le=1.0, description="Minimum quality threshold for pages"
+    )
+    review_queue_min_claim_confidence: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Minimum confidence threshold for claims"
+    )
+    review_queue_max_pending: int = Field(
+        default=1000, ge=1, description="Maximum pending items in review queue"
+    )
+    review_queue_retention_days: int = Field(
+        default=30, ge=1, description="Days to keep resolved review items"
+    )
     promotion: PromotionConfig = Field(
         default_factory=PromotionConfig, description="Promotion configuration"
     )

@@ -13,6 +13,8 @@ from llm_wiki.governance.staleness import StalenessDetector
 from llm_wiki.index.backlinks import BacklinkIndex
 from llm_wiki.index.metadata import MetadataIndex
 from llm_wiki.models.client import ModelClient
+from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewStatus, ReviewType
+from llm_wiki.review.queue import ReviewQueue
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,9 @@ class GovernanceJob:
         self.duplicate_detector = DuplicateDetector(min_score=0.3, wiki_base=wiki_base)
         self.contradiction_detector = ContradictionDetector(client) if client else None
         self.backlink_index = BacklinkIndex(index_dir=index_dir)
+
+        # Review queue for adding items discovered during governance checks
+        self.review_queue = ReviewQueue(queue_dir=wiki_base / "review_queue")
 
     def execute(self) -> dict[str, Any]:
         """Execute governance checks.
@@ -108,6 +113,20 @@ class GovernanceJob:
                 logger.info(
                     f"Found {contradiction_report.total_contradictions} potential contradictions"
                 )
+
+                # Add high-confidence contradictions to review queue
+                if contradiction_report and contradiction_report.high_confidence:
+                    review_added = self._add_contradictions_to_review(contradiction_report)
+                    logger.info(f"Added {review_added} contradictions to review queue")
+
+            # Scan for routing mistakes via metadata issues
+            routing_added = self._scan_routing_mistakes(lint_issues)
+            logger.info(f"Added {routing_added} routing mistakes to review queue")
+
+            # Scan for duplicates
+            if duplicate_report and duplicate_report.total_candidates > 0:
+                duplicates_added = self._add_duplicates_to_review(duplicate_report)
+                logger.info(f"Added {duplicates_added} duplicate candidates to review queue")
 
             # Generate report
             report_path = self._generate_report(
@@ -343,6 +362,141 @@ class GovernanceJob:
         logger.info(f"Generated governance report: {report_path}")
 
         return report_path
+
+    def _add_contradictions_to_review(self, contradiction_report) -> int:
+        """Add high-confidence contradictions to review queue.
+
+        Args:
+            contradiction_report: ContradictionReport with detected contradictions
+
+        Returns:
+            Number of items added to queue
+        """
+        added = 0
+        for contradiction in contradiction_report.high_confidence:
+            item_id = f"contradiction-{contradiction.page_id_1}-{contradiction.page_id_2}"
+
+            # Check if already exists
+            existing = self.review_queue.get(item_id)
+            if existing:
+                continue
+
+            try:
+                item = ReviewItem(
+                    id=item_id,
+                    type=ReviewType.CONTRADICTION,
+                    target_id=f"{contradiction.page_id_1}:{contradiction.page_id_2}",
+                    reason=contradiction.explanation,
+                    priority=ReviewPriority.HIGH
+                    if contradiction.severity == "high"
+                    else ReviewPriority.MEDIUM,
+                    created_at=datetime.now(UTC),
+                    metadata={
+                        "page_id_1": contradiction.page_id_1,
+                        "page_id_2": contradiction.page_id_2,
+                        "claim_1": contradiction.claim_1.claim[:200],
+                        "claim_2": contradiction.claim_2.claim[:200],
+                        "type": contradiction.contradiction_type,
+                        "confidence": contradiction.confidence,
+                        "severity": contradiction.severity,
+                    },
+                )
+                self.review_queue.create(item)
+                added += 1
+                logger.info(f"Added contradiction to review: {item_id}")
+            except Exception as e:
+                logger.warning(f"Failed to add contradiction to review: {e}")
+
+        return added
+
+    def _scan_routing_mistakes(self, lint_issues: list) -> int:
+        """Scan for routing mistakes from lint issues.
+
+        Args:
+            lint_issues: List of lint issues from MetadataLinter
+
+        Returns:
+            Number of items added to queue
+        """
+        added = 0
+
+        routing_errors = [
+            issue for issue in lint_issues if "routing" in issue.get("message", "").lower()
+        ]
+
+        for issue in routing_errors[:20]:  # Limit to 20
+            page_id = issue.get("page_id", "unknown")
+            item_id = f"routing-{page_id}"
+
+            existing = self.review_queue.get(item_id)
+            if existing:
+                continue
+
+            try:
+                item = ReviewItem(
+                    id=item_id,
+                    type=ReviewType.ROUTING_MISTAKE,
+                    target_id=page_id,
+                    reason=issue.get("message", "Routing configuration issue"),
+                    priority=ReviewPriority.MEDIUM,
+                    created_at=datetime.now(UTC),
+                    metadata={
+                        "message": issue.get("message"),
+                        "file": issue.get("file"),
+                    },
+                )
+                self.review_queue.create(item)
+                added += 1
+            except Exception as e:
+                logger.warning(f"Failed to add routing mistake: {e}")
+
+        return added
+
+    def _add_duplicates_to_review(self, duplicate_report) -> int:
+        """Add high-confidence duplicates to review queue.
+
+        Args:
+            duplicate_report: DuplicateReport with detected duplicates
+
+        Returns:
+            Number of items added to queue
+        """
+        added = 0
+
+        # Only add high-confidence duplicates
+        for candidate in duplicate_report.high_confidence[:20]:
+            page_1 = candidate.page_1
+            page_2 = candidate.page_2
+
+            # Use alphabetically sorted pair as ID
+            pair_id = ":".join(sorted([page_1, page_2]))
+            item_id = f"duplicate-{pair_id[:100]}"
+
+            existing = self.review_queue.get(item_id)
+            if existing:
+                continue
+
+            try:
+                item = ReviewItem(
+                    id=item_id,
+                    type=ReviewType.DUPLICATE,
+                    target_id=pair_id,
+                    reason=candidate.suggested_action or f"Potential duplicate of {candidate.primary_page}",
+                    priority=ReviewPriority.MEDIUM,
+                    created_at=datetime.now(UTC),
+                    metadata={
+                        "page_1": page_1,
+                        "page_2": page_2,
+                        "score": candidate.duplicate_score,
+                        "suggested_action": candidate.suggested_action,
+                    },
+                )
+                self.review_queue.create(item)
+                added += 1
+            except Exception as e:
+                logger.warning(f"Failed to add duplicate to review: {e}")
+
+        return added
 
 
 def run_governance_check(
