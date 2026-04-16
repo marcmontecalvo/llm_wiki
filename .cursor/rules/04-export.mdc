@@ -1,0 +1,110 @@
+---
+description: Wiki export commands - generate llms.txt, graph, JSON, sitemap
+globs: ["**/export/**/*.py", "**/exports/**/*"]
+alwaysApply: false
+---
+
+# Wiki Export Commands
+
+Generate various export formats from the wiki.
+
+## Export Commands
+
+### Export All Formats
+```
+@export all
+```
+
+Generates all export formats.
+
+### Export Specific Format
+```
+@export llms.txt
+@export graph
+@export json
+@export sitemap
+```
+
+## Export Formats
+
+### llms.txt
+LLM-optimized format combining all pages into a single file.
+- Concise page summaries
+- Structured for AI consumption
+- Located at: `wiki_system/exports/llms.txt`
+
+### llms-full.txt
+Comprehensive format with all extracted data.
+- Full content with all entities
+- Relationships and claims
+- Located at: `wiki_system/exports/llms-full.txt`
+
+### Graph Export
+JSON format with nodes and edges for graph visualization.
+- Page nodes with metadata
+- Internal link edges
+- Relationship edges
+- Located at: `wiki_system/exports/graph.json`
+
+### JSON Sidecar
+Per-page JSON files with metadata.
+- Located at: `wiki_system/exports/pages/`
+
+### Sitemap
+XML sitemap for search engines.
+- Located at: `wiki_system/exports/sitemap.xml`
+
+## Python API
+
+```python
+from pathlib import Path
+from llm_wiki.export.llmstxt import LLMSTxtExporter
+from llm_wiki.export.graph import GraphExporter
+from llm_wiki.export.sitemap import SitemapExporter
+
+wiki_base = Path("wiki_system")
+
+# Export llms.txt
+llms_exporter = LLMSTxtExporter(wiki_base=wiki_base)
+path = llms_exporter.export_all()
+
+# Export graph
+graph_exporter = GraphExporter(wiki_base=wiki_base)
+path = graph_exporter.export()
+
+# Export sitemap
+sitemap_exporter = SitemapExporter(wiki_base=wiki_base)
+path = sitemap_exporter.export()
+```
+
+## CLI Commands
+
+```bash
+# Export all formats
+uv run llm-wiki export all
+
+# Export specific format
+uv run llm-wiki export llmstxt
+uv run llm-wiki export graph
+uv run llm-wiki export json
+uv run llm-wiki export sitemap
+
+# View exports
+ls -la wiki_system/exports/
+```
+
+## Integration with AI Agents
+
+Use llms.txt with Claude, Cursor, or other AI assistants:
+
+```python
+# Load for AI context
+wiki_context = open("wiki_system/exports/llms.txt").read()
+
+# Use in AI prompt
+prompt = f"""Here's context from the wiki:
+
+{wiki_context}
+
+Based on this, answer: <question>"""
+```

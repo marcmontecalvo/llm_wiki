@@ -1,0 +1,116 @@
+---
+description: Wiki governance, quality checks, and maintenance
+globs: ["**/governance/**/*.py", "**/jobs/**/*.py", "**/reports/**/*"]
+alwaysApply: false
+---
+
+# Wiki Governance Commands
+
+Run quality checks, validation, and maintenance on the wiki.
+
+## Governance Commands
+
+### Run All Checks
+```
+@govern
+@govern check
+```
+
+Runs all governance checks:
+- Metadata validation (lint)
+- Staleness detection
+- Quality scoring
+- Orphan page detection
+
+### Rebuild Index
+```
+@govern rebuild-index
+```
+
+Rebuilds search indexes (metadata, fulltext, backlinks).
+
+### View Report
+```
+@govern report
+```
+
+Shows the latest governance report.
+
+## Checks Performed
+
+### Metadata Linter
+- Validates frontmatter required fields
+- Checks tag format consistency
+- Verifies domain assignments
+
+### Staleness Detector
+- Identifies time-sensitive content
+- Flags pages older than threshold
+- Detects outdated information
+
+### Quality Scorer
+- Content length analysis
+- Tag coverage check
+- Link density evaluation
+
+### Orphan Detection
+- Finds pages with no incoming links
+- Detects broken internal references
+
+## Python API
+
+```python
+from pathlib import Path
+from llm_wiki.daemon.jobs.governance import GovernanceJob
+from llm_wiki.daemon.jobs.index_rebuild import IndexRebuildJob
+
+# Run governance
+gov_job = GovernanceJob(wiki_base=Path("wiki_system"))
+stats = gov_job.execute()
+
+print(f"Lint issues: {stats['lint_issues']}")
+print(f"Stale pages: {stats['stale_pages']}")
+print(f"Quality score: {stats['avg_quality']:.2f}")
+print(f"Orphan pages: {stats['orphan_pages']}")
+
+# Rebuild indexes
+rebuild_job = IndexRebuildJob(wiki_base=Path("wiki_system"))
+result = rebuild_job.execute()
+print(f"Indexed {result['pages_indexed']} pages")
+```
+
+## CLI Commands
+
+```bash
+# Run governance checks
+uv run llm-wiki govern check
+
+# Rebuild indexes
+uv run llm-wiki govern rebuild-index
+
+# View reports
+ls -lt wiki_system/reports/
+cat wiki_system/reports/governance_latest.md
+```
+
+## Reports Location
+
+Governance reports are stored in:
+- `wiki_system/reports/governance_*.md` - Detailed reports
+- `wiki_system/reports/governance_latest.md` - Latest report (symlink)
+
+## Configuration
+
+Governance settings in `config/daemon.yaml`:
+- `staleness_threshold_days`: Days before page considered stale
+- `min_content_length`: Minimum content length
+- `quality_weights`: Scoring weights for factors
+
+## Daemon Mode
+
+Run the daemon for automatic governance:
+```bash
+uv run llm-wiki daemon
+```
+
+The daemon can periodically run governance checks automatically.

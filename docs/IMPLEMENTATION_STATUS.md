@@ -187,7 +187,7 @@ These are **enhancements** beyond the core system. The wiki is fully functional 
 - **#81:** Change log and diff tracking (audit trail)
 
 ### Developer Experience
-- **#76:** Cursor IDE bootstrap
+- **#76:** Cursor IDE bootstrap ✅ Complete
 - **#77:** GitHub Copilot integration
 - **#78:** Obsidian vault import adapter
 
@@ -261,7 +261,7 @@ The core LLM wiki system is **fully implemented and functional**:
 ✅ **Full CLI interface**
 ✅ **Complete documentation**
 ✅ **CI/CD pipeline**
-✅ **Agent integration (Claude Code)**
+✅ **Agent integration (Claude Code, Cursor IDE)**
 
 ## 🚀 Future Enhancements
 
@@ -270,7 +270,7 @@ All remaining work is **enhancement features** tracked in issues #66-#82. These 
 **Priority groups:**
 - **High:** #69 (backlinks), #80 (integration), #82 (scheduler)
 - **Medium:** #66-67 (claims/relationships), #71 (review queue), #74 (retry)
-- **Enhancement:** #70, #72-73, #75-79 (advanced features, IDE integrations)
+- **Enhancement:** #70, #72-73, #75, #77-79 (advanced features, IDE integrations)
 
 ---
 

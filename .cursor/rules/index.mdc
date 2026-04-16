@@ -1,0 +1,40 @@
+---
+description: LLM Wiki - Index of all wiki commands
+globs: []
+alwaysApply: true
+---
+
+# LLM Wiki Commands
+
+This is the main entry point for the LLM Wiki system. Use these @-commands in Cursor to interact with the wiki.
+
+## Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `@wiki <query>` | Search the wiki |
+| `@get <page-id>` | Get a specific page |
+| `@ingest <file>` | Add content to wiki |
+| `@export [format]` | Export wiki data |
+| `@govern [action]` | Run governance checks |
+
+## Quick Start
+
+1. **Search**: `@wiki python` - Search for "python" in all domains
+2. **Filter**: `@wiki kubernetes --domain homelab` - Search within specific domain
+3. **Ingest**: `@ingest notes.md --domain personal` - Add a file to the wiki
+4. **Export**: `@export llms.txt` - Generate LLM-optimized export
+5. **Govern**: `@govern check` - Run quality checks
+
+## For More Details
+
+- `@search` - Detailed search options and filters
+- `@ingest` - Content ingestion options and formats
+- `@export` - All export formats and usage
+- `@govern` - Governance checks and maintenance
+
+## Documentation
+
+- Full docs: `docs/ARCHITECTURE.md`
+- Implementation status: `docs/IMPLEMENTATION_STATUS.md`
+- Agent conventions: `docs/AGENT_CONVENTIONS.md`

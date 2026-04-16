@@ -1,0 +1,83 @@
+---
+description: Wiki search and query commands
+globs: ["**/query/**/*.py", "**/search*.py"]
+alwaysApply: false
+---
+
+# Wiki Search Commands
+
+Use these patterns to search the wiki:
+
+## Basic Search
+
+```
+@wiki <query>
+```
+
+Searches all domains and returns pages matching the query with relevance scores.
+
+## Filtered Search
+
+```
+@wiki <query> --domain vulpine-solutions
+@wiki <query> --kind entity
+@wiki <query> --tags python,programming
+```
+
+Available filters:
+- `--domain`: Filter by domain (vulpine-solutions, home-assistant, homelab, personal, general)
+- `--kind`: Filter by page kind (page, entity, concept, source)
+- `--tags`: Filter by tags (comma-separated)
+
+## Get Specific Page
+
+```
+@get <page-id>
+```
+
+Retrieves a specific page by its ID.
+
+## Python API
+
+```python
+from pathlib import Path
+from llm_wiki.query.search import WikiQuery
+
+wiki = WikiQuery(wiki_base=Path("wiki_system"))
+
+# Basic search
+results = wiki.search("python")
+
+# Filtered search
+results = wiki.search(
+    query="kubernetes",
+    domain="homelab",
+    kind="concept",
+    tags=["k8s", "container"],
+    limit=10
+)
+
+# Get specific page
+page = wiki.get_page("python-programming")
+```
+
+## CLI Commands
+
+```bash
+# Search query
+uv run llm-wiki search query "python" --domain vulpine-solutions
+
+# Get page
+uv run llm-wiki search get python-programming
+```
+
+## Results Format
+
+Search results include:
+- `page_id`: Unique identifier
+- `title`: Page title
+- `domain`: Domain name
+- `kind`: Page kind
+- `tags`: List of tags
+- `summary`: Content summary
+- `score`: Relevance score (0-1)

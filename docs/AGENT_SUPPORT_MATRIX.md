@@ -102,26 +102,58 @@ See Issue #77 for implementation plan:
 
 ## Cursor IDE
 
-**Status:** 📋 **Planned** (Issue #76)
+**Status:** ✅ **Implemented** (Issue #76)
 
-**Official Support:** Not yet
+**Official Support:** Yes (implemented)
 
 ### Features
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| `.cursorrules` | ❌ | Planned |
-| Context Files | ❌ | Planned |
-| Custom Commands | ❌ | Planned |
-| Composer Integration | ❌ | Planned |
+| `.cursor/rules` | ✅ | Multi-file rule system |
+| Context Files | ✅ | `.cursor/rules/00-llm-wiki.mdc` |
+| Custom Commands | ✅ | @wiki, @ingest, @export, @govern |
+| Composer Integration | ✅ | Full command support |
+| Search Rules | ✅ | `.cursor/rules/01-search.mdc` |
+| Ingest Rules | ✅ | `.cursor/rules/02-ingest.mdc` |
+| Govern Rules | ✅ | `.cursor/rules/03-govern.mdc` |
+| Export Rules | ✅ | `.cursor/rules/04-export.mdc` |
+| Index | ✅ | `.cursor/rules/index.mdc` |
 
-### Planned Work
+### Available Commands
 
-See Issue #76 for implementation plan:
-- `.cursorrules` file
-- Cursor-specific bootstrap
-- Custom @-commands
-- Composer workflow integration
+**@wiki** - Search wiki
+```
+@wiki python
+@wiki kubernetes --domain homelab
+@wiki api --tags rest,http
+```
+
+**@ingest** - Add content
+```
+@ingest my-notes.md --domain personal
+@ingest --text "content" --domain vulpine-solutions
+```
+
+**@export** - Generate exports
+```
+@export all
+@export llms.txt
+@export graph
+```
+
+**@govern** - Run governance
+```
+@govern check
+@govern rebuild-index
+@govern report
+```
+
+### Setup
+
+1. Open project in Cursor IDE
+2. Rules automatically loaded from `.cursor/rules/`
+3. Use @-commands in AI chat
 
 ---
 
@@ -358,13 +390,13 @@ To add support for a new agent/tool:
 
 | Feature | Claude Code | Cursor | Copilot | Obsidian | Python API | OpenAI |
 |---------|------------|--------|---------|----------|------------|--------|
-| Search | ✅ | 📋 | 📋 | 📋 | ✅ | 🔄 |
-| Ingest | ✅ | 📋 | 📋 | 📋 | ✅ | ❌ |
-| Export | ✅ | 📋 | 📋 | ❌ | ✅ | ❌ |
-| Govern | ✅ | 📋 | 📋 | ❌ | ✅ | ❌ |
-| Bootstrap | ✅ | 📋 | 📋 | 📋 | ✅ | ❌ |
-| Skills/Commands | ✅ | 📋 | 📋 | ❌ | N/A | ❌ |
-| Context Loading | ✅ | 📋 | 📋 | ❌ | ✅ | 🔄 |
+| Search | ✅ | ✅ | 📋 | 📋 | ✅ | 🔄 |
+| Ingest | ✅ | ✅ | 📋 | 📋 | ✅ | ❌ |
+| Export | ✅ | ✅ | 📋 | ❌ | ✅ | ❌ |
+| Govern | ✅ | ✅ | 📋 | ❌ | ✅ | ❌ |
+| Bootstrap | ✅ | ✅ | 📋 | 📋 | ✅ | ❌ |
+| Skills/Commands | ✅ | ✅ | 📋 | ❌ | N/A | ❌ |
+| Context Loading | ✅ | ✅ | 📋 | ❌ | ✅ | 🔄 |
 
 ---
 

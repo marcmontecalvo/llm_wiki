@@ -1,0 +1,99 @@
+---
+description: Wiki content ingestion commands
+globs: ["**/ingest/**/*.py", "**/adapters/**/*.py", "**/inbox/**/*"]
+alwaysApply: false
+---
+
+# Wiki Ingest Commands
+
+Add content to the wiki system.
+
+## Manual Ingestion
+
+### Ingest File
+```
+@ingest <file> [--domain DOMAIN]
+```
+
+Processes a markdown or text file and adds it to the wiki.
+
+### Ingest Text
+```
+@ingest --text "content here" --domain <domain> [--title "Page Title"]
+```
+
+Creates a page from raw text content.
+
+## Automatic Ingestion
+
+Drop files in `wiki_system/inbox/` - they'll be auto-processed by the daemon.
+
+Supported formats:
+- `.md` - Markdown files
+- `.txt` - Plain text files
+- Frontmatter supported for metadata
+
+## Domain Routing
+
+Files are automatically routed based on:
+1. Explicit `--domain` flag
+2. Frontmatter `domain:` field
+3. Pattern matching in `config/routing.yaml`
+4. Fallback to `general` domain
+
+## Frontmatter Format
+
+```yaml
+---
+title: Page Title
+domain: vulpine-solutions
+kind: entity
+tags: [python, programming]
+summary: Brief description
+---
+```
+
+## Python API
+
+```python
+from pathlib import Path
+from llm_wiki.ingest.adapters.markdown import MarkdownAdapter
+from llm_wiki.storage.queue import QueueManager
+
+# Using adapter directly
+adapter = MarkdownAdapter(wiki_base=Path("wiki_system"))
+page = adapter.process_file(Path("notes.md"), domain="homelab")
+
+# Using queue manager
+queue = QueueManager(wiki_base=Path("wiki_system"))
+queue.enqueue(Path("notes.md"))
+```
+
+## CLI Commands
+
+```bash
+# Ingest file
+uv run llm-wiki ingest file notes.md --domain homelab
+
+# Ingest text
+uv run llm-wiki ingest text "My content" --domain personal --title "My Note"
+
+# Check inbox
+ls -la wiki_system/inbox/
+```
+
+## Processing Pipeline
+
+1. File detected in inbox
+2. Source adapter selected (markdown/text)
+3. Content extracted (entities, concepts, metadata)
+4. Domain routing applied
+5. Page stored in domain directory
+6. Index updated
+
+## Link Processing
+
+Links in content are converted to wiki format:
+- `[text](url)` → `text` (external links removed)
+- `[[page-id]]` → preserved as internal links
+- Relative links → resolved to page IDs

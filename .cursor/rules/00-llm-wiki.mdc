@@ -1,0 +1,125 @@
+---
+description: LLM Wiki system integration - search, ingest, export, and governance commands
+globs: ["**/*.md", "**/llm_wiki/**/*.py", "**/wiki_system/**/*"]
+alwaysApply: true
+---
+
+# LLM Wiki System Integration
+
+This project uses a federated wiki system for agent knowledge management. You can search, ingest, export, and govern the wiki directly from Cursor.
+
+## Quick Commands
+
+Use these commands in Cursor's AI chat:
+
+### Search Wiki
+```
+@wiki <query> [--domain DOMAIN] [--kind KIND] [--tags TAG1,TAG2]
+```
+
+### Ingest Content
+```
+@ingest <file> [--domain DOMAIN]
+```
+
+Or drop files in `wiki_system/inbox/` for automatic processing.
+
+### Export
+```
+@export [format]
+```
+
+Formats: llms.txt, graph, json, sitemap
+
+### Governance
+```
+@govern [check|rebuild-index|report]
+```
+
+## System Structure
+
+```
+wiki_system/
+├── domains/           # Domain-specific wikis
+│   ├── vulpine-solutions/
+│   ├── home-assistant/
+│   ├── homelab/
+│   ├── personal/
+│   └── general/
+├── inbox/             # Drop files here for ingestion
+├── index/             # Search indexes
+├── exports/           # Generated exports
+├── reports/           # Governance reports
+├── logs/              # Daemon logs
+└── state/             # System state
+```
+
+## Active Domains
+
+- **vulpine-solutions**: MSP, operations, sales, security, client delivery
+- **home-assistant**: Automation, voice assistant, ESP32, local AI, sensors
+- **homelab**: Proxmox, k3s, storage, networking, GPUs, services
+- **personal**: Family logistics, hobbies, plans, notes
+- **general**: Fallback bucket for unclassified content
+
+## Page Kinds
+
+- **page**: Standard wiki page
+- **entity**: People, organizations, technologies, tools
+- **concept**: Ideas, methodologies, patterns
+- **source**: Source documents
+
+## Linking Conventions
+
+Link to other pages using: `[[page-id]]`
+Page IDs are kebab-case (e.g., `python-programming`, `api-design`)
+
+## CLI Commands
+
+```bash
+# Initialize wiki
+uv run llm-wiki init
+
+# Search wiki
+uv run llm-wiki search query "python"
+uv run llm-wiki search get <page-id>
+
+# Ingest content
+uv run llm-wiki ingest file <file>
+uv run llm-wiki ingest text "content" --domain <domain>
+
+# Governance
+uv run llm-wiki govern check
+uv run llm-wiki govern rebuild-index
+
+# Export
+uv run llm-wiki export all
+uv run llm-wiki export llmstxt
+uv run llm-wiki export graph
+```
+
+## Configuration Files
+
+- **domains**: `config/domains.yaml`
+- **routing**: `config/routing.yaml`
+- **models**: `config/models.yaml`
+- **daemon**: `config/daemon.yaml`
+
+## Development Commands
+
+```bash
+# Run tests
+uv run pytest
+
+# Run daemon
+uv run llm-wiki daemon
+
+# Rebuild indexes
+uv run llm-wiki govern rebuild-index
+```
+
+## Help
+
+- See `docs/IMPLEMENTATION_STATUS.md` for feature status
+- See `docs/ARCHITECTURE.md` for system architecture
+- See `docs/AGENT_CONVENTIONS.md` for agent integration
