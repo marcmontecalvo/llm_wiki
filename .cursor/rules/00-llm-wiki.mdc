@@ -110,6 +110,17 @@ uv run llm-wiki export graph
 ```bash
 # Run tests
 uv run pytest
+uv run pytest tests/ -v
+
+# Lint code
+uv run ruff check .
+uv run ruff check src/llm_wiki/
+
+# Format code
+uv run ruff format .
+
+# Type check
+uv run mypy src/
 
 # Run daemon
 uv run llm-wiki daemon
@@ -118,8 +129,70 @@ uv run llm-wiki daemon
 uv run llm-wiki govern rebuild-index
 ```
 
+## Architecture Overview
+
+The LLM wiki is a federated system with these components:
+
+### Core Components
+- **Ingest Pipeline**: Watches inbox, routes files, extracts content
+- **Storage Layer**: Domains, pages, indexes stored in wiki_system/
+- **Query Interface**: WikiQuery class for searching and retrieval
+- **Governance**: Quality checks, validation, reporting
+- **Export**: Multiple formats (llms.txt, graph, JSON, sitemap)
+
+### Data Flow
+1. Files dropped in `inbox/` → Source adapters parse content
+2. Domain router assigns domain → Extracted entities/concepts stored
+3. Pages saved to domain directory → Indexes updated
+4. Search queries use metadata/fulltext indexes → Results ranked by TF-IDF
+
+### Key Files
+- `src/llm_wiki/ingest/` - Ingestion adapters and pipeline
+- `src/llm_wiki/storage/` - Domain and page storage
+- `src/llm_wiki/query/` - Search and query interfaces
+- `src/llm_wiki/export/` - Export formatters
+- `src/llm_wiki/daemon/` - Background job runner
+
+## Conventions
+
+### Page IDs
+- Format: `kebab-case` (lowercase with hyphens)
+- Examples: `python-programming`, `api-design`, `docker-compose`
+- Must be unique across entire wiki
+
+### Page Titles
+- Natural language, proper capitalization
+- Keep under 80 characters
+
+### Frontmatter Required Fields
+```yaml
+---
+id: page-id
+title: Page Title
+domain: domain-name
+---
+```
+
+### Recommended Fields
+```yaml
+kind: page  # page, entity, concept, source
+summary: Brief description
+tags: [tag1, tag2]
+source: https://...
+```
+
+### Link Format
+- Internal: `[[page-id]]`
+- Works across all domains
+
+### Quality Standards
+- Minimum content: 100 characters
+- Tags recommended for all pages
+- Internal links encouraged for connectivity
+
 ## Help
 
 - See `docs/IMPLEMENTATION_STATUS.md` for feature status
 - See `docs/ARCHITECTURE.md` for system architecture
 - See `docs/AGENT_CONVENTIONS.md` for agent integration
+- See `docs/CURSOR_SETUP.md` for Cursor-specific setup

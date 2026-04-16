@@ -131,6 +131,23 @@ uv run llm-wiki daemon
 
 See `docs/SETUP.md` for detailed setup instructions.
 
+## Agent Integrations
+
+The wiki supports multiple AI agents and IDEs:
+
+### Claude Code
+- Skills in `.claude/skills/`
+- Bootstrap in `.claude/bootstrap.md`
+- Use `/wiki`, `/ingest`, `/export`, `/govern` slash commands
+
+### Cursor IDE
+- Rules in `.cursor/rules/` (`.mdc` files)
+- Workspace settings in `.vscode/settings.json`
+- Example prompts in `.cursor/prompts/`
+- Use `@wiki`, `@ingest`, `@export`, `@govern` commands in AI chat
+
+See `docs/CURSOR_SETUP.md` for detailed Cursor IDE setup.
+
 ## Build order (for understanding architecture)
 
 Read these in order:
