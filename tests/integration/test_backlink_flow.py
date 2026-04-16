@@ -1,6 +1,7 @@
 """Integration tests for backlink tracking flow."""
 
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -13,7 +14,18 @@ class TestBacklinkFlow:
     """Integration tests for complete backlink tracking flow."""
 
     @pytest.fixture
-    def wiki_setup(self, temp_dir: Path) -> Path:
+    def mock_client(self) -> Mock:
+        """Create mock LLM client."""
+        client = Mock()
+        client.chat_completion.side_effect = [
+            "page",  # kind classification
+            '["wiki"]',  # tags
+            "A test page",  # summary
+        ] * 10  # enough for multiple calls
+        return client
+
+    @pytest.fixture
+    def wiki_base(self, temp_dir: Path) -> Path:
         """Set up a wiki for testing backlink flow.
 
         Returns:
