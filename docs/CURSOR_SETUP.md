@@ -12,6 +12,8 @@ This guide covers how to use Cursor IDE with the LLM wiki system.
 
 Cursor automatically loads project rules from `.cursor/rules/`. No additional configuration needed.
 
+**Note:** The wiki uses the modern `.mdc` (Markdown Cursor) format for rules, stored in `.cursor/rules/` directory, rather than a single `.cursorrules` file. This allows for modular, organized rule sets that can be individually enabled/disabled.
+
 ### Initial Setup
 
 ```bash
@@ -142,6 +144,49 @@ The wiki system provides these @-commands:
 | @export | Generate exports |
 | @govern | Run quality checks |
 | @get | Get specific page |
+
+## Cursor IDE Integration Features
+
+The wiki provides several Cursor-specific capabilities:
+
+### Auto-Complete with Wiki Context
+- Wiki page IDs are indexed for auto-completion when typing `[[`
+- Type `[[python` to see matching wiki pages
+- Domain prefixes help filter: `homelab/k3s` shows homelab domain k3s pages
+
+### Inline Suggestions
+- AI chat suggests wiki-related commands as you type
+- Context-aware suggestions based on current file
+- Quick-insert for wiki links: type page ID, press Tab to complete
+
+### Command Palette Integration
+- Access wiki commands via `Cmd+Shift+P` / `Ctrl+Shift+P`
+- Search for "wiki" to see all wiki-related commands:
+  - `Wiki: Search` - Open search dialog
+  - `Wiki: Ingest` - Add new content
+  - `Wiki: Export` - Generate exports
+  - `Wiki: Governance` - Run quality checks
+
+### File Navigation Shortcuts
+- Quick file open (`Cmd+P` / `Ctrl+P`) includes wiki pages
+- Wiki domains appear as folder groups
+- Recent wiki pages appear in "Recent Files" section
+
+### AI Chat Integration
+The @-commands work in Cursor's AI chat (Cmd+L / Ctrl+L):
+
+```
+@wiki kubernetes --domain homelab --tags k8s,container
+@ingest notes.md --domain personal
+@export llms.txt
+@govern check --domain vulpine-solutions
+```
+
+### Composer Features
+When using Cursor Composer (Cmd+Enter / Ctrl+Enter):
+- Multi-file wiki edits supported
+- Batch content updates across domains
+- Generate wiki pages from code documentation
 
 ## Troubleshooting
 
