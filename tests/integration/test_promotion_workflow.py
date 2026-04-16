@@ -144,6 +144,19 @@ class TestPromotionWorkflow:
             original_content = original_path.read_text()
             assert "shared" in original_content.lower()
 
+            # CRITICAL: Verify that referring pages have been UPDATED to point to shared
+            # This is the key fix - before it was a no-op
+            ref_content1 = ref_page1.read_text()
+            ref_content2 = ref_page2.read_text()
+
+            # The references should now have "shared/" prefix
+            assert "[[shared/distributed-systems]]" in ref_content1 or "[[shared/distributed-systems" in ref_content1, (
+                f"Reference not updated in microservices-arch. Content: {ref_content1[:200]}"
+            )
+            assert "[[shared/distributed-systems]]" in ref_content2 or "[[shared/distributed-systems" in ref_content2, (
+                f"Reference not updated in kubernetes-deploy. Content: {ref_content2[:200]}"
+            )
+
     def test_promotion_with_multiple_references_from_same_domain(
         self, wiki_setup: tuple[Path, Path, Path]
     ):

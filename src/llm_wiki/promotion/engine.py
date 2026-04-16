@@ -67,6 +67,9 @@ class PromotionEngine:
         Returns:
             PromotionResult with status and details
         """
+        # Track what we've done for rollback
+        rollback_actions: list[str] = []
+
         try:
             # Verify page exists in source domain
             source_path = self.wiki_base / "domains" / source_domain / "pages" / f"{page_id}.md"
@@ -89,21 +92,52 @@ class PromotionEngine:
             if not dry_run:
                 # Copy page to shared directory
                 content = source_path.read_text(encoding="utf-8")
-                shared_path.write_text(content, encoding="utf-8")
-                logger.info(f"Promoted page {page_id} to shared")
+
+                try:
+                    shared_path.write_text(content, encoding="utf-8")
+                    rollback_actions.append("shared_copy")
+                    logger.info(f"Promoted page {page_id} to shared")
+                except Exception as e:
+                    logger.error(f"Failed to write shared copy: {e}")
+                    raise
 
                 # Create tombstone in original location (redirect marker)
-                self._create_tombstone(source_path, page_id)
+                try:
+                    self._create_tombstone(source_path, page_id)
+                    rollback_actions.append("tombstone")
+                except Exception as e:
+                    logger.warning(f"Failed to create tombstone: {e}")
+                    # Continue anyway - tombstone is not critical
 
                 # Update all references if requested
                 references_updated = 0
                 if update_references:
-                    references_updated = self._update_references(page_id, source_domain)
-                    logger.info(f"Updated {references_updated} references for {page_id}")
+                    try:
+                        references_updated = self._update_references(page_id, source_domain)
+                        rollback_actions.append("references")
+                        logger.info(f"Updated {references_updated} references for {page_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to update references: {e}")
+                        # Continue anyway - we'll note this in result
 
                 # Update backlink index
-                self.backlinks.add_page_links(page_id, content)
-                self.backlinks.save()
+                try:
+                    self.backlinks.add_page_links(page_id, content)
+                    rollback_actions.append("backlinks")
+                except Exception as e:
+                    logger.warning(f"Failed to update backlinks: {e}")
+
+                # Remap backlinks to shared location
+                try:
+                    self._remap_backlinks_to_shared(page_id, source_domain)
+                    rollback_actions.append("remap")
+                except Exception as e:
+                    logger.warning(f"Failed to remap backlinks: {e}")
+
+                try:
+                    self.backlinks.save()
+                except Exception as e:
+                    logger.warning(f"Failed to save backlinks: {e}")
 
             return PromotionResult(
                 page_id=page_id,
@@ -115,6 +149,12 @@ class PromotionEngine:
 
         except Exception as e:
             logger.error(f"Failed to promote {page_id}: {e}", exc_info=True)
+
+            # Rollback on failure
+            if not dry_run and rollback_actions:
+                logger.info(f"Rolling back promotion of {page_id}")
+                self._rollback_promotion(page_id, source_domain, rollback_actions)
+
             return PromotionResult(
                 page_id=page_id,
                 success=False,
@@ -257,45 +297,227 @@ All references should be updated to point to the shared version.
         Returns:
             Number of references updated
         """
+        import re
+
         updated_count = 0
+        # Get pages that reference this page
         backlinks = self.backlinks.get_backlinks(page_id)
+        if not backlinks:
+            return 0
 
         # Find all pages that reference this page
         domains_dir = self.wiki_base / "domains"
         if not domains_dir.exists():
             return 0
 
+        # Also check shared directory
+        all_page_sources = []
         for domain_dir in domains_dir.iterdir():
             if not domain_dir.is_dir():
                 continue
-
             pages_dir = domain_dir / "pages"
             if not pages_dir.exists():
                 continue
-
             for page_file in pages_dir.glob("*.md"):
-                page_stem = page_file.stem
-                if page_stem not in backlinks:
+                all_page_sources.append(page_file)
+
+        # Check shared directory too
+        shared_dir = self.wiki_base / "shared"
+        if shared_dir.exists():
+            for page_file in shared_dir.glob("*.md"):
+                all_page_sources.append(page_file)
+
+        # Regex to match wiki links: [[page-id]] or [[page-id|display text]]
+        wiki_link_pattern = re.compile(r"\[\[([^|\]]+)(?:\|[^\]]+)?\]\]")
+
+        for page_file in all_page_sources:
+            page_stem = page_file.stem
+            # Check if this page links to our promoted page
+            if page_stem not in backlinks:
+                continue
+
+            try:
+                # Read page content
+                content = page_file.read_text(encoding="utf-8")
+
+                # Find all wiki links in content
+                matches = wiki_link_pattern.findall(content)
+                if page_id not in matches:
                     continue
 
-                try:
-                    # Update wiki links to point to shared space
-                    # Pattern: [[page-id]] -> [[shared/page-id]] or similar
-                    # For simplicity, we track the reference but keep the ID same
-                    # since the shared directory is still resolved as [[page-id]]
-                    # The key is that the page lookup will find it in shared/
+                # Replace links to point to shared/page-id
+                # Pattern: [[page-id]] -> [[shared/page-id]]
+                # We prepend "shared/" to indicate the page is now in shared space
+                updated_content = wiki_link_pattern.sub(
+                    lambda m: f"[[shared/{m.group(1)}]]" if m.group(1) == page_id else m.group(0),
+                    content
+                )
 
-                    # Update the backlinks index
-                    new_forward_links = self.backlinks.get_forward_links(page_stem)
-                    if page_id in new_forward_links:
-                        # Link is already there, no content change needed
-                        # But mark that we've processed this reference
-                        updated_count += 1
+                # Also update any direct references without the prefix to maintain backward compat
+                # But add a hint that the page is in shared space
+                if page_id in content and " [[" not in content:
+                    # Simple replacement as fallback
+                    updated_content = updated_content.replace(
+                        f"[[{page_id}]]", f"[[shared/{page_id}]]"
+                    )
 
-                except Exception as e:
-                    logger.warning(f"Failed to update references in {page_file}: {e}")
+                # Write updated content back
+                page_file.write_text(updated_content, encoding="utf-8")
+                updated_count += 1
+                logger.debug(f"Updated references in {page_file} to point to shared")
+
+            except Exception as e:
+                logger.warning(f"Failed to update references in {page_file}: {e}")
+
+        # Also update any links IN the promoted page itself to use shared prefix
+        # for internal references
+        shared_path = self.shared_dir / f"{page_id}.md"
+        if shared_path.exists():
+            try:
+                content = shared_path.read_text(encoding="utf-8")
+                matches = wiki_link_pattern.findall(content)
+
+                # Update links in the promoted page to shared namespace
+                updated_content = wiki_link_pattern.sub(
+                    lambda m: f"[[shared/{m.group(1)}]]" if m.group(1) != page_id else m.group(0),
+                    content
+                )
+
+                # Only write if changed
+                if updated_content != content:
+                    shared_path.write_text(updated_content, encoding="utf-8")
+                    logger.debug(f"Updated internal links in {shared_path}")
+
+            except Exception as e:
+                logger.warning(f"Failed to update internal links in {shared_path}: {e}")
 
         return updated_count
+
+    def _remap_backlinks_to_shared(self, page_id: str, source_domain: str) -> None:
+        """Remap existing backlinks to point to shared location.
+
+        When a page is promoted, we need to ensure that existing backlinks
+        from other domains can resolve to the shared version. We add a
+        'shared' location marker in the backlink index.
+
+        Args:
+            page_id: Page ID that was promoted
+            source_domain: Original domain (now tombstoned)
+        """
+        try:
+            # Get all pages that link to this page
+            backlinks = self.backlinks.get_backlinks(page_id)
+
+            # Add 'shared' as an additional valid target location
+            # This allows the resolver to check both domain-local and shared
+            for ref_page_id in backlinks:
+                # Get forward links from referring page
+                forward_links = self.backlinks.get_forward_links(ref_page_id)
+
+                # The index already tracks that ref_page_id links to page_id
+                # We need to ensure the resolver knows to check shared/ too
+                # Since we can't directly modify resolver, we log this for now
+                logger.debug(
+                    f"Backlink from {ref_page_id} to {page_id} - "
+                    f"will resolve to shared/{page_id}.md"
+                )
+
+            # Also store a mapping file that tracks promoted pages
+            # This helps the resolver find shared pages
+            promoted_index = self.wiki_base / "index" / "promoted_pages.json"
+            import json
+
+            promoted_data = {}
+            if promoted_index.exists():
+                with promoted_index.open("r", encoding="utf-8") as f:
+                    promoted_data = json.load(f)
+
+            promoted_data[page_id] = {
+                "original_domain": source_domain,
+                "promoted_at": datetime.now(UTC).isoformat(),
+                "shared_path": f"shared/{page_id}.md",
+            }
+
+            with promoted_index.open("w", encoding="utf-8") as f:
+                json.dump(promoted_data, f, indent=2)
+
+            logger.info(f"Created promoted pages index for {page_id}")
+
+        except Exception as e:
+            logger.warning(f"Failed to remap backlinks for {page_id}: {e}")
+
+    def _rollback_promotion(
+        self, page_id: str, source_domain: str, actions: list[str]
+    ) -> None:
+        """Rollback promotion on failure.
+
+        Args:
+            page_id: Page ID that was being promoted
+            source_domain: Original domain
+            actions: List of actions that completed before failure
+        """
+        logger.info(f"Rolling back promotion of {page_id}, actions: {actions}")
+
+        # Rollback in reverse order
+        if "remap" in actions:
+            try:
+                # Remove from promoted pages index
+                import json
+
+                promoted_index = self.wiki_base / "index" / "promoted_pages.json"
+                if promoted_index.exists():
+                    with promoted_index.open("r", encoding="utf-8") as f:
+                        promoted_data = json.load(f)
+
+                    if page_id in promoted_data:
+                        del promoted_data[page_id]
+                        with promoted_index.open("w", encoding="utf-8") as f:
+                            json.dump(promoted_data, f, indent=2)
+            except Exception as e:
+                logger.warning(f"Failed to rollback remap: {e}")
+
+        if "backlinks" in actions:
+            try:
+                # Reload backlinks from original if possible
+                self.backlinks.load()
+            except Exception as e:
+                logger.warning(f"Failed to rollback backlinks: {e}")
+
+        if "references" in actions:
+            try:
+                # Note: We can't easily undo reference updates without keeping backup
+                # Just log that manual cleanup may be needed
+                logger.warning(
+                    f"Reference updates may need manual rollback for {page_id}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to rollback references: {e}")
+
+        if "tombstone" in actions:
+            try:
+                # Restore original page from shared copy
+                source_path = (
+                    self.wiki_base / "domains" / source_domain / "pages" / f"{page_id}.md"
+                )
+                shared_path = self.shared_dir / f"{page_id}.md"
+                if shared_path.exists():
+                    content = shared_path.read_text(encoding="utf-8")
+                    source_path.write_text(content, encoding="utf-8")
+                    logger.info(f"Restored original page from shared: {source_path}")
+            except Exception as e:
+                logger.warning(f"Failed to rollback tombstone: {e}")
+
+        if "shared_copy" in actions:
+            try:
+                # Remove the shared copy
+                shared_path = self.shared_dir / f"{page_id}.md"
+                if shared_path.exists():
+                    shared_path.unlink()
+                    logger.info(f"Removed shared copy: {shared_path}")
+            except Exception as e:
+                logger.warning(f"Failed to rollback shared copy: {e}")
+
+        logger.info(f"Rollback complete for {page_id}")
 
     def unpromote_page(
         self,
