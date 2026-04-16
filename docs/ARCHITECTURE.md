@@ -142,7 +142,7 @@ The Duplicate Detector identifies when the same entity is documented in multiple
 
 **Scoring Formula**:
 ```
-duplicate_score = name_similarity * 0.4 + alias_match * 0.3 + metadata_overlap * 0.2 + content_similarity * 0.1
+duplicate_score = name_similarity * 0.4 + alias_match * 0.3 + metadata_overlap * 0.2 + tag_overlap * 0.1 + content_similarity * 0.1
 ```
 
 **Configuration** (in `config/daemon.yaml`):
