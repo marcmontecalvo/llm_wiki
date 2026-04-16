@@ -6,6 +6,7 @@ from pathlib import Path
 
 from llm_wiki.adapters.base import AdapterRegistry
 from llm_wiki.adapters.markdown import MarkdownAdapter
+from llm_wiki.adapters.obsidian import ObsidianVaultAdapter
 from llm_wiki.adapters.text import TextAdapter
 from llm_wiki.ingest.failed import FailedIngestionsTracker, FailureReason
 from llm_wiki.ingest.normalizer import NormalizationPipeline
@@ -49,6 +50,7 @@ class InboxWatcher:
         # Set up normalization pipeline
         registry = AdapterRegistry()
         registry.register(MarkdownAdapter)
+        registry.register(ObsidianVaultAdapter)
         registry.register(TextAdapter)
         self.pipeline = NormalizationPipeline(registry, config_dir)
 

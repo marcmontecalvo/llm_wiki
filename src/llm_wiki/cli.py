@@ -463,6 +463,72 @@ updated: {now}"""
     click.echo("\nThe daemon will process this page automatically.")
 
 
+@ingest.command("obsidian")
+@click.argument("vault_path", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--domain", default="personal", help="Target domain for imported pages")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def ingest_obsidian(vault_path: Path, domain: str, wiki_base: Path):
+    """Import an Obsidian vault into the wiki.
+
+    This command processes all markdown files from an Obsidian vault,
+    handling Obsidian-specific syntax like wikilinks [[page-id]] and
+    embedded files ![page-id]].
+
+    VAULT_PATH: Path to the Obsidian vault directory.
+    """
+    import shutil
+    from pathlib import Path
+
+    # Find all markdown files in the vault
+    md_files = list(vault_path.rglob("*.md"))
+
+    if not md_files:
+        click.echo(f"No markdown files found in {vault_path}", err=True)
+        return
+
+    inbox = wiki_base / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+
+    # Track imported files
+    imported = 0
+    skipped = 0
+
+    for md_file in md_files:
+        # Skip templates and other special directories
+        if ".obsidian" in md_file.parts or "templates" in md_file.parts:
+            skipped += 1
+            continue
+
+        # Preserve relative path structure in filename to maintain context
+        rel_path = md_file.relative_to(vault_path)
+        dest_name = str(rel_path).replace("/", "__")
+
+        dest = inbox / dest_name
+
+        # Handle filename conflicts
+        if dest.exists():
+            counter = 1
+            stem = dest.stem
+            while dest.exists():
+                dest = inbox / f"{stem}_{counter}{dest.suffix}"
+                counter += 1
+
+        shutil.copy2(md_file, dest)
+        imported += 1
+
+    click.echo(f"✓ Imported {imported} files from Obsidian vault")
+    click.echo(f"  Vault: {vault_path}")
+    click.echo(f"  Domain: {domain}")
+    if skipped > 0:
+        click.echo(f"  Skipped: {skipped} (templates/special)")
+    click.echo("\nThe daemon will process these files automatically.")
+
+
 @ingest.command("stats")
 @click.option(
     "--wiki-base",

@@ -189,7 +189,7 @@ These are **enhancements** beyond the core system. The wiki is fully functional 
 ### Developer Experience
 - **#76:** Cursor IDE bootstrap ✅ Complete
 - **#77:** GitHub Copilot integration
-- **#78:** Obsidian vault import adapter
+- **#78:** Obsidian vault import adapter ✅ Complete
 
 ### Infrastructure
 - **#82:** Enhanced daemon scheduler (cron, prioritization, retry)

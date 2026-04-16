@@ -161,48 +161,42 @@ Created `.github/copilot-instructions.md` with:
 
 ## Obsidian
 
-**Status:** 📋 **Planned** (Issue #78)
+**Status:** ✅ **Implemented** (Issue #78)
 
-**Official Support:** Not yet
+**Official Support:** Yes
 
 ### Features
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Vault Import | ❌ | Planned adapter |
+| Vault Import | ✅ | Via `llm-wiki ingest obsidian` command |
 | Markdown Compatibility | ✅ | Standard markdown |
-| Wikilinks | 🔄 | `[[page-id]]` supported |
+| Wikilinks | ✅ | `[[page-id]]` supported |
+| Embedded Files | ✅ | `![[page-id]]` supported |
+| Hashtags | ✅ | Auto-extracted to tags |
 | Frontmatter | ✅ | Compatible format |
 | Graph View | 🔄 | Export compatible |
 
-### Current Compatibility
+### Usage
 
-**Works Now:**
-- Standard markdown files
-- Frontmatter format
-- Wikilink syntax `[[page-id]]`
-- Tag format `tags: [tag1, tag2]`
-
-**Planned:**
-- Obsidian vault import adapter (#78)
-- Dataview compatibility
-- Daily notes integration
-- Template support
-
-### Manual Workflow
-
+**Import a vault:**
 ```bash
-# Export Obsidian vault to wiki
-cp -r ~/Documents/Obsidian/MyVault/*.md wiki_system/inbox/
+# Import full Obsidian vault to personal domain
+uv run llm-wiki ingest obsidian ~/Documents/Obsidian/MyVault --domain personal
 
-# Process files
-uv run llm-wiki daemon
-
-# Or use CLI
-for file in ~/Documents/Obsidian/MyVault/*.md; do
-  uv run llm-wiki ingest file "$file" --domain personal
-done
+# Import to specific domain
+uv run llm-wiki ingest obsidian ~/Documents/Obsidian/WorkNotes --domain work
 ```
+
+**What gets imported:**
+- All markdown files from the vault (excluding `.obsidian` and `templates` folders)
+- Wikilinks `[[page-id]]` → preserved
+- Embedded files `![[page-id]]` → converted to wikilinks
+- Hashtags `#tag` → extracted to tags metadata
+- Frontmatter → parsed and included in metadata
+- Filename → used as page ID
+
+**The daemon processes imported files automatically.**
 
 ---
 
@@ -393,7 +387,7 @@ To add support for a new agent/tool:
 | Feature | Claude Code | Cursor | Copilot | Obsidian | Python API | OpenAI |
 |---------|------------|--------|---------|----------|------------|--------|
 | Search | ✅ | ✅ | 📋 | 📋 | ✅ | 🔄 |
-| Ingest | ✅ | ✅ | 📋 | 📋 | ✅ | ❌ |
+| Ingest | ✅ | ✅ | 📋 | ✅ | ✅ | ❌ |
 | Export | ✅ | ✅ | 📋 | ❌ | ✅ | ❌ |
 | Govern | ✅ | ✅ | 📋 | ❌ | ✅ | ❌ |
 | Bootstrap | ✅ | ✅ | 📋 | 📋 | ✅ | ❌ |
