@@ -24,6 +24,6 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [types-pyyaml, pydantic]
-        args: [--ignore-missing-imports]
+        args: [--ignore-missing-imports, --no-incremental]
         files: ^src/
         exclude: ^examples/
