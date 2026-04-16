@@ -8,6 +8,14 @@ Core decision:
 - **Pratiyush/llm-wiki** is the model for transcript/session ingest and machine-readable exports.
 - **Ar9av/obsidian-wiki** is the model for cross-agent compatibility and skill/bootstrap wiring.
 
+### Agent Integrations
+
+This wiki supports multiple AI agents:
+- **Claude Code**: `.claude/skills/` and `.claude/bootstrap.md`
+- **GitHub Copilot**: `.github/copilot-instructions.md` and `.github/copilot-snippets.json`
+
+See [docs/AGENT_SUPPORT_MATRIX.md](docs/AGENT_SUPPORT_MATRIX.md) for full list.
+
 ## Why this design
 
 A pure skill-only wiki is too fragile. Behavior drifts by model, prompt, and tool discipline.
