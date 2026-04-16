@@ -83,9 +83,6 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
-    "--cov=llm_wiki",
-    "--cov-report=term-missing",
-    "--cov-report=html",
 ]
 
 [tool.coverage.run]

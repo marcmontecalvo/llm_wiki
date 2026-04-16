@@ -8,16 +8,19 @@ from llm_wiki.daemon.jobs.retry_failed_ingests import (
     RetryFailedIngestsJob,
     run_retry_failed_ingests,
 )
+from llm_wiki.daemon.jobs.review_queue import ReviewQueueJob, run_review_queue_job
 
 __all__ = [
     "ExportJob",
     "GovernanceJob",
     "IndexRebuildJob",
     "PromotionJob",
+    "ReviewQueueJob",
     "RetryFailedIngestsJob",
     "run_export_job",
     "run_governance_check",
     "run_index_rebuild",
     "run_promotion_check",
+    "run_review_queue_job",
     "run_retry_failed_ingests",
 ]

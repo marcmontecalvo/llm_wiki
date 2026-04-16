@@ -102,6 +102,17 @@ class WikiDaemon:
             wiki_base=wiki_base,
         )
 
+        # Register review queue population job
+        if self.config.daemon.daemon.review_queue_enabled:
+            from llm_wiki.daemon.jobs.review_queue import run_review_queue_job
+
+            self.scheduler.add_job(
+                func=run_review_queue_job,
+                job_name="review_queue_population",
+                interval_seconds=self.config.daemon.daemon.review_queue_every_minutes * 60,
+                wiki_base=wiki_base,
+            )
+
         # Start scheduler
         self.scheduler.start()
         logger.info("Scheduler started")

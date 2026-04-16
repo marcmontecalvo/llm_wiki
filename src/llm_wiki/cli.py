@@ -1980,5 +1980,278 @@ def changes_stats(wiki_base: Path):
             click.echo(f"  {item['page_id']}: {item['count']} changes")
 
 
+@main.group()
+def review():
+    """Manage the review queue."""
+    pass
+
+
+@review.command("list")
+@click.option(
+    "--status",
+    type=click.Choice(["pending", "approved", "rejected", "deferred"]),
+    default="pending",
+    help="Filter by status",
+)
+@click.option(
+    "--type",
+    "item_type",
+    type=click.Choice(
+        ["page", "claim", "contradiction", "promotion", "duplicate", "routing_mistake", "sourceless_claim", "manual"]
+    ),
+    default=None,
+    help="Filter by type",
+)
+@click.option(
+    "--priority",
+    type=click.Choice(["low", "medium", "high", "urgent"]),
+    default=None,
+    help="Filter by priority",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def review_list(status: str, item_type: str | None, priority: str | None, wiki_base: Path):
+    """List review queue items."""
+    from llm_wiki.review.models import ReviewPriority, ReviewStatus, ReviewType
+    from llm_wiki.review.queue import ReviewQueue
+
+    queue = ReviewQueue(queue_dir=Path(wiki_base) / "review_queue")
+
+    # Convert string filters to enums
+    status_enum = ReviewStatus(status)
+    type_enum = ReviewType(item_type) if item_type else None
+    priority_enum = ReviewPriority(priority) if priority else None
+
+    items = queue.list_by_status(status_enum, type_enum, priority_enum)
+
+    click.echo(f"Review Queue - {status.upper()} Items")
+    click.echo("=" * 80)
+
+    if not items:
+        click.echo(f"No {status} items found.")
+        return
+
+    # Show summary by type and priority
+    type_counts: dict[str, int] = {}
+    priority_counts: dict[str, int] = {}
+
+    for item in items:
+        type_counts[item.type.value] = type_counts.get(item.type.value, 0) + 1
+        priority_counts[item.priority.value] = priority_counts.get(item.priority.value, 0) + 1
+
+    click.echo(f"\nTotal: {len(items)}")
+    click.echo(f"\nBy type: {', '.join(f'{k}({v})' for k, v in sorted(type_counts.items()))}")
+    click.echo(f"By priority: {', '.join(f'{k}({v})' for k, v in sorted(priority_counts.items()))}")
+
+    click.echo(f"\n{'ID':<25} {'Type':<20} {'Priority':<10} {'Target':<30} {'Created'}")
+    click.echo("-" * 100)
+
+    for item in items[:50]:
+        created_str = item.created_at.strftime("%Y-%m-%d %H:%M")
+        click.echo(f"{item.id:<25} {item.type.value:<20} {item.priority.value:<10} {item.target_id:<30} {created_str}")
+
+    if len(items) > 50:
+        click.echo(f"\n... and {len(items) - 50} more items")
+
+
+@review.command("show")
+@click.argument("item-id")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def review_show(item_id: str, wiki_base: Path):
+    """Show details of a review item."""
+    from llm_wiki.review.queue import ReviewQueue
+
+    queue = ReviewQueue(queue_dir=Path(wiki_base) / "review_queue")
+
+    item = queue.get(item_id)
+
+    if item is None:
+        click.echo(f"Review item not found: {item_id}", err=True)
+        raise click.Abort()
+
+    click.echo(f"Review Item: {item.id}")
+    click.echo("=" * 60)
+    click.echo(f"Type:        {item.type.value}")
+    click.echo(f"Target ID:   {item.target_id}")
+    click.echo(f"Reason:     {item.reason}")
+    click.echo(f"Priority:   {item.priority.value}")
+    click.echo(f"Status:     {item.status.value}")
+    click.echo(f"Created:    {item.created_at.isoformat()}")
+
+    if item.reviewed_at:
+        click.echo(f"Reviewed:   {item.reviewed_at.isoformat()}")
+    if item.reviewed_by:
+        click.echo(f"Reviewed By: {item.reviewed_by}")
+    if item.notes:
+        click.echo(f"Notes:      {item.notes}")
+
+    if item.metadata:
+        click.echo(f"\nMetadata:")
+        for key, value in item.metadata.items():
+            click.echo(f"  {key}: {value}")
+
+
+@review.command("approve")
+@click.argument("item-id")
+@click.option(
+    "--notes",
+    default=None,
+    help="Approval notes",
+)
+@click.option(
+    "--reviewed-by",
+    default="cli",
+    help="Who is approving (default: cli)",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def review_approve(item_id: str, notes: str | None, reviewed_by: str, wiki_base: Path):
+    """Approve a review item."""
+    from llm_wiki.review.queue import ReviewQueue
+
+    queue = ReviewQueue(queue_dir=Path(wiki_base) / "review_queue")
+
+    try:
+        item = queue.approve(item_id, reviewed_by, notes)
+        click.echo(f"✓ Approved: {item.id}")
+        if notes:
+            click.echo(f"  Notes: {notes}")
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort()
+
+
+@review.command("reject")
+@click.argument("item-id")
+@click.option(
+    "--notes",
+    default=None,
+    help="Rejection reason",
+)
+@click.option(
+    "--reviewed-by",
+    default="cli",
+    help="Who is rejecting (default: cli)",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def review_reject(item_id: str, notes: str | None, reviewed_by: str, wiki_base: Path):
+    """Reject a review item."""
+    from llm_wiki.review.queue import ReviewQueue
+
+    queue = ReviewQueue(queue_dir=Path(wiki_base) / "review_queue")
+
+    try:
+        item = queue.reject(item_id, reviewed_by, notes)
+        click.echo(f"✓ Rejected: {item.id}")
+        if notes:
+            click.echo(f"  Reason: {notes}")
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort()
+
+
+@review.command("defer")
+@click.argument("item-id")
+@click.option(
+    "--notes",
+    default=None,
+    help="Deferral reason",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def review_defer(item_id: str, notes: str | None, wiki_base: Path):
+    """Defer a review item for later."""
+    from llm_wiki.review.queue import ReviewQueue
+
+    queue = ReviewQueue(queue_dir=Path(wiki_base) / "review_queue")
+
+    try:
+        item = queue.defer(item_id, notes)
+        click.echo(f"✓ Deferred: {item.id}")
+        if notes:
+            click.echo(f"  Notes: {notes}")
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort()
+
+
+@review.command("stats")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def review_stats(wiki_base: Path):
+    """Show review queue statistics."""
+    from llm_wiki.review.queue import ReviewQueue
+
+    queue = ReviewQueue(queue_dir=Path(wiki_base) / "review_queue")
+
+    stats = queue.export_stats()
+
+    click.echo("Review Queue Statistics")
+    click.echo("=" * 40)
+    click.echo(f"\nTotal Items: {stats['total_all']}")
+    click.echo(f"Total Pending: {stats['total_pending']}")
+
+    click.echo("\nBy Status:")
+    for status, count in stats["counts_by_status"].items():
+        click.echo(f"  {status}: {count}")
+
+    click.echo("\nPending By Priority:")
+    for priority, count in sorted(stats["pending_by_priority"].items()):
+        click.echo(f"  {priority}: {count}")
+
+    click.echo("\nPending By Type:")
+    for item_type, count in sorted(stats["pending_by_type"].items()):
+        click.echo(f"  {item_type}: {count}")
+
+
+@review.command("cleanup")
+@click.option(
+    "--days",
+    default=30,
+    type=int,
+    help="Delete items older than this many days (default: 30)",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def review_cleanup(days: int, wiki_base: Path):
+    """Clean up old resolved review items."""
+    from llm_wiki.review.queue import ReviewQueue
+
+    queue = ReviewQueue(queue_dir=Path(wiki_base) / "review_queue")
+
+    deleted = queue.cleanup_old_items(days)
+    click.echo(f"✓ Deleted {deleted} old resolved items")
+
+
 if __name__ == "__main__":
     main()
