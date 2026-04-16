@@ -80,6 +80,22 @@ class WikiDaemon:
             wiki_base=wiki_base,
         )
 
+        # Register duplicate detection job
+        if self.config.daemon.daemon.duplicates.enabled:
+            from llm_wiki.daemon.jobs.duplicates import run_duplicate_detection
+
+            self.scheduler.add_job(
+                func=run_duplicate_detection,
+                job_name="duplicates_check",
+                interval_seconds=self.config.daemon.daemon.duplicates.duplicates_check_every_hours * 3600,
+                wiki_base=wiki_base,
+                config=self.config.daemon.daemon.duplicates,
+            )
+            logger.info(
+                f"Registered duplicates_check job "
+                f"(every {self.config.daemon.daemon.duplicates.duplicates_check_every_hours}h)"
+            )
+
         # Register promotion job
         if self.config.daemon.daemon.promotion.enabled:
             from llm_wiki.daemon.jobs.promotion import run_promotion_check

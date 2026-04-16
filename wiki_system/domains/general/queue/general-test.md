@@ -2,7 +2,7 @@
 domain: general
 id: general-test
 kind: source
-source_path: /var/folders/x9/61fhwf5x6_xfq1qfpnn8_j400000gn/T/tmph8b8fwk5/inbox/processing/test.md
+source_path: /tmp/tmpnu4w6soq/inbox/processing/test.md
 source_type: markdown
 status: queued
 title: Test

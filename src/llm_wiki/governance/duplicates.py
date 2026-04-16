@@ -65,15 +65,25 @@ class DuplicateReport:
 class DuplicateDetector:
     """Detects duplicate entity pages in the wiki."""
 
-    def __init__(self, min_score: float = 0.3, wiki_base: Path | None = None):
+    def __init__(
+        self,
+        min_score: float = 0.3,
+        wiki_base: Path | None = None,
+        check_domains: list[str] | None = None,
+        exclude_kinds: list[str] | None = None,
+    ):
         """Initialize duplicate detector.
 
         Args:
             min_score: Minimum duplicate score to include in report (0.0-1.0)
             wiki_base: Base wiki directory (optional, used by analyze_all_pages)
+            check_domains: List of domain names to check (None = all domains)
+            exclude_kinds: List of page kinds to exclude (e.g., ["source"])
         """
         self.min_score = min_score
         self.wiki_base = wiki_base
+        self.check_domains = check_domains
+        self.exclude_kinds = exclude_kinds or ["source"]
 
     def analyze_all_pages(self, wiki_base: Path | None = None) -> DuplicateReport:
         """Analyze all pages for duplicates.
@@ -101,6 +111,11 @@ class DuplicateDetector:
             if not domain_dir.is_dir():
                 continue
 
+            # Filter by domain name if check_domains is specified
+            if self.check_domains and domain_dir.name not in self.check_domains:
+                logger.debug(f"Skipping domain {domain_dir.name} (not in check_domains)")
+                continue
+
             pages_dir = domain_dir / "pages"
             if not pages_dir.exists():
                 continue
@@ -111,9 +126,10 @@ class DuplicateDetector:
                     metadata, body = parse_frontmatter(content)
                     page_id = metadata.get("id", page_file.stem)
 
-                    # Skip source pages (don't detect source doc duplicates)
-                    if metadata.get("kind") == "source":
-                        logger.debug(f"Skipping source page: {page_id}")
+                    # Skip pages with excluded kinds
+                    page_kind = metadata.get("kind")
+                    if page_kind in self.exclude_kinds:
+                        logger.debug(f"Skipping {page_id} (kind={page_kind} in exclude_kinds)")
                         continue
 
                     if page_id in pages_metadata:
@@ -228,13 +244,20 @@ class DuplicateDetector:
         aliases_1 = meta1.get("aliases", []) or []
         aliases_2 = meta2.get("aliases", []) or []
 
-        # Check if name_2 is in aliases_1 or vice versa
+        # Check if name_2 is in aliases_1 or vice versa (including KNOWN_ABBREVIATIONS)
         if self._check_alias_match(name_2, aliases_1):
             alias_match = 1.0
-            reasons.append(f"'{name_2}' is in aliases of page 1")
+            # Check page aliases first, then known abbreviations
+            if self._check_alias_match(name_2, aliases_1):
+                reasons.append(f"'{name_2}' is in aliases of page 1")
+            elif self._is_known_abbreviation(name_2):
+                reasons.append(f"Known abbreviation: '{name_2}'")
         elif self._check_alias_match(name_1, aliases_2):
             alias_match = 1.0
-            reasons.append(f"'{name_1}' is in aliases of page 2")
+            if self._check_alias_match(name_1, aliases_2):
+                reasons.append(f"'{name_1}' is in aliases of page 2")
+            elif self._is_known_abbreviation(name_1):
+                reasons.append(f"Known abbreviation: '{name_1}'")
 
         # C. Metadata overlap (same source URL or GitHub repo)
         metadata_overlap = 0.0
@@ -282,12 +305,13 @@ class DuplicateDetector:
                         reasons.append(f"Content similarity: {jaccard:.2f}")
 
         # Calculate final score using formula:
-        # duplicate_score = name_similarity * 0.4 + alias_match * 0.3 + metadata_overlap * 0.2 + tag_overlap * 0.1
+        # duplicate_score = name_similarity * 0.4 + alias_match * 0.3 + metadata_overlap * 0.2 + tag_overlap * 0.1 + content_similarity * 0.1
         score = (
             name_similarity * 0.4
             + alias_match * 0.3
             + metadata_overlap * 0.2
             + tag_overlap * 0.1
+            + content_similarity * 0.1
         )
 
         return score, reasons
@@ -319,24 +343,59 @@ class DuplicateDetector:
         return normalized
 
     def _check_alias_match(self, name: str, aliases: list[str]) -> bool:
-        """Check if a name matches any alias.
+        """Check if a name matches any alias or known abbreviation.
 
         Args:
             name: Name to check
             aliases: List of aliases
 
         Returns:
-            True if name matches an alias (case-insensitive)
+            True if name matches an alias (case-insensitive) or known abbreviation
         """
-        if not name or not aliases:
+        if not name:
             return False
 
         norm_name = self._normalize_name(name)
-        for alias in aliases:
-            norm_alias = self._normalize_name(alias)
-            if norm_name == norm_alias:
+
+        # Check against page aliases
+        if aliases:
+            for alias in aliases:
+                norm_alias = self._normalize_name(alias)
+                if norm_name == norm_alias:
+                    return True
+
+        # Check against known abbreviations
+        # Check if name is a known abbreviation key (e.g., "aws")
+        if norm_name in KNOWN_ABBREVIATIONS:
+            return True
+
+        # Check if name is an expansion of a known abbreviation
+        for abbrev, expansion in KNOWN_ABBREVIATIONS.items():
+            if norm_name == self._normalize_name(expansion):
                 return True
 
+        return False
+
+    def _is_known_abbreviation(self, name: str) -> bool:
+        """Check if a name is a known abbreviation or expansion.
+
+        Args:
+            name: Name to check
+
+        Returns:
+            True if name is a known abbreviation or its expansion
+        """
+        if not name:
+            return False
+
+        norm_name = self._normalize_name(name)
+        # Check if it's an abbreviation key (e.g., "aws")
+        if norm_name in KNOWN_ABBREVIATIONS:
+            return True
+        # Check if it's an expansion of a known abbreviation
+        for abbrev, expansion in KNOWN_ABBREVIATIONS.items():
+            if norm_name == self._normalize_name(expansion):
+                return True
         return False
 
     def generate_report(self, report: DuplicateReport, output_path: Path) -> Path:
@@ -605,6 +664,56 @@ This page has been merged into [[{primary_page}]].
             "redirect_created": str(redirect_path),
             "archived_path": str(archived_path),
         }
+
+    def auto_merge_duplicates(
+        self,
+        report: DuplicateReport,
+        wiki_base: Path | None = None,
+        threshold: float = 0.9,
+    ) -> list[dict[str, Any]]:
+        """Automatically merge duplicates above the threshold.
+
+        This method iterates through high-confidence duplicate candidates
+        and merges them automatically if they exceed the threshold.
+        For safety, this only auto-merges when score > threshold.
+
+        Args:
+            report: DuplicateReport with detected duplicates
+            wiki_base: Base wiki directory (defaults to self.wiki_base)
+            threshold: Minimum score for automatic merging (default 0.9)
+
+        Returns:
+            List of merge results for each successful merge
+        """
+        if wiki_base is None:
+            wiki_base = self.wiki_base or Path("wiki_system")
+
+        results = []
+
+        # Only auto-merge high-confidence duplicates
+        for candidate in report.high_confidence:
+            if candidate.duplicate_score >= threshold:
+                primary = candidate.primary_page or candidate.page_1
+
+                try:
+                    result = self.merge_duplicate(
+                        candidate.page_1,
+                        candidate.page_2,
+                        primary,
+                        wiki_base,
+                    )
+                    result["candidate_score"] = candidate.duplicate_score
+                    results.append(result)
+                    logger.info(
+                        f"Auto-merged {candidate.page_2} -> {primary} "
+                        f"(score: {candidate.duplicate_score:.3f})"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Auto-merge failed for {candidate.page_1} ↔ {candidate.page_2}: {e}"
+                    )
+
+        return results
 
     def _find_page_files(
         self, page_1: str, page_2: str, wiki_base: Path

@@ -2,7 +2,7 @@
 domain: personal
 id: personal-test
 kind: source
-source_path: /var/folders/x9/61fhwf5x6_xfq1qfpnn8_j400000gn/T/tmpc3y5q8bf/inbox/processing/test.md
+source_path: /tmp/tmp961iu0ri/inbox/processing/test.md
 source_type: markdown
 status: queued
 title: Test

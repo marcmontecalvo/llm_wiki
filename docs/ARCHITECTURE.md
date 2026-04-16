@@ -135,7 +135,7 @@ The Duplicate Detector identifies when the same entity is documented in multiple
 
 **Detection Strategies**:
 - **Exact Name Match**: Case-insensitive comparison of normalized titles
-- **Alias/Synonym Matching**: Check if one page's title appears in another's aliases
+- **Alias/Synonym Matching**: Check if one page's title appears in another's aliases, including KNOWN_ABBREVIATIONS (e.g., AWS → Amazon Web Services, npm → Node Package Manager)
 - **Metadata Correlation**: Same source_url or github_url indicates duplicates
 - **Tag Overlap**: 3+ common tags suggest related content
 - **Content Similarity**: Word-based Jaccard similarity (requires 30%+ match)
@@ -143,6 +143,18 @@ The Duplicate Detector identifies when the same entity is documented in multiple
 **Scoring Formula**:
 ```
 duplicate_score = name_similarity * 0.4 + alias_match * 0.3 + metadata_overlap * 0.2 + content_similarity * 0.1
+```
+
+**Configuration** (in `config/daemon.yaml`):
+```yaml
+duplicates:
+  enabled: true
+  duplicates_check_every_hours: 24  # Run every 24 hours
+  min_score_to_flag: 0.5
+  auto_merge_threshold: 0.9  # Auto-merge only at >0.9
+  require_review: true
+  check_domains: [tech, general]
+  exclude_kinds: [source]
 ```
 
 **Confidence Levels**:
@@ -158,11 +170,20 @@ duplicate_score = name_similarity * 0.4 + alias_match * 0.3 + metadata_overlap *
 5. Archive secondary page
 6. Log merge action
 
+**Auto-Merge**:
+- Automatically merges duplicates when score > auto_merge_threshold (default 0.9)
+- Only runs in daemon when enabled in config
+
 **Review Queue Integration**:
 High-confidence duplicates can be automatically added to the review queue for manual approval before merging.
 
+**Daemon Job**:
+- Registered as `duplicates_check` job in daemon scheduler
+- Runs independently based on `duplicates_check_every_hours` config
+
 **Key Files**:
 - `src/llm_wiki/governance/duplicates.py`
+- `src/llm_wiki/daemon/jobs/duplicates.py`
 - `config/daemon.yaml` (duplicates config)
 
 ### 5. Export System

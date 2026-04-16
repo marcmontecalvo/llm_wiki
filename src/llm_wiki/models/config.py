@@ -74,11 +74,14 @@ class DuplicatesConfig(BaseModel):
     detection_interval: int = Field(
         default=86400, ge=1, description="Seconds between duplicate detection runs"
     )
+    duplicates_check_every_hours: int = Field(
+        default=24, ge=1, description="Hours between duplicate detection runs"
+    )
     min_score_to_flag: float = Field(
         default=0.5, ge=0.0, le=1.0, description="Minimum score to flag as duplicate"
     )
     auto_merge_threshold: float = Field(
-        default=0.9, ge=0.0, le=1.0, description="Score threshold for auto-merge (not implemented)"
+        default=0.9, ge=0.0, le=1.0, description="Score threshold for auto-merge"
     )
     require_review: bool = Field(
         default=True, description="Whether duplicates require review before merging"
