@@ -1,0 +1,124 @@
+{
+  "wiki-cli-command": {
+    "prefix": "wiki-cli-command",
+    "body": [
+      "@main.command()",
+      "@click.argument('arg_name')",
+      "@click.option('--domain', help='Domain to use')",
+      "@click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')",
+      "def command_name(arg_name: str, domain: str | None, verbose: bool) -> None:",
+      "    \"\"\"A helpful command description.\"\"\"\"",
+      "    # Implementation here",
+      "    click.echo(f'Running: {arg_name}' if verbose else arg_name)"
+    ],
+    "description": "New CLI command for llm-wiki"
+  },
+  "wiki-extractor": {
+    "prefix": "wiki-extractor",
+    "body": [
+      "class ${1:Name}Extractor(BaseExtractor):",
+      "    \"\"\"Extract ${2:description} from content.\"\"\"",
+      "",
+      "    def extract(self, content: str, metadata: dict) -> list[dict]:",
+      "        \"\"\"Extract ${1:name} from content.",
+      "",
+      "        Args:",
+      "            content: The raw content to extract from",
+      "            metadata: Page metadata dict with id, domain, etc.",
+      "",
+      "        Returns:",
+      "            List of dicts with extracted data",
+      "        \"\"\"",
+      "        results = []",
+      "        # Implementation here",
+      "        return results"
+    ],
+    "description": "New extractor class for llm-wiki"
+  },
+  "wiki-exporter": {
+    "prefix": "wiki-exporter",
+    "body": [
+      "class ${1:Name}Exporter(BaseExporter):",
+      "    \"\"\"Export wiki pages to ${2:format}.\"\"\"",
+      "",
+      "    def export(self, pages: list[dict], output_path: Path) -> Path:",
+      "        \"\"\"Export pages to ${2:format}.",
+      "",
+      "        Args:",
+      "            pages: List of page dicts with content and metadata",
+      "            output_path: Destination path for export",
+      "",
+      "        Returns:",
+      "            Path to the generated export file",
+      "        \"\"\"",
+      "        # Implementation here",
+      "        return output_path"
+    ],
+    "description": "New exporter class for llm-wiki"
+  },
+  "wiki-governance-check": {
+    "prefix": "wiki-governance-check",
+    "body": [
+      "class ${1:Name}Check(BaseCheck):",
+      "    \"\"\"Description of what this check does.\"\"\"",
+      "",
+      "    def run(self, pages: list[dict]) -> list[dict]:",
+      "        \"\"\"Run the governance check.",
+      "",
+      "        Args:",
+      "            pages: List of page dicts",
+      "",
+      "        Returns:",
+      "            List of issue dicts with severity, message, page_id",
+      "        \"\"\"",
+      "        issues = []",
+      "        # Implementation here",
+      "        return issues"
+    ],
+    "description": "New governance check for llm-wiki"
+  },
+  "wiki-fixture-wiki-base": {
+    "prefix": "wiki-fixture-wiki-base",
+    "body": [
+      "@pytest.fixture",
+      "def wiki_base(tmp_path):",
+      "    \"\"\"Create a temporary wiki for testing.\"\"\"",
+      "    wiki = WikiQuery(wiki_base=tmp_path)",
+      "    # Add test data",
+      "    return wiki"
+    ],
+    "description": "Pytest fixture for wiki base"
+  },
+  "wiki-fixture-sample-page": {
+    "prefix": "wiki-fixture-sample-page",
+    "body": [
+      "@pytest.fixture",
+      "def sample_page():",
+      "    \"\"\"Sample page for testing.\"\"\"",
+      "    return {",
+      "        \"id\": \"test-page\",",
+      "        \"title\": \"Test Page\",",
+      "        \"domain\": \"general\",",
+      "        \"content\": \"# Test Page\\n\\nThis is test content.\"",
+      "    }"
+    ],
+    "description": "Pytest fixture for sample page"
+  },
+  "wiki-mock-llm": {
+    "prefix": "wiki-mock-llm",
+    "body": [
+      "@patch(\"llm_wiki.extraction.service.OpenAI\")",
+      "def test_extraction_with_mock(mock_openai):",
+      "    \"\"\"Test extraction with mocked LLM.\"\"\"",
+      "    mock_client = Mock()",
+      "    mock_client.chat.completions.create.return_value = mock_response",
+      "    mock_openai.return_value = mock_client",
+      "",
+      "    from llm_wiki.extraction.service import ExtractionService",
+      "    service = ExtractionService()",
+      "    results = service.extract(\"content\")",
+      "    assert results is not None"
+    ],
+    "description": "Mock LLM calls in tests"
+  }
+}
