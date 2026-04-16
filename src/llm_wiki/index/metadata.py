@@ -27,6 +27,7 @@ class MetadataIndex:
         self.by_tag: dict[str, set[str]] = {}  # tag -> set of page_ids
         self.by_kind: dict[str, set[str]] = {}  # kind -> set of page_ids
         self.by_domain: dict[str, set[str]] = {}  # domain -> set of page_ids
+        self.claims: list[dict[str, Any]] = []  # flat list of all claims with page context
 
     def add_page(self, page_id: str, metadata: dict[str, Any]) -> None:
         """Add or update a page in the index.
@@ -59,6 +60,14 @@ class MetadataIndex:
             self.by_domain[domain] = set()
         self.by_domain[domain].add(page_id)
 
+        # Index claims (remove old entries for this page first, then add new)
+        self.claims = [c for c in self.claims if c.get("page_id") != page_id]
+        for claim in metadata.get("claims", []):
+            if isinstance(claim, dict) and "text" in claim:
+                entry = dict(claim)
+                entry["page_id"] = page_id
+                self.claims.append(entry)
+
     def remove_page(self, page_id: str) -> None:
         """Remove a page from the index.
 
@@ -87,6 +96,9 @@ class MetadataIndex:
         domain = metadata.get("domain", "general")
         if domain in self.by_domain:
             self.by_domain[domain].discard(page_id)
+
+        # Remove claims for this page
+        self.claims = [c for c in self.claims if c.get("page_id") != page_id]
 
         # Remove metadata
         del self.pages[page_id]
@@ -147,6 +159,42 @@ class MetadataIndex:
         """
         return sorted(self.by_tag.keys())
 
+    def search_claims(
+        self, query: str, min_confidence: float = 0.0, page_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Search claims by text keyword.
+
+        Args:
+            query: Text to search for (case-insensitive substring match)
+            min_confidence: Minimum confidence threshold (0.0-1.0)
+            page_id: Optional page_id to restrict search to one page
+
+        Returns:
+            List of matching claim dicts sorted by confidence descending
+        """
+        query_lower = query.lower()
+        results = []
+        for claim in self.claims:
+            if claim.get("confidence", 0.0) < min_confidence:
+                continue
+            if page_id and claim.get("page_id") != page_id:
+                continue
+            if query_lower in claim.get("text", "").lower():
+                results.append(claim)
+        results.sort(key=lambda c: c.get("confidence", 0.0), reverse=True)
+        return results
+
+    def get_claims_for_page(self, page_id: str) -> list[dict[str, Any]]:
+        """Get all claims for a specific page.
+
+        Args:
+            page_id: Page identifier
+
+        Returns:
+            List of claim dicts for the page
+        """
+        return [c for c in self.claims if c.get("page_id") == page_id]
+
     def save(self) -> None:
         """Save index to disk."""
         index_file = self.index_dir / "metadata.json"
@@ -157,6 +205,7 @@ class MetadataIndex:
             "by_tag": {k: list(v) for k, v in self.by_tag.items()},
             "by_kind": {k: list(v) for k, v in self.by_kind.items()},
             "by_domain": {k: list(v) for k, v in self.by_domain.items()},
+            "claims": self.claims,
         }
 
         with index_file.open("w", encoding="utf-8") as f:
@@ -179,6 +228,7 @@ class MetadataIndex:
         self.by_tag = {k: set(v) for k, v in data.get("by_tag", {}).items()}
         self.by_kind = {k: set(v) for k, v in data.get("by_kind", {}).items()}
         self.by_domain = {k: set(v) for k, v in data.get("by_domain", {}).items()}
+        self.claims = data.get("claims", [])
 
         logger.info(f"Loaded metadata index ({len(self.pages)} pages)")
 
@@ -198,6 +248,7 @@ class MetadataIndex:
         self.by_tag.clear()
         self.by_kind.clear()
         self.by_domain.clear()
+        self.claims.clear()
 
         # Scan all domains
         domains_dir = wiki_base / "domains"

@@ -523,6 +523,173 @@ def govern_rebuild_index(wiki_base: Path):
 
 
 @main.group()
+def claims():
+    """Extract and query factual claims from wiki pages."""
+    pass
+
+
+@claims.command("extract")
+@click.argument("page_id")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+@click.option(
+    "--domain",
+    default=None,
+    help="Domain containing the page (searches all domains if omitted)",
+)
+@click.option(
+    "--min-confidence",
+    type=float,
+    default=0.5,
+    help="Minimum confidence threshold for displayed claims (0.0-1.0)",
+)
+def claims_extract(page_id: str, wiki_base: Path, domain: str | None, min_confidence: float):
+    """Extract factual claims from a wiki page."""
+
+    from llm_wiki.extraction.claims import ClaimsExtractor
+    from llm_wiki.models.client import create_model_client
+    from llm_wiki.models.config import ModelProviderConfig
+    from llm_wiki.utils.frontmatter import parse_frontmatter
+
+    # Find the page file
+    wiki_base = Path(wiki_base)
+    page_file = None
+
+    if domain:
+        # Look in specific domain
+        for subdir in ("pages", "queue"):
+            candidate = wiki_base / "domains" / domain / subdir / f"{page_id}.md"
+            if candidate.exists():
+                page_file = candidate
+                break
+    else:
+        # Search all domains
+        for domain_dir in (wiki_base / "domains").iterdir():
+            if not domain_dir.is_dir():
+                continue
+            for subdir in ("pages", "queue"):
+                candidate = domain_dir / subdir / f"{page_id}.md"
+                if candidate.exists():
+                    page_file = candidate
+                    break
+            if page_file:
+                break
+
+    if not page_file:
+        click.echo(f"Error: page '{page_id}' not found", err=True)
+        raise click.Abort()
+
+    content_text = page_file.read_text(encoding="utf-8")
+    metadata, body = parse_frontmatter(content_text)
+
+    try:
+        config = ModelProviderConfig(provider="ollama", model="llama3.2:3b")
+        client = create_model_client(config)
+        extractor = ClaimsExtractor(client=client)
+        extracted = extractor.extract_claims(body, metadata, page_id=page_id)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort() from e
+
+    filtered = [c for c in extracted if c.confidence >= min_confidence]
+    click.echo(f"\nClaims for '{page_id}' (min confidence {min_confidence}):")
+    click.echo("=" * 60)
+
+    if not filtered:
+        click.echo("No claims found above confidence threshold.")
+        return
+
+    for i, claim in enumerate(filtered, 1):
+        click.echo(f"\n{i}. {claim.claim}")
+        click.echo(f"   Confidence: {claim.confidence:.2f}")
+        click.echo(f"   Source: {claim.source_reference}")
+        if claim.temporal_context:
+            click.echo(f"   When: {claim.temporal_context}")
+        if claim.qualifiers:
+            click.echo(f"   Qualifiers: {', '.join(claim.qualifiers)}")
+
+    click.echo(f"\nTotal: {len(filtered)} claims")
+
+
+@claims.command("search")
+@click.argument("query_text")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+@click.option(
+    "--min-confidence",
+    type=float,
+    default=0.0,
+    help="Minimum confidence threshold (0.0-1.0)",
+)
+@click.option("--limit", default=20, help="Maximum results to return")
+def claims_search(query_text: str, wiki_base: Path, min_confidence: float, limit: int):
+    """Search claims across all wiki pages."""
+    from llm_wiki.index.metadata import MetadataIndex
+
+    index = MetadataIndex(index_dir=Path(wiki_base) / "index")
+    index.load()
+
+    results = index.search_claims(query_text, min_confidence=min_confidence)
+
+    click.echo(f"\nClaims matching '{query_text}':")
+    click.echo("=" * 60)
+
+    if not results:
+        click.echo("No matching claims found.")
+        return
+
+    for i, claim in enumerate(results[:limit], 1):
+        click.echo(f"\n{i}. {claim['text']}")
+        click.echo(f"   Page: {claim['page_id']}")
+        click.echo(f"   Confidence: {claim.get('confidence', 0.0):.2f}")
+        click.echo(f"   Source: {claim.get('source_ref', 'unknown')}")
+        if claim.get("temporal_context"):
+            click.echo(f"   When: {claim['temporal_context']}")
+
+    click.echo(f"\nTotal: {len(results)} matches (showing {min(len(results), limit)})")
+
+
+@claims.command("list")
+@click.argument("page_id")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def claims_list(page_id: str, wiki_base: Path):
+    """List all indexed claims for a wiki page."""
+    from llm_wiki.index.metadata import MetadataIndex
+
+    index = MetadataIndex(index_dir=Path(wiki_base) / "index")
+    index.load()
+
+    page_claims = index.get_claims_for_page(page_id)
+
+    click.echo(f"\nIndexed claims for '{page_id}':")
+    click.echo("=" * 60)
+
+    if not page_claims:
+        click.echo("No indexed claims found. Run 'govern rebuild-index' to rebuild.")
+        return
+
+    for i, claim in enumerate(page_claims, 1):
+        click.echo(f"\n{i}. {claim['text']}")
+        click.echo(f"   Confidence: {claim.get('confidence', 0.0):.2f}")
+        click.echo(f"   Source: {claim.get('source_ref', 'unknown')}")
+
+    click.echo(f"\nTotal: {len(page_claims)} claims")
+
+
+@main.group()
 def export():
     """Export wiki content in various formats."""
     pass
@@ -612,6 +779,12 @@ def export_llmstxt(output: Path | None, wiki_base: Path):
     help="Maximum number of pages to export",
 )
 @click.option(
+    "--since",
+    type=str,
+    default=None,
+    help="Only include pages updated at or after this date (ISO format: YYYY-MM-DD)",
+)
+@click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
     default="wiki_system",
@@ -622,6 +795,7 @@ def export_llmsfull(
     domain: str | None,
     min_quality: float,
     max_pages: int | None,
+    since: str | None,
     wiki_base: Path,
 ):
     """Export to llms-full.txt format with comprehensive page data."""
@@ -651,12 +825,19 @@ def export_llmsfull(
     if domain:
         click.echo(f"Exporting domain '{domain}'...")
         result = exporter.export_domain(
-            domain, output_file=output, min_quality=min_quality, max_pages=max_pages
+            domain,
+            output_file=output,
+            min_quality=min_quality,
+            max_pages=max_pages,
+            since_date=since,
         )
     else:
         click.echo("Exporting all domains...")
         result = exporter.export_all(
-            output_file=output, min_quality=min_quality, max_pages=max_pages
+            output_file=output,
+            min_quality=min_quality,
+            max_pages=max_pages,
+            since_date=since,
         )
 
     # Show results

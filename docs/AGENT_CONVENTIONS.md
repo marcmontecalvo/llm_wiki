@@ -69,7 +69,23 @@ concepts:                # Extracted concepts
     description: Brief description
 related_pages:           # Explicit relationships
   - related-page-id
+claims:                  # Extracted factual claims (auto-populated by pipeline)
+  - text: "Python was first released in 1991"
+    source_ref: "paragraph 1"
+    confidence: 0.95       # 0.0-1.0; >= 0.8 considered high confidence
+    page_id: page-id       # which page this claim is on
+    temporal_context: "initial release"  # optional: when this was true
+    qualifiers: []         # optional: conditions/limitations on the claim
+    evidence: null         # optional: supporting evidence text
 ```
+
+### Claims Format
+- **text**: Atomic, declarative, verifiable statement (one fact per claim)
+- **source_ref**: Where in the content (e.g., "paragraph 2", "section title")
+- **confidence**: `1.0` = explicit/well-supported; `0.6–0.7` = less explicit; `< 0.4` = very uncertain
+- **temporal_context**: When the claim is/was true (e.g., "as of 2024", "during 2020–2023")
+- **qualifiers**: Conditions limiting the claim (e.g., "in the US", "for adults")
+- Claims are extracted for all page kinds and stored in the metadata index for cross-page search
 
 ## Domain Boundaries
 

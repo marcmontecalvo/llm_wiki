@@ -393,6 +393,7 @@ class LLMSFullExporter:
         output_file: Path | None = None,
         min_quality: float = 0.0,
         max_pages: int | None = None,
+        since_date: str | None = None,
     ) -> Path:
         """Export all pages in a domain to llms-full.txt.
 
@@ -401,6 +402,7 @@ class LLMSFullExporter:
             output_file: Optional output file path
             min_quality: Minimum confidence score to include (0.0-1.0)
             max_pages: Maximum number of pages to export (None = all)
+            since_date: Only include pages updated at or after this ISO date (e.g. "2024-01-01")
 
         Returns:
             Path to generated llms-full.txt file
@@ -412,6 +414,9 @@ class LLMSFullExporter:
             logger.warning(f"Pages directory not found: {pages_dir}")
             return output_file or Path(f"{domain_name}_llms-full.txt")
 
+        # Load backlink index so link data is available during export
+        self.backlink_index.load()
+
         # Collect all page exports
         exports = []
         exported_count = 0
@@ -421,13 +426,17 @@ class LLMSFullExporter:
             if max_pages and exported_count >= max_pages:
                 break
 
-            # Check quality filter
+            # Check quality and date filters
             try:
                 content = page_file.read_text(encoding="utf-8")
                 metadata, _ = parse_frontmatter(content)
                 confidence = metadata.get("confidence", 0.0)
                 if confidence < min_quality:
                     continue
+                if since_date:
+                    updated_at = metadata.get("updated_at") or metadata.get("created_at", "")
+                    if updated_at and str(updated_at) < since_date:
+                        continue
             except Exception as e:
                 logger.debug(f"Failed to check quality for {page_file}: {e}")
                 continue
@@ -460,6 +469,7 @@ class LLMSFullExporter:
         output_file: Path | None = None,
         min_quality: float = 0.0,
         max_pages: int | None = None,
+        since_date: str | None = None,
     ) -> Path:
         """Export all domains to single llms-full.txt.
 
@@ -467,6 +477,7 @@ class LLMSFullExporter:
             output_file: Optional output file path
             min_quality: Minimum confidence score to include (0.0-1.0)
             max_pages: Maximum number of pages to export (None = all)
+            since_date: Only include pages updated at or after this ISO date (e.g. "2024-01-01")
 
         Returns:
             Path to generated llms-full.txt file
@@ -507,13 +518,17 @@ class LLMSFullExporter:
                 if max_pages and remaining_pages is not None and remaining_pages <= 0:
                     break
 
-                # Check quality filter
+                # Check quality and date filters
                 try:
                     content = page_file.read_text(encoding="utf-8")
                     metadata, _ = parse_frontmatter(content)
                     confidence = metadata.get("confidence", 0.0)
                     if confidence < min_quality:
                         continue
+                    if since_date:
+                        updated_at = metadata.get("updated_at") or metadata.get("created_at", "")
+                        if updated_at and str(updated_at) < since_date:
+                            continue
                 except Exception as e:
                     logger.debug(f"Failed to check quality for {page_file}: {e}")
                     continue

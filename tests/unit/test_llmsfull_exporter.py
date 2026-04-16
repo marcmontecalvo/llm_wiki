@@ -505,6 +505,55 @@ Django is a high-level web framework that encourages rapid development."""
         assert "Backlinks:" in result
         assert "[[related-page]]" in result
 
+    def test_export_domain_loads_backlink_index(
+        self, exporter: LLMSFullExporter, wiki_with_pages: Path
+    ):
+        """export_domain should load the backlink index so link data is populated."""
+        exporter.wiki_base = wiki_with_pages
+        # Intentionally do NOT call backlink_index.load() before export_domain
+
+        output = exporter.export_domain("general")
+        content = output.read_text()
+
+        # Django links to python; after backlink index is loaded the link section exists
+        assert "<!-- Links -->" in content
+
+    def test_export_domain_since_date_filter(
+        self, exporter: LLMSFullExporter, wiki_with_pages: Path
+    ):
+        """export_domain should exclude pages updated before since_date."""
+        exporter.wiki_base = wiki_with_pages
+
+        # Both test pages have updated_at 2024-02-01, so since 2024-03-01 should exclude all
+        output = exporter.export_domain("general", since_date="2024-03-01")
+        content = output.read_text()
+
+        assert "# Python Programming Language" not in content
+        assert "# Django Web Framework" not in content
+
+    def test_export_domain_since_date_includes_newer(
+        self, exporter: LLMSFullExporter, wiki_with_pages: Path
+    ):
+        """export_domain since_date should include pages at or after the cutoff."""
+        exporter.wiki_base = wiki_with_pages
+
+        # Both pages updated 2024-02-01, since 2024-01-01 should include both
+        output = exporter.export_domain("general", since_date="2024-01-01")
+        content = output.read_text()
+
+        assert "# Python Programming Language" in content
+        assert "# Django Web Framework" in content
+
+    def test_export_all_since_date_filter(self, exporter: LLMSFullExporter, wiki_with_pages: Path):
+        """export_all should respect since_date across all domains."""
+        exporter.wiki_base = wiki_with_pages
+
+        output = exporter.export_all(since_date="2025-01-01")
+        content = output.read_text()
+
+        assert "# Python Programming Language" not in content
+        assert "# Django Web Framework" not in content
+
 
 class TestLLMSFullExporterIntegration:
     """Integration tests for LLMSFullExporter."""

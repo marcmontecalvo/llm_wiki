@@ -4,6 +4,7 @@ import logging
 import shutil
 from pathlib import Path
 
+from llm_wiki.extraction.claims import ClaimsExtractor
 from llm_wiki.extraction.concepts import ConceptExtractor
 from llm_wiki.extraction.enrichment import PageEnricher
 from llm_wiki.extraction.entities import EntityExtractor
@@ -46,6 +47,7 @@ class ExtractionPipeline:
         self.entity_extractor = EntityExtractor(client)
         self.concept_extractor = ConceptExtractor(client)
         self.relationship_extractor = RelationshipExtractor(client)
+        self.claims_extractor = ClaimsExtractor(client)
         self.enricher = PageEnricher()
 
         # Initialize backlink index
@@ -118,8 +120,27 @@ class ExtractionPipeline:
             concepts = self.concept_extractor.extract_concepts(body, metadata)
             relationships = self.relationship_extractor.extract_relationships(body, metadata)
 
+        # Extract claims from all pages (not just entity/concept)
+        page_id = metadata.get("id", filepath.stem)
+        claim_extractions = self.claims_extractor.extract_claims(body, metadata, page_id=page_id)
+        claims = None
+        if claim_extractions:
+            claims = [
+                {
+                    "text": c.claim,
+                    "source_ref": c.source_reference,
+                    "confidence": c.confidence,
+                    "page_id": page_id,
+                    "temporal_context": c.temporal_context,
+                    "qualifiers": c.qualifiers,
+                }
+                for c in claim_extractions
+            ]
+
         # Enrich the page
-        self.enricher.enrich_page(filepath, extracted_metadata, entities, concepts, relationships)
+        self.enricher.enrich_page(
+            filepath, extracted_metadata, entities, concepts, relationships, claims
+        )
 
         # Move to active wiki
         active_dir = self.wiki_base / "domains" / domain / "pages"

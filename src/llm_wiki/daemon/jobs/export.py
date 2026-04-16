@@ -6,6 +6,7 @@ from typing import Any
 
 from llm_wiki.export.graph import GraphExporter
 from llm_wiki.export.json_sidecar import JSONSidecarExporter
+from llm_wiki.export.llmsfull import LLMSFullExporter
 from llm_wiki.export.llmstxt import LLMSTxtExporter
 from llm_wiki.export.sitemap import SitemapGenerator
 
@@ -25,6 +26,7 @@ class ExportJob:
 
         # Initialize exporters
         self.llmstxt_exporter = LLMSTxtExporter(wiki_base=self.wiki_base)
+        self.llmsfull_exporter = LLMSFullExporter(wiki_base=self.wiki_base)
         self.json_exporter = JSONSidecarExporter(wiki_base=self.wiki_base)
         self.graph_exporter = GraphExporter(wiki_base=self.wiki_base)
         self.sitemap_generator = SitemapGenerator(wiki_base=self.wiki_base)
@@ -40,6 +42,7 @@ class ExportJob:
         try:
             # Run all exporters
             llmstxt_path = self.llmstxt_exporter.export_all()
+            llmsfull_path = self.llmsfull_exporter.export_all()
             json_count = self.json_exporter.export_all()
             graph_path = self.graph_exporter.export_json()
             sitemap_path = self.sitemap_generator.generate()
@@ -47,6 +50,7 @@ class ExportJob:
             stats = {
                 "status": "success",
                 "llmstxt_path": str(llmstxt_path),
+                "llmsfull_path": str(llmsfull_path),
                 "json_sidecars": json_count,
                 "graph_path": str(graph_path),
                 "sitemap_path": str(sitemap_path),

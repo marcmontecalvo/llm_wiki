@@ -392,6 +392,28 @@ Just some content.""")
         # Should show reduced export
         assert "Wiki contains" in result.output
 
+    def test_cli_command_since_filter(self, wiki_structure: Path):
+        """Test CLI --since flag filters pages by date."""
+        from click.testing import CliRunner
+
+        from llm_wiki.cli import export_llmsfull
+
+        runner = CliRunner()
+
+        result = runner.invoke(
+            export_llmsfull,
+            ["--wiki-base", str(wiki_structure), "--since", "2025-01-01"],
+        )
+
+        assert result.exit_code == 0
+        assert "Exporting all domains" in result.output
+
+        # All test pages have updated_at 2024-02-01, so nothing should be exported
+        output_file = wiki_structure / "exports" / "llms-full.txt"
+        assert output_file.exists()
+        content = output_file.read_text()
+        assert "# Python" not in content
+
     def test_export_file_is_readable(self, wiki_structure: Path):
         """Test that exported file is valid and readable."""
         exporter = LLMSFullExporter(wiki_base=wiki_structure)
