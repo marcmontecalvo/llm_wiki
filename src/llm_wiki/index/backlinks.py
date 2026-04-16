@@ -88,6 +88,29 @@ class BacklinkIndex:
 
         return forward_links
 
+    def update_page_links(self, page_id: str, content: str) -> dict[str, list[str]]:
+        """Update forward links for a page and return a diff of changes.
+
+        Args:
+            page_id: Page identifier
+            content: New page content (markdown)
+
+        Returns:
+            Dict with 'added' and 'removed' link lists
+        """
+        old_forward = set(self.index.get(page_id, {}).get("forward_links", set()))
+        new_forward = set(self._extract_links(content))
+
+        self.add_page_links(page_id, content)
+
+        added = sorted(new_forward - old_forward)
+        removed = sorted(old_forward - new_forward)
+
+        if added or removed:
+            logger.debug(f"Link diff for {page_id}: +{len(added)} added, -{len(removed)} removed")
+
+        return {"added": added, "removed": removed}
+
     def remove_page(self, page_id: str) -> None:
         """Remove a page from the index.
 
