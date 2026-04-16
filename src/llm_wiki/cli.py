@@ -52,19 +52,164 @@ def init(wiki_base: Path):
         raise click.Abort() from e
 
 
-@main.command()
+@main.group(invoke_without_command=True)
 @click.option(
     "--config-dir",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default="config",
     help="Path to configuration directory",
 )
-def daemon(config_dir: Path):
-    """Start the wiki daemon."""
+@click.pass_context
+def daemon(ctx: click.Context, config_dir: Path):
+    """Start the wiki daemon, or manage daemon jobs.
+
+    When called without a subcommand, starts the daemon (backwards-compatible
+    with the original ``llm-wiki daemon`` invocation).
+    """
+    # Store config_dir so subcommands can reach it if ever needed
+    ctx.ensure_object(dict)
+    ctx.obj["config_dir"] = config_dir
+    if ctx.invoked_subcommand is None:
+        from llm_wiki.daemon.main import run_daemon
+
+        click.echo(f"Starting daemon with config from {config_dir}...")
+        run_daemon(config_dir)
+
+
+@daemon.command("start")
+@click.option(
+    "--config-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default="config",
+    help="Path to configuration directory",
+)
+def daemon_start(config_dir: Path):
+    """Start the wiki daemon (explicit subcommand form)."""
     from llm_wiki.daemon.main import run_daemon
 
     click.echo(f"Starting daemon with config from {config_dir}...")
     run_daemon(config_dir)
+
+
+@daemon.command("status")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def daemon_status(wiki_base: Path):
+    """Show daemon status and recent job execution summary."""
+    from llm_wiki.daemon.execution_store import JobExecutionStore
+
+    store = JobExecutionStore(state_dir=wiki_base / "state" / "job_executions")
+    jobs = store.list_jobs()
+
+    if not jobs:
+        click.echo("No job execution history found.")
+        return
+
+    click.echo(f"Job execution summary (from {wiki_base}/state/job_executions/):\n")
+    stats = store.export_stats()
+    for job_name, info in sorted(stats.items()):
+        last_status = info.get("last_status") or "never run"
+        last_started = info.get("last_started_at") or "-"
+        total = info.get("total_executions", 0)
+        failures = info.get("failures_last_hour", 0)
+        duration = info.get("last_duration_seconds")
+        duration_str = f"{duration:.1f}s" if duration is not None else "-"
+
+        status_indicator = {
+            "completed": "✓",
+            "failed": "✗",
+            "running": "~",
+            "timeout": "!",
+            "retrying": "↺",
+            "cancelled": "-",
+        }.get(last_status, "?")
+
+        click.echo(f"  {status_indicator} {job_name}")
+        click.echo(f"      last status : {last_status}")
+        click.echo(f"      last started: {last_started}")
+        click.echo(f"      last runtime: {duration_str}")
+        click.echo(f"      total runs  : {total}  (failures last hour: {failures})")
+        click.echo()
+
+
+@daemon.group("jobs")
+def daemon_jobs():
+    """Inspect and manage individual daemon jobs."""
+    pass
+
+
+@daemon_jobs.command("list")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def daemon_jobs_list(wiki_base: Path):
+    """List all jobs that have execution history."""
+    from llm_wiki.daemon.execution_store import JobExecutionStore
+
+    store = JobExecutionStore(state_dir=wiki_base / "state" / "job_executions")
+    jobs = store.list_jobs()
+
+    if not jobs:
+        click.echo("No job execution history found.")
+        return
+
+    click.echo(f"{'Job name':<40}  {'Last status':<12}  {'Total runs':>10}  {'Fails/hr':>8}")
+    click.echo("-" * 76)
+    stats = store.export_stats()
+    for job_name in sorted(jobs):
+        info = stats.get(job_name, {})
+        last_status = info.get("last_status") or "never"
+        total = info.get("total_executions", 0)
+        failures = info.get("failures_last_hour", 0)
+        click.echo(f"{job_name:<40}  {last_status:<12}  {total:>10}  {failures:>8}")
+
+
+@daemon_jobs.command("history")
+@click.argument("job_name")
+@click.option("--limit", default=20, help="Maximum entries to show")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def daemon_jobs_history(job_name: str, limit: int, wiki_base: Path):
+    """Show execution history for a specific job."""
+    from llm_wiki.daemon.execution_store import JobExecutionStore
+
+    store = JobExecutionStore(state_dir=wiki_base / "state" / "job_executions")
+    history = store.get_history(job_name)
+
+    if not history.executions:
+        click.echo(f"No execution history for job '{job_name}'.")
+        return
+
+    click.echo(f"Execution history for '{job_name}' (showing up to {limit}):\n")
+    executions = list(reversed(history.executions))[:limit]
+
+    for ex in executions:
+        started = ex.started_at.strftime("%Y-%m-%d %H:%M:%S")
+        duration = f"{ex.duration_seconds:.1f}s" if ex.duration_seconds else "-"
+        status = ex.status.value
+        indicator = {
+            "completed": "✓",
+            "failed": "✗",
+            "running": "~",
+            "timeout": "!",
+        }.get(status, "?")
+
+        click.echo(
+            f"  {indicator} [{started}]  {status:<12}  {duration:>8}  (id: {ex.execution_id[:8]})"
+        )
+        if ex.error:
+            click.echo(f"      error: {ex.error}")
 
 
 @main.group()
@@ -306,6 +451,164 @@ updated: {now}"""
     click.echo(f"  ID: {page_id}")
     click.echo(f"  Domain: {domain}")
     click.echo("\nThe daemon will process this page automatically.")
+
+
+@ingest.command("stats")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def ingest_stats(wiki_base: Path):
+    """Show ingestion statistics including failed files."""
+    from llm_wiki.ingest.failed import FailedIngestionsTracker
+
+    state_dir = wiki_base / "state"
+    tracker = FailedIngestionsTracker(state_dir=state_dir)
+    stats = tracker.get_stats()
+
+    click.echo("Ingestion Statistics")
+    click.echo("=" * 40)
+    click.echo(f"Total failed:        {stats['total_failed']}")
+    click.echo(f"Permanent failures:  {stats['permanent_failures']}")
+    click.echo(f"Transient failures:  {stats['transient_failures']}")
+    click.echo(f"Retryable now:       {stats['retryable_now']}")
+
+    if stats["by_reason"]:
+        click.echo("\nFailures by reason:")
+        for reason, count in sorted(stats["by_reason"].items()):
+            click.echo(f"  {reason}: {count}")
+
+
+@ingest.group("failed")
+def ingest_failed():
+    """Manage failed ingestions."""
+    pass
+
+
+@ingest_failed.command("list")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+@click.option("--permanent-only", is_flag=True, help="Show only permanently failed files")
+def ingest_failed_list(wiki_base: Path, permanent_only: bool):
+    """List failed ingestions."""
+    from llm_wiki.ingest.failed import FailedIngestionsTracker
+
+    state_dir = wiki_base / "state"
+    tracker = FailedIngestionsTracker(state_dir=state_dir)
+
+    ingestions = tracker.get_permanent_failures() if permanent_only else tracker.get_all_failed()
+
+    if not ingestions:
+        click.echo("No failed ingestions.")
+        return
+
+    click.echo(f"{'File':<40} {'Reason':<25} {'Count':>5}  {'Status':<12}  Next Retry")
+    click.echo("-" * 110)
+    for ing in sorted(ingestions, key=lambda i: i.file_path.name):
+        status = "permanent" if ing.permanent_failure else "retryable"
+        next_retry = "—" if ing.permanent_failure else ing.next_retry.strftime("%Y-%m-%d %H:%M")
+        click.echo(
+            f"{ing.file_path.name:<40} {ing.failure_reason:<25} {ing.failure_count:>5}  {status:<12}  {next_retry}"
+        )
+
+
+@ingest_failed.command("retry")
+@click.argument("file_path", type=click.Path(path_type=Path))
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def ingest_failed_retry(file_path: Path, wiki_base: Path):
+    """Manually retry a failed ingestion by moving it back to the inbox queue."""
+    import shutil
+
+    from llm_wiki.ingest.failed import FailedIngestionsTracker
+    from llm_wiki.ingest.watcher import InboxWatcher
+
+    state_dir = wiki_base / "state"
+    tracker = FailedIngestionsTracker(state_dir=state_dir)
+    watcher = InboxWatcher(inbox_dir=wiki_base / "inbox")
+
+    failed_path = watcher.failed_dir / file_path.name
+    if not failed_path.exists():
+        if file_path.exists():
+            failed_path = file_path
+        else:
+            click.echo(f"Error: File not found in failed directory: {file_path.name}", err=True)
+            raise click.Abort()
+
+    new_path = watcher.new_dir / failed_path.name
+    if new_path.exists():
+        counter = 1
+        while (watcher.new_dir / f"{failed_path.stem}_{counter}{failed_path.suffix}").exists():
+            counter += 1
+        new_path = watcher.new_dir / f"{failed_path.stem}_{counter}{failed_path.suffix}"
+
+    shutil.move(str(failed_path), str(new_path))
+
+    error_file = failed_path.with_suffix(failed_path.suffix + ".error")
+    if error_file.exists():
+        error_file.unlink()
+
+    # Clear using failed_path (the key the tracker recorded the failure under)
+    tracker.clear_ingestion(failed_path)
+
+    click.echo(f"✓ Queued for retry: {new_path.name}")
+    click.echo("  The daemon will pick it up on the next inbox scan.")
+
+
+@ingest_failed.command("abandon")
+@click.argument("file_path", type=click.Path(path_type=Path))
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt")
+def ingest_failed_abandon(file_path: Path, wiki_base: Path, yes: bool):
+    """Mark a failed ingestion as permanently abandoned (no more retries)."""
+    from llm_wiki.ingest.failed import FailedIngestionsTracker
+
+    state_dir = wiki_base / "state"
+    tracker = FailedIngestionsTracker(state_dir=state_dir)
+
+    ingestion = tracker.get_failed_ingestion(file_path)
+    if ingestion is None:
+        all_failed = tracker.get_all_failed()
+        matches = [i for i in all_failed if i.file_path.name == file_path.name]
+        if not matches:
+            click.echo(f"Error: No failure record found for: {file_path.name}", err=True)
+            raise click.Abort()
+        if len(matches) > 1:
+            click.echo(
+                f"Error: Multiple records match '{file_path.name}'. Specify the full path:",
+                err=True,
+            )
+            for m in matches:
+                click.echo(f"  {m.file_path}", err=True)
+            raise click.Abort()
+        ingestion = matches[0]
+        file_path = ingestion.file_path
+
+    if not yes:
+        click.confirm(
+            f"Permanently abandon '{ingestion.file_path.name}'? This stops all future retries.",
+            abort=True,
+        )
+
+    tracker.mark_as_permanent(file_path)
+
+    click.echo(f"✓ Marked as permanently abandoned: {ingestion.file_path.name}")
+    click.echo("  Use 'ingest failed retry' to undo this if needed.")
 
 
 @main.group()

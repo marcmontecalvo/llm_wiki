@@ -326,6 +326,23 @@ class FailedIngestionsTracker:
             self._save()
             logger.debug(f"Cleared failure record for {file_path.name}")
 
+    def mark_as_permanent(self, file_path: Path) -> bool:
+        """Mark a failed ingestion as permanently failed.
+
+        Args:
+            file_path: Path to file
+
+        Returns:
+            True if the record was found and updated
+        """
+        key = self._get_key(file_path)
+        if key not in self._ingestions:
+            return False
+        self._ingestions[key].mark_as_permanent()
+        self._save()
+        logger.debug(f"Marked as permanent failure: {file_path.name}")
+        return True
+
     def clear_all(self) -> None:
         """Clear all failed ingestion records."""
         self._ingestions.clear()
