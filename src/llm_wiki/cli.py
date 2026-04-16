@@ -1,6 +1,7 @@
 """Command-line interface for llm-wiki."""
 
 import subprocess
+from datetime import UTC
 from pathlib import Path
 
 import click
@@ -1252,6 +1253,148 @@ def graph_stats(wiki_base: Path):
         click.echo("\n  Edges by type:")
         for etype, cnt in sorted(stats["edges_by_type"].items()):
             click.echo(f"    {etype}: {cnt}")
+
+
+# ---------------------------------------------------------------------------
+# changes commands
+# ---------------------------------------------------------------------------
+
+
+@main.group()
+def changes():
+    """View and query the wiki change log."""
+    pass
+
+
+@changes.command("list")
+@click.option("--page", help="Filter to a specific page ID")
+@click.option("--since", help="Only show changes since this date (ISO format, e.g. 2024-01-01)")
+@click.option("--limit", default=20, show_default=True, help="Maximum entries to show")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def changes_list(page: str | None, since: str | None, limit: int, wiki_base: Path):
+    """List recent changes across all pages (or for a specific page)."""
+    from llm_wiki.changelog.log import ChangeLog
+
+    cl = ChangeLog(changelog_dir=Path(wiki_base) / "changelog")
+    cl.load_index()
+
+    if page:
+        entries = cl.get_page_history(page, limit=limit)
+    else:
+        since_dt = None
+        if since:
+            from datetime import datetime
+
+            try:
+                since_dt = datetime.fromisoformat(since).replace(tzinfo=UTC)
+            except ValueError:
+                click.echo(f"Error: invalid date format {since!r}. Use ISO format.", err=True)
+                raise click.Abort() from None
+        entries = cl.get_recent_changes(since=since_dt, limit=limit)
+
+    if not entries:
+        click.echo("No changes found.")
+        return
+
+    click.echo(f"{'Change ID':<18} {'Timestamp':<22} {'Type':<12} {'Actor':<20} Page")
+    click.echo("-" * 90)
+    for e in entries:
+        ts = e.timestamp[:19].replace("T", " ")
+        click.echo(f"{e.id:<18} {ts:<22} {e.change_type:<12} {e.actor:<20} {e.page_id}")
+
+
+@changes.command("show")
+@click.argument("change_id")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def changes_show(change_id: str, wiki_base: Path):
+    """Show full details of a single change entry."""
+    from llm_wiki.changelog.log import ChangeLog
+
+    cl = ChangeLog(changelog_dir=Path(wiki_base) / "changelog")
+    cl.load_index()
+
+    entry = cl.get_entry(change_id)
+    if not entry:
+        click.echo(f"Error: change {change_id!r} not found.", err=True)
+        raise click.Abort()
+
+    click.echo(cl.format_diff(entry))
+
+
+@changes.command("diff")
+@click.argument("page_id")
+@click.option("--from", "from_date", help="Start date (ISO format)")
+@click.option("--to", "to_date", help="End date (ISO format)")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def changes_diff(page_id: str, from_date: str | None, to_date: str | None, wiki_base: Path):
+    """Show a diff of all changes to a page in a time window."""
+    from datetime import datetime
+
+    from llm_wiki.changelog.log import ChangeLog
+
+    cl = ChangeLog(changelog_dir=Path(wiki_base) / "changelog")
+
+    from_dt = None
+    to_dt = None
+    try:
+        if from_date:
+            from_dt = datetime.fromisoformat(from_date).replace(tzinfo=UTC)
+        if to_date:
+            to_dt = datetime.fromisoformat(to_date).replace(tzinfo=UTC)
+    except ValueError as e:
+        click.echo(f"Error: invalid date format: {e}", err=True)
+        raise click.Abort() from e
+
+    click.echo(cl.format_page_diff(page_id, from_dt=from_dt, to_dt=to_dt))
+
+
+@changes.command("stats")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def changes_stats(wiki_base: Path):
+    """Show change log statistics."""
+    from llm_wiki.changelog.log import ChangeLog
+
+    cl = ChangeLog(changelog_dir=Path(wiki_base) / "changelog")
+    cl.load_index()
+
+    stats = cl.get_change_stats()
+    click.echo(f"Total changes: {stats['total_changes']}")
+    click.echo(f"Total pages:   {stats['total_pages']}")
+
+    if stats["changes_by_type"]:
+        click.echo("\nChanges by type:")
+        for ct, cnt in sorted(stats["changes_by_type"].items()):
+            click.echo(f"  {ct}: {cnt}")
+
+    if stats["changes_by_actor"]:
+        click.echo("\nChanges by actor:")
+        for actor, cnt in sorted(stats["changes_by_actor"].items(), key=lambda x: -x[1]):
+            click.echo(f"  {actor}: {cnt}")
+
+    if stats["most_changed"]:
+        click.echo("\nMost changed pages:")
+        for item in stats["most_changed"]:
+            click.echo(f"  {item['page_id']}: {item['count']} changes")
 
 
 if __name__ == "__main__":
