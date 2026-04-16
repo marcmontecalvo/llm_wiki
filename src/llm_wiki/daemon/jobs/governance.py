@@ -413,19 +413,38 @@ class GovernanceJob:
         """Scan for routing mistakes from lint issues.
 
         Args:
-            lint_issues: List of lint issues from MetadataLinter
+            lint_issues: List of lint issues from MetadataLinter (LintIssue dataclasses or dicts)
 
         Returns:
             Number of items added to queue
         """
+        from llm_wiki.governance.linter import LintIssue
+
         added = 0
 
-        routing_errors = [
-            issue for issue in lint_issues if "routing" in issue.get("message", "").lower()
-        ]
+        # Handle both LintIssue dataclass objects and dict format
+        routing_errors = []
+        for issue in lint_issues:
+            if isinstance(issue, LintIssue):
+                # LintIssue dataclass - access attributes directly
+                if "routing" in issue.message.lower():
+                    routing_errors.append(issue)
+            elif isinstance(issue, dict):
+                # Legacy dict format - use .get()
+                if "routing" in issue.get("message", "").lower():
+                    routing_errors.append(issue)
 
         for issue in routing_errors[:20]:  # Limit to 20
-            page_id = issue.get("page_id", "unknown")
+            # Handle both LintIssue and dict formats
+            if isinstance(issue, LintIssue):
+                page_id = issue.page_id
+                message = issue.message
+                field = issue.field
+            else:
+                page_id = issue.get("page_id", "unknown")
+                message = issue.get("message", "Routing configuration issue")
+                field = issue.get("file")  # Note: dict uses "file", dataclass uses "field"
+
             item_id = f"routing-{page_id}"
 
             existing = self.review_queue.get(item_id)
@@ -437,12 +456,12 @@ class GovernanceJob:
                     id=item_id,
                     type=ReviewType.ROUTING_MISTAKE,
                     target_id=page_id,
-                    reason=issue.get("message", "Routing configuration issue"),
+                    reason=message,
                     priority=ReviewPriority.MEDIUM,
                     created_at=datetime.now(UTC),
                     metadata={
-                        "message": issue.get("message"),
-                        "file": issue.get("file"),
+                        "message": message,
+                        "file": field,
                     },
                 )
                 self.review_queue.create(item)

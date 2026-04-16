@@ -2440,5 +2440,293 @@ def review_cleanup(days: int, wiki_base: Path):
     click.echo(f"✓ Deleted {deleted} old resolved items")
 
 
+@main.group()
+def integrate():
+    """Integration management commands for deterministic merging."""
+    pass
+
+
+@integrate.command("check")
+@click.argument("page_id", type=str)
+@click.option(
+    "--extracted",
+    "-e",
+    required=True,
+    help="Extracted data as JSON string or path to JSON file",
+)
+@click.option(
+    "--auto-resolve",
+    is_flag=True,
+    default=False,
+    help="Auto-resolve conflicts using strategies",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def integrate_check(page_id: str, extracted: str, auto_resolve: bool, wiki_base: Path):
+    """Preview integration result without applying changes."""
+    import json
+
+    from llm_wiki.integration import DeterministicIntegrator
+    from llm_wiki.models.page import WikiPage
+
+    # Load extracted data
+    if Path(extracted).exists():
+        extracted_data = json.loads(Path(extracted).read_text())
+    else:
+        extracted_data = json.loads(extracted)
+
+    # Load existing page
+    page = WikiPage.load(page_id, wiki_base)
+
+    if not page.frontmatter:
+        click.echo(f"Error: Page '{page_id}' not found", err=True)
+        raise click.Abort()
+
+    existing_page = page.to_dict()
+
+    # Apply integration strategies (preview only)
+    integrator = DeterministicIntegrator()
+    result = integrator.integrate(
+        page_id,
+        existing_page,
+        extracted_data,
+        auto_resolve_conflicts=auto_resolve,
+    )
+
+    # Display preview
+    click.echo(f"Integration Preview for: {page_id}")
+    click.echo("=" * 50)
+
+    # Show changes
+    if result.changes:
+        click.echo(f"\nChanges ({len(result.changes)}):")
+        for change in result.changes[:10]:  # Limit display
+            click.echo(f"  {change.change_type}: {change.field}")
+            if change.old_value and change.new_value:
+                click.echo(f"    {change.old_value} → {change.new_value}")
+        if len(result.changes) > 10:
+            click.echo(f"  ... and {len(result.changes) - 10} more")
+    else:
+        click.echo("\nNo changes detected")
+
+    # Show conflicts
+    if result.conflicts:
+        click.echo(f"\nConflicts ({len(result.conflicts)}):")
+        for conflict in result.conflicts:
+            click.echo(f"  - {conflict.field}: {conflict.existing_value} vs {conflict.extracted_value}")
+            click.echo(f"    Reason: {conflict.reason}")
+    else:
+        click.echo("\nNo conflicts detected")
+
+    # Summary
+    click.echo(f"\nSummary:")
+    click.echo(f"  Fields changed: {result.fields_changed}")
+    click.echo(f"  Fields merged: {result.fields_merged}")
+    click.echo(f"  Conflicts: {result.conflicts_detected}")
+    click.echo(f"  Success: {result.success}")
+
+
+@integrate.command("apply")
+@click.argument("page_id", type=str)
+@click.option(
+    "--extracted",
+    "-e",
+    required=True,
+    help="Extracted data as JSON string or path to JSON file",
+)
+@click.option(
+    "--auto-resolve/--no-auto-resolve",
+    default=False,
+    help="Auto-resolve conflicts using strategies",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def integrate_apply(page_id: str, extracted: str, auto_resolve: bool, wiki_base: Path):
+    """Apply integration to a page."""
+    import json
+
+    from llm_wiki.integration import DeterministicIntegrator
+    from llm_wiki.models.page import WikiPage
+
+    # Load extracted data
+    if Path(extracted).exists():
+        extracted_data = json.loads(Path(extracted).read_text())
+    else:
+        extracted_data = json.loads(extracted)
+
+    # Load existing page
+    page = WikiPage.load(page_id, wiki_base)
+
+    if not page.frontmatter:
+        click.echo(f"Error: Page '{page_id}' not found", err=True)
+        raise click.Abort()
+
+    existing_page = page.to_dict()
+
+    # Apply integration
+    integrator = DeterministicIntegrator()
+    result = integrator.integrate(
+        page_id,
+        existing_page,
+        extracted_data,
+        auto_resolve_conflicts=auto_resolve,
+    )
+
+    if not result.success:
+        click.echo(f"Error: Integration failed - {result.error}", err=True)
+        raise click.Abort()
+
+    # Update page with merged data
+    page.frontmatter.update(existing_page)
+    page.save()
+
+    # Display result
+    click.echo(f"✓ Integration applied for: {page_id}")
+    click.echo(f"  Changes: {result.fields_changed} fields changed, {result.fields_merged} merged")
+    if result.conflicts_detected > 0:
+        click.echo(f"  Conflicts: {result.conflicts_detected} detected")
+
+
+@integrate.command("history")
+@click.argument("page_id", type=str)
+def integrate_history(page_id: str):
+    """Show integration history for a page."""
+    from llm_wiki.integration import DeterministicIntegrator
+
+    integrator = DeterministicIntegrator()
+    history = integrator.get_history(page_id)
+
+    if not history:
+        click.echo(f"No integration history for: {page_id}")
+        return
+
+    click.echo(f"Integration History for: {page_id}")
+    click.echo("=" * 50)
+    click.echo(f"Total states: {len(history)}")
+
+    for i, state in enumerate(history):
+        click.echo(f"\n[{i + 1}] {state.timestamp.isoformat()}")
+        if state.result:
+            r = state.result
+            click.echo(f"    Changes: {r.fields_changed} changed, {r.fields_merged} merged")
+            click.echo(f"    Conflicts: {r.conflicts_detected}")
+
+
+@integrate.command("rollback")
+@click.argument("page_id", type=str)
+@click.option(
+    "--steps",
+    "-n",
+    default=1,
+    type=int,
+    help="Number of integration steps to rollback (default: 1)",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def integrate_rollback(page_id: str, steps: int, wiki_base: Path):
+    """Rollback integration to previous state."""
+    from llm_wiki.integration import DeterministicIntegrator
+    from llm_wiki.models.page import WikiPage
+
+    before_page = WikiPage.load(page_id, wiki_base)
+
+    if not before_page.frontmatter:
+        click.echo(f"Error: Page '{page_id}' not found", err=True)
+        raise click.Abort()
+
+    before_data = before_page.to_dict()
+
+    # Perform rollback
+    integrator = DeterministicIntegrator()
+    result = integrator.rollback(page_id, steps)
+
+    if result is None:
+        click.echo(f"Warning: No history to rollback for: {page_id}", err=True)
+        return
+
+    # Update page with rolled back data
+    after_page = WikiPage.load(page_id, wiki_base)
+    after_page.frontmatter.update(before_data)
+    after_page.save()
+
+    click.echo(f"✓ Rolled back {steps} step(s) for: {page_id}")
+
+
+@integrate.command("strategies")
+@click.option(
+    "--title",
+    type=click.Choice(["keep_existing", "use_extracted"]),
+    default="keep_existing",
+    help="Title merge strategy",
+)
+@click.option(
+    "--tags",
+    type=click.Choice(["keep_existing", "use_extracted", "union"]),
+    default="union",
+    help="Tags merge strategy",
+)
+@click.option(
+    "--summary",
+    type=click.Choice(["keep_existing", "use_extracted", "prefer_newer"]),
+    default="prefer_newer",
+    help="Summary merge strategy",
+)
+@click.option(
+    "--entities",
+    type=click.Choice(["keep_existing", "use_extracted", "union", "deduplicate_merge"]),
+    default="union",
+    help="Entities merge strategy",
+)
+@click.option(
+    "--concepts",
+    type=click.Choice(["keep_existing", "use_extracted", "union", "deduplicate_merge"]),
+    default="union",
+    help="Concepts merge strategy",
+)
+@click.option(
+    "--relationships",
+    type=click.Choice(["keep_existing", "use_extracted", "union", "deduplicate_merge"]),
+    default="union",
+    help="Relationships merge strategy",
+)
+def integrate_strategies(
+    title: str,
+    tags: str,
+    summary: str,
+    entities: str,
+    concepts: str,
+    relationships: str,
+):
+    """Show merge strategy configuration."""
+    from llm_wiki.models.integration import MergeStrategies
+
+    strategies = MergeStrategies(
+        title=title,
+        tags=tags,
+        summary=summary,
+        entities=entities,
+        concepts=concepts,
+        relationships=relationships,
+    )
+
+    click.echo("Merge Strategy Configuration:")
+    click.echo("=" * 40)
+    for field, strategy in strategies.model_dump().items():
+        if strategy and not field.startswith("_"):
+            click.echo(f"  {field}: {strategy}")
+
+
 if __name__ == "__main__":
     main()

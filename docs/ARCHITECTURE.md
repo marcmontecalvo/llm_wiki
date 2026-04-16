@@ -320,6 +320,130 @@ Strict schemas for all data structures:
 - Change logs (future)
 - Reversible operations
 
+## Integration Module
+
+The integration module provides deterministic merging of extracted metadata into existing wiki pages without data loss or conflicts.
+
+### Core Concepts
+
+**Integration Principles:**
+- **Deterministic**: Same input always produces same output
+- **Additive**: Never delete existing data without explicit reason
+- **Conflict-aware**: Detect and flag conflicts, don't silently overwrite
+- **Traceable**: Log all integration decisions
+
+### Usage
+
+```python
+from llm_wiki.integration import DeterministicIntegrator
+from llm_wiki.models.integration import MergeStrategies
+
+# Create integrator with custom strategies
+integrator = DeterministicIntegrator(
+    MergeStrategies(
+        title="keep_existing",  # Never change title
+        tags="union",        # Combine all tags
+        summary="prefer_newer",  # Use higher confidence
+        entities="union",
+        concepts="union",
+    )
+)
+
+# Integrate extracted data into existing page
+result = integrator.integrate(
+    page_id="my-page-id",
+    existing_page={"title": "My Page", "tags": ["python"]},
+    extracted_data={"tags": ["python", "coding"], "confidence": 0.9},
+    auto_resolve_conflicts=False,
+)
+
+# Check result
+if result.conflicts:
+    # Handle conflicts manually
+    for conflict in result.conflicts:
+        print(f"Conflict in {conflict.field}: {conflict.reason}")
+
+# View changes
+for change in result.changes:
+    print(f"{change.change_type}: {change.field}")
+```
+
+### CLI Commands
+
+```bash
+# Preview integration without applying
+llm-wiki integrate check PAGE_ID --extracted '{"tags": ["python"]}'
+
+# Apply integration
+llm-wiki integrate apply PAGE_ID --extracted '{"tags": ["python"]}' --auto-resolve
+
+# Show integration history
+llm-wiki integrate history PAGE_ID
+
+# Rollback integration
+llm-wiki integrate rollback PAGE_ID --steps 2
+
+# View strategy configuration
+llm-wiki integrate strategies --tags union --entities deduplicate_merge
+```
+
+### Merge Strategies
+
+| Strategy | Description | Common Fields |
+|----------|-------------|---------------|
+| `keep_existing` | Never change field | title, domain, source |
+| `use_extracted` | Always replace with new | summary (when high confidence) |
+| `union` | Combine all items (no duplicates) | tags, entities, concepts, relationships, links |
+| `deduplicate_merge` | Merge with deduplication | claims, relationships |
+| `prefer_newer` | Use higher confidence value | summary, confidence |
+| `set_to_now` | Set to current timestamp | updated |
+
+### Change Tracking
+
+Every integration produces detailed change records:
+
+```python
+@dataclass
+class Change:
+    field: str           # Field name
+    old_value: Any       # Original value
+    new_value: Any      # New value  
+    change_type: str    # "added", "removed", "updated", "merged"
+    timestamp: datetime
+    reason: str         # Why the change was made
+```
+
+### Conflict Detection
+
+Conflicts are detected when:
+- Same field has different values with similar confidence
+- Contradictory claims in content
+- Incompatible relationships
+- Metadata inconsistencies
+
+```python
+@dataclass
+class IntegrationConflict:
+    field: str
+    existing_value: Any
+    extracted_value: Any
+    resolution: str     # "keep_existing", "use_extracted", "manual_review"
+    reason: str         # Why this is a conflict
+    confidence_diff: float
+```
+
+### Rollback Support
+
+The integrator maintains history for rollback:
+
+```python
+# Get integration history
+history = integrator.get_history("page-id")
+
+# Rollback to previous state
+result = integrator.rollback("page-id", steps=2)
+```
+
 ## Extension Points
 
 ### Adding Adapters
