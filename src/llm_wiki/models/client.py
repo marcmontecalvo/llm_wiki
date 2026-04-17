@@ -217,6 +217,135 @@ class OpenAICompatibleClient(ModelClient):
             raise ModelClientError("OpenAI provider requires OPENAI_API_KEY")
 
 
+class ClaudeAgentSDKClient(ModelClient):
+    """Client backed by the Claude Agent SDK.
+
+    Useful for users on Claude Max/Team/Enterprise subscriptions — extraction
+    runs under the existing subscription rather than consuming separate API
+    credits. The SDK is an optional dependency; import is deferred to
+    ``__init__`` so users who don't need it aren't required to install it.
+    """
+
+    def __init__(self, config: ModelProviderConfig):
+        """Initialize the Claude Agent SDK client.
+
+        Args:
+            config: Model provider configuration.
+
+        Raises:
+            ModelClientError: If the ``claude-agent-sdk`` package is not installed.
+        """
+        super().__init__(config)
+        try:
+            # Imported lazily — keep the package optional.
+            import claude_agent_sdk  # type: ignore[import-not-found]
+        except ImportError as e:
+            raise ModelClientError(
+                "claude-agent-sdk not installed. "
+                "Install with: pip install 'llm-wiki[claude-agent]'"
+            ) from e
+
+        self._sdk = claude_agent_sdk
+
+    def chat_completion(
+        self,
+        messages: list[dict[str, str]],
+        response_format: dict[str, Any] | None = None,
+    ) -> str:
+        """Dispatch a chat completion via the Claude Agent SDK.
+
+        The SDK exposes a ``query(prompt=...)`` entry point that returns an async
+        iterator of messages. We concatenate system + user messages into a single
+        prompt and collect the assistant's text response.
+
+        Args:
+            messages: Chat messages to send.
+            response_format: Optional response format hint. When
+                ``{"type": "json_object"}``, we suffix the prompt with an
+                instruction to return JSON only — the SDK does not enforce
+                structured output natively.
+
+        Returns:
+            Assistant response as a string.
+
+        Raises:
+            ModelClientError: If the SDK call fails.
+        """
+        import asyncio
+
+        # Flatten messages to a single prompt string. The Claude Agent SDK's
+        # ``query`` interface is designed for one prompt per turn, not a full
+        # message history, but extractors in this project send a single user
+        # message so flattening is safe.
+        parts: list[str] = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                parts.append(f"[System]\n{content}")
+            elif role == "assistant":
+                parts.append(f"[Assistant]\n{content}")
+            else:
+                parts.append(content)
+        prompt = "\n\n".join(p for p in parts if p)
+
+        if response_format and response_format.get("type") == "json_object":
+            prompt += (
+                "\n\nReturn ONLY valid JSON matching the requested shape. "
+                "Do not wrap the output in markdown fences or prose."
+            )
+
+        async def _run() -> str:
+            chunks: list[str] = []
+            # The SDK's ``query`` yields messages; collect assistant text blocks.
+            async for message in self._sdk.query(prompt=prompt):
+                content = getattr(message, "content", None)
+                if isinstance(content, str):
+                    chunks.append(content)
+                    continue
+                if isinstance(content, list):
+                    for block in content:
+                        text = getattr(block, "text", None)
+                        if isinstance(text, str):
+                            chunks.append(text)
+            return "".join(chunks).strip()
+
+        # Event-loop-safe dispatch. ``asyncio.run`` raises when called from a
+        # thread that already has a running loop (e.g. inside Jupyter, FastAPI,
+        # APScheduler's async executor). Detect a running loop and, if present,
+        # spin the coroutine on a fresh loop in a worker thread.
+        try:
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                # No running loop — safe to use asyncio.run directly.
+                result = asyncio.run(_run())
+            else:
+                import concurrent.futures
+
+                def _in_thread() -> str:
+                    return asyncio.run(_run())
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    result = pool.submit(_in_thread).result()
+        except Exception as e:
+            raise ModelClientError(f"Claude Agent SDK request failed: {e}") from e
+
+        if not result:
+            raise ModelClientError("Claude Agent SDK returned empty response")
+        return result
+
+    def validate_config(self) -> None:
+        """Validate Claude Agent SDK configuration.
+
+        The SDK authenticates via the Claude Code CLI session and does not
+        require an API key. Import success is verified in ``__init__`` — if
+        the SDK were missing, constructing the client would have already
+        raised ``ModelClientError``, so there's nothing further to check here.
+        """
+        return None
+
+
 def create_model_client(config: ModelProviderConfig) -> ModelClient:
     """Factory function to create appropriate model client.
 
@@ -229,9 +358,9 @@ def create_model_client(config: ModelProviderConfig) -> ModelClient:
     Raises:
         ModelClientError: If provider is unsupported
     """
-    # For now, we only support OpenAI-compatible providers
-    # Future: Add Anthropic, other providers as needed
     if config.provider in ("openai", "ollama", "lmstudio", "local"):
         return OpenAICompatibleClient(config)
+    if config.provider in ("claude_agent_sdk", "claude-agent-sdk", "claude_agent"):
+        return ClaudeAgentSDKClient(config)
 
     raise ModelClientError(f"Unsupported provider: {config.provider}")

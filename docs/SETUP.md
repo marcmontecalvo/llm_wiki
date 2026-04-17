@@ -78,6 +78,38 @@ Set your API key:
 export OPENAI_API_KEY=your-key-here
 ```
 
+**Alternative: use Claude subscription instead of metered API.**
+
+If you're on Claude Max/Team/Enterprise, route extraction through the
+Claude Agent SDK (no API key needed):
+
+```bash
+uv sync --extra claude-agent
+```
+
+```yaml
+# config/models.yaml
+extraction:
+  provider: claude_agent_sdk
+  model: claude-sonnet-4-5
+```
+
+### 6. (Optional) Install Claude Code Hooks
+
+Automatically capture Claude Code sessions into the inbox:
+
+```bash
+uv run llm-wiki hooks install --scope project
+```
+
+This writes `SessionEnd` and `PreCompact` entries into
+`.claude/settings.json`. Every session transcript lands in
+`wiki_system/inbox/new/session-*.jsonl` and the daemon picks it up.
+Use `--scope user` to apply the hooks globally across all projects.
+
+Preview without writing: `--dry-run`. Remove later:
+`uv run llm-wiki hooks uninstall`.
+
 ## Quick Start
 
 ### Add Content

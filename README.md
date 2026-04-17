@@ -137,6 +137,53 @@ uv run llm-wiki daemon
 
 See `docs/SETUP.md` for detailed setup instructions.
 
+## Claude Code Integration
+
+Capture knowledge from Claude Code sessions automatically and (optionally) run
+extraction under your existing Claude subscription rather than separate API
+credits.
+
+### Automatic session capture (hooks)
+
+```bash
+uv run llm-wiki hooks install --scope project     # or --scope user
+uv run llm-wiki hooks install --dry-run           # preview merged settings
+uv run llm-wiki hooks uninstall                   # remove cleanly
+```
+
+Installs `SessionEnd` and `PreCompact` hooks into
+`.claude/settings.json` (or `~/.claude/settings.json`). Every session
+transcript lands in `wiki_system/inbox/new/session-*.jsonl`, where the
+daemon/watcher picks it up and routes it into the `general` domain by
+default. The `ClaudeSessionAdapter` normalizes transcripts to markdown
+with `kind: source`.
+
+### Claude Agent SDK as model provider
+
+Users on Claude Max/Team/Enterprise can route extraction through the
+subscription:
+
+```bash
+uv sync --extra claude-agent
+```
+
+Then in `config/models.yaml`:
+
+```yaml
+extraction:
+  provider: claude_agent_sdk
+  model: claude-sonnet-4-5
+```
+
+No API key required — auth flows through the Claude Code CLI session.
+
+### `qa` page kind
+
+Sessions often contain "how do I X?" → "do Y" pairs. These are
+extracted as first-class `kind: qa` wiki pages with `question`,
+`answer`, and `related_pages` linking back to the source. Search
+them with the normal query surface.
+
 ## Agent Integrations
 
 The wiki supports multiple AI agents and IDEs:

@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 from llm_wiki.adapters.base import AdapterRegistry
+from llm_wiki.adapters.claude_session import ClaudeSessionAdapter
 from llm_wiki.adapters.markdown import MarkdownAdapter
 from llm_wiki.adapters.obsidian import ObsidianVaultAdapter
 from llm_wiki.adapters.text import TextAdapter
@@ -48,9 +49,12 @@ class InboxWatcher:
         self.failed_tracker = failed_tracker
 
         # Set up normalization pipeline
-        # Order matters: ObsidianVaultAdapter must be BEFORE MarkdownAdapter
-        # to ensure Obsidian files with wikilinks/embedded/#hashtags are processed correctly
+        # Order matters:
+        #   - ClaudeSessionAdapter first (matches session-*.json{,l} exclusively)
+        #   - ObsidianVaultAdapter BEFORE MarkdownAdapter so Obsidian files with
+        #     wikilinks/embedded/#hashtags are processed correctly
         registry = AdapterRegistry()
+        registry.register(ClaudeSessionAdapter)  # Claude Code session transcripts
         registry.register(ObsidianVaultAdapter)  # Try Obsidian first (checks for obsidian markers)
         registry.register(MarkdownAdapter)      # Fall back to standard markdown
         registry.register(TextAdapter)

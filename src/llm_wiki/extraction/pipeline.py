@@ -4,16 +4,22 @@ import logging
 import shutil
 from pathlib import Path
 
+from datetime import datetime, timezone
+
 from llm_wiki.extraction.claims import ClaimsExtractor
 from llm_wiki.extraction.concepts import ConceptExtractor
 from llm_wiki.extraction.enrichment import PageEnricher
 from llm_wiki.extraction.entities import EntityExtractor
+from llm_wiki.extraction.qa import QAExtractor
 from llm_wiki.extraction.relationships import RelationshipExtractor
 from llm_wiki.extraction.service import ContentExtractor
 from llm_wiki.index.backlinks import BacklinkIndex
 from llm_wiki.index.graph_edges import GraphEdgeIndex
 from llm_wiki.models.client import ModelClient, create_model_client
 from llm_wiki.models.config import load_models_config
+from llm_wiki.models.page import create_frontmatter
+from llm_wiki.utils.frontmatter import write_with_validation
+from llm_wiki.utils.id_gen import generate_page_id
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +55,7 @@ class ExtractionPipeline:
         self.concept_extractor = ConceptExtractor(client)
         self.relationship_extractor = RelationshipExtractor(client)
         self.claims_extractor = ClaimsExtractor(client)
+        self.qa_extractor = QAExtractor(client)
         self.enricher = PageEnricher()
 
         # Initialize backlink index
@@ -164,6 +171,17 @@ class ExtractionPipeline:
 
         logger.info(f"Moved {filepath.name} to {domain}/pages/")
 
+        # Materialize Q&A pages derived from this source/page. Skip kinds that
+        # don't carry Q&A-shaped content (entity, concept, qa).
+        if page_kind in ("page", "source"):
+            self._emit_qa_pages(
+                parent_page_id=page_id,
+                parent_body=body,
+                parent_metadata=metadata,
+                domain=domain,
+                active_dir=active_dir,
+            )
+
         # Update backlink index
         page_id = metadata.get("id", filepath.stem)
         self.backlinks.add_page_links(page_id, body)
@@ -176,6 +194,84 @@ class ExtractionPipeline:
         self.graph_edges.update_page_links(page_id, links)
         if relationships:
             self.graph_edges.update_page_relationships(page_id, relationships)
+        self.graph_edges.save()
+
+    def _emit_qa_pages(
+        self,
+        parent_page_id: str,
+        parent_body: str,
+        parent_metadata: dict,
+        domain: str,
+        active_dir: Path,
+    ) -> None:
+        """Extract Q&A pairs and write each as its own ``kind: qa`` wiki page.
+
+        Args:
+            parent_page_id: ID of the source page the Q&A was extracted from.
+            parent_body: Body content of the source page.
+            parent_metadata: Parent frontmatter — used for domain, source refs.
+            domain: Domain ID to write Q&A pages into.
+            active_dir: Active pages directory for the domain.
+        """
+        try:
+            pairs = self.qa_extractor.extract_qa_pairs(parent_body, parent_metadata)
+        except Exception as e:
+            logger.warning(f"Q&A extraction failed for {parent_page_id}: {e}")
+            return
+
+        if not pairs:
+            return
+
+        now = datetime.now(timezone.utc)
+        parent_sources = parent_metadata.get("sources", []) or []
+
+        for pair in pairs:
+            question = pair["question"]
+            answer = pair["answer"]
+            tags = pair.get("tags", [])
+
+            # Generate a collision-free id scoped to the domain pages dir.
+            def _collision_check(candidate: str) -> bool:
+                return (active_dir / f"{candidate}.md").exists()
+
+            page_id = generate_page_id(
+                title=f"qa {question}"[:80],
+                domain=domain,
+                collision_check=_collision_check,
+            )
+
+            frontmatter_obj = create_frontmatter(
+                kind="qa",
+                id=page_id,
+                title=question[:120],
+                domain=domain,
+                question=question,
+                answer=answer,
+                tags=tags,
+                related_pages=[parent_page_id],
+                sources=parent_sources,
+                updated_at=now,
+                created_at=now,
+                status="draft",
+                confidence=0.6,
+            )
+
+            # Body mirrors the answer as readable markdown. Schema holds the
+            # canonical fields; body is for humans reading the file directly.
+            body = f"**Q:** {question}\n\n**A:** {answer}\n"
+            content = write_with_validation(frontmatter_obj, body)
+
+            out_path = active_dir / f"{page_id}.md"
+            out_path.write_text(content, encoding="utf-8")
+
+            # Index backlink from qa → parent source page.
+            self.backlinks.add_page_links(page_id, f"[[{parent_page_id}]]")
+            self.graph_edges.update_page_links(page_id, [parent_page_id])
+
+            logger.info(f"Wrote Q&A page {page_id} (from {parent_page_id})")
+
+        # Persist indices after batch.
+        self.backlinks.save()
         self.graph_edges.save()
 
     def process_all_queues(self) -> dict[str, dict[str, int]]:

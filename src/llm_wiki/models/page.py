@@ -10,7 +10,9 @@ class PageFrontmatter(BaseModel):
     """Base frontmatter schema for all wiki pages."""
 
     id: str = Field(..., description="Unique page identifier")
-    kind: Literal["page", "entity", "concept", "source"] = Field(..., description="Page type")
+    kind: Literal["page", "entity", "concept", "source", "qa"] = Field(
+        ..., description="Page type"
+    )
     title: str = Field(..., description="Page title")
     domain: str = Field(..., description="Domain this page belongs to")
     status: Literal["draft", "published", "archived", "review"] = Field(
@@ -104,11 +106,43 @@ class SourceFrontmatter(PageFrontmatter):
         return v
 
 
+class QAFrontmatter(PageFrontmatter):
+    """Frontmatter schema for Q&A pages.
+
+    Q&A pages capture a specific question and its practical answer, distinct
+    from free-form pages or concepts. They're the natural shape for knowledge
+    extracted from assistant sessions ("how do I X?" → "do Y").
+    """
+
+    kind: Literal["qa"] = Field(default="qa", description="Page type")
+    question: str = Field(..., description="The question being answered")
+    answer: str = Field(..., description="Practical answer to the question")
+    related_pages: list[str] = Field(
+        default_factory=list, description="Related page IDs (concepts, entities)"
+    )
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, v: str) -> str:
+        """Validate question is not empty."""
+        if not v or not v.strip():
+            raise ValueError("Question cannot be empty")
+        return v
+
+    @field_validator("answer")
+    @classmethod
+    def validate_answer(cls, v: str) -> str:
+        """Validate answer is not empty."""
+        if not v or not v.strip():
+            raise ValueError("Answer cannot be empty")
+        return v
+
+
 def create_frontmatter(kind: str, **kwargs) -> PageFrontmatter:
     """Factory function to create appropriate frontmatter based on kind.
 
     Args:
-        kind: Page kind (page, entity, concept, source)
+        kind: Page kind (page, entity, concept, source, qa)
         **kwargs: Frontmatter fields
 
     Returns:
@@ -122,6 +156,7 @@ def create_frontmatter(kind: str, **kwargs) -> PageFrontmatter:
         "entity": EntityFrontmatter,
         "concept": ConceptFrontmatter,
         "source": SourceFrontmatter,
+        "qa": QAFrontmatter,
     }
 
     if kind not in frontmatter_classes:

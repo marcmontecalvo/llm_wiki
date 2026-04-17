@@ -2728,5 +2728,185 @@ def integrate_strategies(
             click.echo(f"  {field}: {strategy}")
 
 
+@main.group()
+def hooks():
+    """Manage Claude Code session capture hooks.
+
+    Hooks automatically copy session transcripts into the wiki inbox at the end
+    of each session and before context compaction. They complement manual
+    ``llm-wiki ingest file`` usage.
+    """
+    pass
+
+
+@hooks.command("install")
+@click.option(
+    "--scope",
+    type=click.Choice(["user", "project"]),
+    default="project",
+    help="Install to project-level .claude/settings.json or user-level ~/.claude/settings.json.",
+)
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Wiki base directory used as the inbox target.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Print the merged settings without writing to disk.",
+)
+def hooks_install(scope: str, wiki_base: Path, dry_run: bool):
+    """Install SessionEnd and PreCompact hooks into Claude Code settings.
+
+    Merges with existing hook entries (does not overwrite unrelated hooks).
+    """
+    import json as _json
+    import sys as _sys
+    from importlib.resources import as_file, files
+
+    # Locate capture script — shipped inside the package at
+    # ``llm_wiki/hook_templates/capture_session.py`` so importlib.resources
+    # resolves it in both editable and wheel installs.
+    try:
+        _resource = files("llm_wiki.hook_templates").joinpath("capture_session.py")
+        with as_file(_resource) as _path:
+            capture_script = _path.resolve()
+    except (ModuleNotFoundError, FileNotFoundError) as e:
+        click.echo(f"Error: capture script resource not found: {e}", err=True)
+        raise click.Abort() from e
+    if not capture_script.exists():
+        click.echo(f"Error: capture script not found at {capture_script}", err=True)
+        raise click.Abort()
+
+    inbox_dir = (wiki_base / "inbox" / "new").resolve()
+
+    if scope == "user":
+        settings_path = Path.home() / ".claude" / "settings.json"
+    else:
+        settings_path = Path(".claude") / "settings.json"
+
+    # Load existing settings if present
+    if settings_path.exists():
+        try:
+            settings = _json.loads(settings_path.read_text(encoding="utf-8"))
+        except _json.JSONDecodeError as e:
+            click.echo(f"Error: existing {settings_path} is not valid JSON: {e}", err=True)
+            raise click.Abort() from e
+    else:
+        settings = {}
+
+    if not isinstance(settings, dict):
+        click.echo(f"Error: {settings_path} must contain a JSON object", err=True)
+        raise click.Abort()
+
+    hooks_block = settings.setdefault("hooks", {})
+    if not isinstance(hooks_block, dict):
+        click.echo("Error: existing 'hooks' key is not an object", err=True)
+        raise click.Abort()
+
+    def _hook_entry(hook_name: str) -> dict:
+        # Use the current interpreter (``sys.executable``) — installs made
+        # under a venv or uv environment must invoke that same Python, not
+        # bare "python" from PATH.
+        command = (
+            f'"{_sys.executable}" "{capture_script}" {hook_name} "{inbox_dir}"'
+        )
+        # SessionEnd / PreCompact entries do not use ``matcher`` (that's a
+        # PreToolUse/PostToolUse field). Omit it to stay schema-correct.
+        return {
+            "hooks": [{"type": "command", "command": command}],
+        }
+
+    for event in ("SessionEnd", "PreCompact"):
+        existing = hooks_block.get(event)
+        entry = _hook_entry(event)
+        if isinstance(existing, list):
+            # Filter out any prior llm-wiki entries to avoid duplicates
+            filtered = [
+                item
+                for item in existing
+                if not (
+                    isinstance(item, dict)
+                    and any(
+                        isinstance(h, dict)
+                        and "capture_session.py" in str(h.get("command", ""))
+                        for h in item.get("hooks", [])
+                    )
+                )
+            ]
+            filtered.append(entry)
+            hooks_block[event] = filtered
+        else:
+            hooks_block[event] = [entry]
+
+    serialized = _json.dumps(settings, indent=2)
+
+    if dry_run:
+        click.echo(serialized)
+        return
+
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(serialized + "\n", encoding="utf-8")
+
+    click.echo(f"✓ Installed SessionEnd and PreCompact hooks in {settings_path}")
+    click.echo(f"  Transcripts will land in: {inbox_dir}")
+    click.echo("  Run `llm-wiki daemon` to process them.")
+
+
+@hooks.command("uninstall")
+@click.option(
+    "--scope",
+    type=click.Choice(["user", "project"]),
+    default="project",
+    help="Uninstall from project or user settings.",
+)
+def hooks_uninstall(scope: str):
+    """Remove llm-wiki session capture hooks from Claude Code settings."""
+    import json as _json
+
+    if scope == "user":
+        settings_path = Path.home() / ".claude" / "settings.json"
+    else:
+        settings_path = Path(".claude") / "settings.json"
+
+    if not settings_path.exists():
+        click.echo(f"No settings file at {settings_path} — nothing to do.")
+        return
+
+    settings = _json.loads(settings_path.read_text(encoding="utf-8"))
+    hooks_block = settings.get("hooks", {}) if isinstance(settings, dict) else {}
+    if not isinstance(hooks_block, dict):
+        click.echo("No hooks block present.")
+        return
+
+    removed = 0
+    for event in ("SessionEnd", "PreCompact"):
+        items = hooks_block.get(event)
+        if not isinstance(items, list):
+            continue
+        filtered = [
+            item
+            for item in items
+            if not (
+                isinstance(item, dict)
+                and any(
+                    isinstance(h, dict)
+                    and "capture_session.py" in str(h.get("command", ""))
+                    for h in item.get("hooks", [])
+                )
+            )
+        ]
+        removed += len(items) - len(filtered)
+        if filtered:
+            hooks_block[event] = filtered
+        else:
+            hooks_block.pop(event, None)
+
+    settings_path.write_text(_json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+    click.echo(f"✓ Removed {removed} llm-wiki hook entries from {settings_path}")
+
+
 if __name__ == "__main__":
     main()

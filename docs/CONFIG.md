@@ -174,6 +174,16 @@ providers:
     model: claude-3-opus-20240229
     max_tokens: 4096
     temperature: 0.7
+
+  # Runs extraction through the user's Claude Code / Max / Team / Enterprise
+  # subscription instead of metered API credits. Requires the optional
+  # dependency: `uv sync --extra claude-agent`. No api_key needed — auth
+  # flows through the Claude Code CLI session.
+  claude_agent_sdk:
+    provider: claude_agent_sdk
+    model: claude-sonnet-4-5
+    max_tokens: 4096
+    temperature: 0.7
 ```
 
 **Field Reference:**

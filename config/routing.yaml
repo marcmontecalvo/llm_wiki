@@ -3,6 +3,11 @@ routing:
   confidence_threshold: 0.75
   explicit_override_frontmatter_key: domain
   source_rules:
+    # Claude Code session transcripts land in ``general`` by default — the
+    # user can retag or reroute to a more specific domain later. ``general``
+    # is bootstrapped on every install, so it's the safe fallback.
+    - match: "session-"
+      default_domain: general
     - match: ".claude"
       default_domain: general
     - match: ".codex"

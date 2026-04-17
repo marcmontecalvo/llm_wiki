@@ -50,6 +50,15 @@ inbox/ → adapter → router → normalize → domains/{domain}/queue/
 - `src/llm_wiki/adapters/*.py`
 - `src/llm_wiki/ingest/router.py`
 
+**Source adapters** (registration order matters — first match wins):
+
+1. `ClaudeSessionAdapter` — `session-*.jsonl` / `session-*.json` transcripts
+   produced by Claude Code `SessionEnd`/`PreCompact` hooks. Tags with
+   `capture_hook`, source_type `claude-session`.
+2. `ObsidianVaultAdapter` — markdown with wikilinks, embeds, `#hashtags`.
+3. `MarkdownAdapter` — plain markdown fallback.
+4. `TextAdapter` — bare `.txt`.
+
 ### 2. Extraction Pipeline
 
 **Purpose**: Extract structured metadata from content.
@@ -58,17 +67,23 @@ inbox/ → adapter → router → normalize → domains/{domain}/queue/
 - **Content Extractor**: Extract basic metadata (title, tags, kind)
 - **Entity Extractor**: Identify entities (people, tech, tools)
 - **Concept Extractor**: Identify concepts (ideas, methodologies)
+- **Claims Extractor**: Extract atomic claims with source refs
+- **Q&A Extractor**: Extract question/answer pairs and emit each as a
+  standalone `kind: qa` page with `related_pages` linking to parent source
 - **Page Enricher**: Merge extracted data into pages
 
 **Flow**:
 ```
-queue/ → extract metadata → extract entities/concepts → enrich → pages/
+queue/ → extract metadata → extract entities/concepts/claims →
+         enrich → pages/ → emit qa pages for each Q&A pair
 ```
 
 **Key Files**:
 - `src/llm_wiki/extraction/service.py`
 - `src/llm_wiki/extraction/entities.py`
 - `src/llm_wiki/extraction/concepts.py`
+- `src/llm_wiki/extraction/claims.py`
+- `src/llm_wiki/extraction/qa.py`
 - `src/llm_wiki/extraction/enrichment.py`
 
 ### 3. Index System

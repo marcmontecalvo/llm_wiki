@@ -14,3 +14,15 @@ models:
 contracts:
   require_schema_validation: true
   allow_freeform_page_writes: false
+
+# Supported providers:
+#   openai / ollama / lmstudio / local  -> OpenAI-compatible HTTP API
+#   claude_agent_sdk                    -> Runs under your Claude Max/Team
+#                                          subscription via the Claude Agent
+#                                          SDK (no separate API credits).
+#                                          Install with: pip install 'llm-wiki[claude-agent]'
+# Example:
+#   extraction:
+#     provider: claude_agent_sdk
+#     model: claude-sonnet-4-6
+#     temperature: 0.1

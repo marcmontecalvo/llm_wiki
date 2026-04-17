@@ -132,15 +132,26 @@ kind: page
             test_file = queue_dir / f"{domain}.md"
             test_file.write_text(f"---\ntitle: {domain}\n---\nContent")
 
-        # Mock responses for both files
-        mock_client.chat_completion.side_effect = [
-            "page",
-            '["test"]',
-            "Summary",  # general
-            "page",
-            '["test"]',
-            "Summary",  # homelab
-        ]
+        # ContentExtractor uses 3 calls (kind/tags/summary) per file; claims,
+        # relationship, and QA extractors add more. Use a callable that yields
+        # kind-appropriate values for the first 3 calls per file and safe
+        # "[]" for the rest so each extractor simply returns an empty list.
+        from itertools import cycle
+
+        per_file_kind_cycle = cycle(["page", '["test"]', "Summary"])
+
+        def _next_response(*args, **kwargs):
+            return next(per_file_kind_cycle) if _next_response.counter < 6 else "[]"
+
+        _next_response.counter = 0
+
+        def _wrapped(*args, **kwargs):
+            val = next(per_file_kind_cycle) if _wrapped.counter < 6 else "[]"
+            _wrapped.counter += 1
+            return val
+
+        _wrapped.counter = 0
+        mock_client.chat_completion.side_effect = _wrapped
 
         results = pipeline.process_all_queues()
 
@@ -236,3 +247,64 @@ Links to [[other-page]] and [[another-page]].
         fresh_index = BacklinkIndex(index_dir=temp_dir / "wiki_system" / "index")
         fresh_index.load()
         assert "page-b" in fresh_index.get_forward_links("page-a")
+
+    def test_qa_pairs_materialized_as_pages(
+        self, pipeline: ExtractionPipeline, mock_client: Mock, temp_dir: Path
+    ):
+        """F1 regression: pipeline emits kind=qa pages for extracted pairs.
+
+        Mocks the LLM chain so ContentExtractor + ClaimsExtractor receive junk
+        responses (which their try/except handles gracefully) and the final
+        call — from QAExtractor — returns a structured pairs JSON.
+        """
+        import json as _json
+        from collections.abc import Iterator
+
+        queue_dir = temp_dir / "wiki_system/domains/general/queue"
+        queue_dir.mkdir(parents=True)
+        test_file = queue_dir / "qa-source.md"
+        test_file.write_text(
+            "---\nid: qa-source\ntitle: Q&A Source\nkind: source\n---\n\n"
+            "How do I reboot a node? Run `systemctl reboot`.\n"
+        )
+
+        qa_json = _json.dumps(
+            {
+                "pairs": [
+                    {
+                        "question": "How do I reboot a node?",
+                        "answer": "Run `systemctl reboot`.",
+                        "tags": ["ops"],
+                    }
+                ]
+            }
+        )
+
+        # Responses: ContentExtractor + ClaimsExtractor + RelationshipExtractor
+        # calls return "safe" values; last QA call returns our JSON. Any
+        # extras exhaust side_effect → exception → extractor returns [].
+        responses: Iterator[str] = iter(
+            ["page", "[]", "stub", "[]", "[]", qa_json, qa_json]
+        )
+
+        def _next_response(*args, **kwargs):
+            try:
+                return next(responses)
+            except StopIteration:
+                return "[]"
+
+        mock_client.chat_completion.side_effect = _next_response
+
+        pipeline.process_queue("general")
+
+        pages_dir = temp_dir / "wiki_system/domains/general/pages"
+        qa_pages = [
+            p
+            for p in pages_dir.glob("*.md")
+            if "How do I reboot" in p.read_text(encoding="utf-8")
+            and "kind: qa" in p.read_text(encoding="utf-8")
+        ]
+        assert qa_pages, "No kind=qa page materialized from QA pair"
+        content = qa_pages[0].read_text(encoding="utf-8")
+        assert "related_pages" in content
+        assert "qa-source" in content

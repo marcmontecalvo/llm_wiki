@@ -269,6 +269,64 @@ uv run llm-wiki export graph --output my-graph.json
 
 ---
 
+### `llm-wiki hooks install`
+
+Install Claude Code session capture hooks (`SessionEnd` and `PreCompact`)
+so that every Claude Code session lands as a transcript in
+`wiki_system/inbox/new/`.
+
+```bash
+llm-wiki hooks install [OPTIONS]
+```
+
+**Options:**
+- `--scope {user,project}`: Write to `~/.claude/settings.json` or
+  `.claude/settings.json` (default: `project`)
+- `--wiki-base PATH`: Wiki base used as the inbox target (default:
+  `wiki_system`)
+- `--dry-run`: Print merged settings instead of writing
+
+**Behavior:**
+- Merges with existing hook entries — never overwrites unrelated hooks.
+- Idempotent: running twice does not duplicate the llm-wiki entry.
+- Command uses the current Python interpreter (`sys.executable`) so a
+  venv/uv install points at the right Python, not bare `python` on PATH.
+- Script is resolved from the packaged resource
+  `llm_wiki/hook_templates/capture_session.py`, so it works in both
+  editable and wheel installs.
+
+**Example:**
+```bash
+# Preview without writing
+uv run llm-wiki hooks install --dry-run
+
+# Install at project scope
+uv run llm-wiki hooks install
+
+# Install at user scope (applies to every project that uses Claude Code)
+uv run llm-wiki hooks install --scope user
+```
+
+---
+
+### `llm-wiki hooks uninstall`
+
+Remove llm-wiki session capture hooks from Claude Code settings.
+
+```bash
+llm-wiki hooks uninstall [OPTIONS]
+```
+
+**Options:**
+- `--scope {user,project}`: Which settings file to clean (default: `project`)
+
+**Behavior:**
+- Only removes entries whose command references `capture_session.py`.
+- Leaves any other hook entries intact.
+- If the event list becomes empty, the event key is dropped entirely.
+
+---
+
 ## Common Workflows
 
 ### Initial Setup
