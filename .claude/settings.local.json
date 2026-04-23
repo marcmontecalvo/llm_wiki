@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/unit/test_claude_session_adapter.py tests/unit/test_qa_kind.py tests/unit/test_qa_extractor.py tests/unit/test_claude_agent_sdk_client.py tests/unit/test_hooks_cli.py -x --tb=short)",
+      "Bash(uv --version)",
+      "Bash(uv sync:*)"
+    ]
+  }
+}
