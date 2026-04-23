@@ -45,13 +45,16 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Project specific
-wiki_system/inbox/processing/
-wiki_system/inbox/failed/
-wiki_system/inbox/done/
+# Project specific - wiki system runtime data
+# (wiki_system/domains/ content is tracked, but helper files are not)
+wiki_system/inbox/
 wiki_system/exports/
+wiki_system/index/
 wiki_system/logs/
+wiki_system/reports/
+wiki_system/review_queue/
 wiki_system/state/
+wiki_system/domains/*/queue/
 *.log
 
 # Local files
