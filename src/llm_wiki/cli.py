@@ -1,5 +1,6 @@
 """Command-line interface for llm-wiki."""
 
+import shlex
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -2811,7 +2812,10 @@ def hooks_install(scope: str, wiki_base: Path, dry_run: bool):
         # under a venv or uv environment must invoke that same Python, not
         # bare "python" from PATH.
         command = (
-            f'"{_sys.executable}" "{capture_script}" {hook_name} "{inbox_dir}"'
+            f"{shlex.quote(_sys.executable)} "
+            f"{shlex.quote(str(capture_script))} "
+            f"{shlex.quote(hook_name)} "
+            f"{shlex.quote(str(inbox_dir))}"
         )
         # SessionEnd / PreCompact entries do not use ``matcher`` (that's a
         # PreToolUse/PostToolUse field). Omit it to stay schema-correct.
