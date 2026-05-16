@@ -52,7 +52,7 @@ The LLM Wiki is a **git-ops, local-first, file-backed federated wiki** with a DA
 | B: Separate `llm-wiki-server` package | Clean separation but doubles the maintenance burden. Two entry points. | Skip — no need to split a solo dev |
 | C: Gunicorn behind nginx for K8s | Overkill for solo dev + AI agent fleet context | No |
 
-**Decision:** Add FastAPI as an optional dependency. The daemon, when started, optionally launches a FastAPI server on `API_PORT` (configurable in `daemon.yaml`). Same `WikiConfig` and data reads as the CLI — no new code paths, just new entry points. This matches the "fit the tool to the team" constraint: one more dep, one more command (`llm-wiki serve`), and external agents can now call HTTP endpoints.
+**Decision:** Add FastAPI as an optional dependency. The daemon, when started, optionally launches a FastAPI server on `API_PORT` (configurable in `daemon.yaml`). Same `WikiConfig` and data reads as the CLI — no new code paths, just new entry points. This matches the "fit the tool to the team" constraint: one more dep, one more command (`llm-wiki serve`, not yet implemented), and external agents can now call HTTP endpoints.
 
 ### ADR-002: JSON index persistence — add a write-ahead log
 
@@ -248,7 +248,7 @@ The security audit claim (per docs) references code from April 13, 2026. Since t
 | Transition | What's Saved | What's Lost on Failure | Recovery | Race Condition |
 |------------|-------------|----------------------|----------|----------------|
 | File dropped into `inbox/new/` | File on disk | None (file still in inbox) | Re-process on next poll | **Low** — files processed by one scan won't be re-scanned until next cycle, but if daemon crashes mid-processing, the file is left in `processing/` |
-| Adapter fails → moves to `failed/` | Error log + error file | Original file in failed/ (retryable via CLI) | `llm-wiki ingest-failed retry` or `abandon` | None |
+| Adapter fails → moves to `failed/` | Error log + error file | Original file in failed/ (retryable via CLI) | `llm-wiki ingest failed retry` or `abandon` | None |
 | Normalization succeeds → page in domain queue | Page written to `{domain}/queue/{page_id}.md` | Nothing lost — page is committed | Daemon picks up from queue | None |
 | Integration (merge with existing) fails | `IntegrationError` raised, no page modified | Nothing — IDempotent merge | Daemon will reprocess | **High** — two parallel integration runs on same page could both read → both write → last one wins |
 | LLM extraction fails | Original page unchanged | Nothing lost | Retry job picks it up at 30min interval | **High** — see above |

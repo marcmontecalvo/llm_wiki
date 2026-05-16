@@ -46,7 +46,9 @@ class GovernanceJob:
         self.backlink_index = BacklinkIndex(index_dir=index_dir)
 
         # Review queue for adding items discovered during governance checks
-        self.review_queue = ReviewQueue(queue_dir=wiki_base / "review_queue")
+        self.review_queue = (
+            ReviewQueue(queue_dir=wiki_base / "review_queue") if wiki_base else ReviewQueue()
+        )
 
     def execute(self) -> dict[str, Any]:
         """Execute governance checks.
@@ -425,7 +427,7 @@ class GovernanceJob:
         added = 0
 
         # Handle both LintIssue dataclass objects and dict format
-        routing_errors = []
+        routing_errors: list[LintIssue | dict[str, Any]] = []
         for issue in lint_issues:
             if isinstance(issue, LintIssue):
                 # LintIssue dataclass - access attributes directly

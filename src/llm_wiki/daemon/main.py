@@ -157,6 +157,33 @@ class WikiDaemon:
             f"(every {self.config.daemon.daemon.migrate_queue_every_minutes}m)"
         )
 
+        # Register export job
+        from llm_wiki.daemon.jobs.export import run_export_job
+
+        self.scheduler.add_job(
+            func=run_export_job,
+            job_name="export",
+            interval_seconds=self.config.daemon.daemon.export_every_minutes * 60,
+            wiki_base=wiki_base,
+        )
+        logger.info(
+            f"Registered export job (every {self.config.daemon.daemon.export_every_minutes}m)"
+        )
+
+        # Register index-rebuild job
+        from llm_wiki.daemon.jobs.index_rebuild import run_index_rebuild
+
+        self.scheduler.add_job(
+            func=run_index_rebuild,
+            job_name="index_rebuild",
+            interval_seconds=self.config.daemon.daemon.rebuild_index_every_minutes * 60,
+            wiki_base=wiki_base,
+        )
+        logger.info(
+            f"Registered index_rebuild job "
+            f"(every {self.config.daemon.daemon.rebuild_index_every_minutes}m)"
+        )
+
         # Start scheduler
         self.scheduler.start()
         logger.info("Scheduler started")

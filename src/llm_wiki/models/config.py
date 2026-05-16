@@ -261,4 +261,4 @@ def load_models_config(filepath: Path) -> ModelsYAML:
     with filepath.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
-    return ModelsYAML.model_validate(data)
+    return ModelsYAML.model_validate(data if data is not None else {})  # type: ignore[no-any-return]

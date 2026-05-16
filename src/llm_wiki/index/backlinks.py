@@ -203,7 +203,7 @@ class BacklinkIndex:
                 import difflib
 
                 best_match = None
-                best_score = 0
+                best_score = 0.0
                 for candidate in all_page_ids:
                     # Simple similarity: same prefix or high edit similarity
                     if candidate.startswith(page_id[:3]) or candidate.endswith(page_id[-3:]):

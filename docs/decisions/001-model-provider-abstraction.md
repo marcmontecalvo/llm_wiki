@@ -1,4 +1,4 @@
-# Decision 001: Model Provider Abstraction
+# ADR 001: Model Provider Abstraction
 
 **Date**: 2026-04-13
 **Status**: Accepted

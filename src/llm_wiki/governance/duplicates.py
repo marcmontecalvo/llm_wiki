@@ -540,6 +540,7 @@ class DuplicateDetector:
                 target_id=candidate.primary_page or candidate.page_1,
                 reason=f"Duplicate detected: '{candidate.page_1}' ↔ '{candidate.page_2}' (score: {candidate.duplicate_score:.2f})",
                 priority=priority,
+                created_at=datetime.now(UTC),
                 metadata={
                     "page_1": candidate.page_1,
                     "page_2": candidate.page_2,

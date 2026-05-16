@@ -245,7 +245,7 @@ class RelationshipIndex:
         by_type_data = data.get("by_type", {})
         self.by_type = {}
         for k, v_list in by_type_data.items():
-            self.by_type[k] = {tuple(v) if isinstance(v, list) else v for v in v_list}
+            self.by_type[k] = [tuple(v) if isinstance(v, list) else v for v in v_list]
 
         stats = self.get_stats()
         logger.info(f"Loaded relationship index ({stats['total_relationships']} relationships)")

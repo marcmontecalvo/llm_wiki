@@ -146,7 +146,7 @@ class ReviewItem(BaseModel):
         Returns:
             Dictionary representation of the review item
         """
-        return self.model_dump(mode="json")
+        return self.model_dump(mode="json")  # type: ignore[no-any-return]
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ReviewItem":
@@ -158,4 +158,4 @@ class ReviewItem(BaseModel):
         Returns:
             ReviewItem instance
         """
-        return cls.model_validate(data)
+        return cls.model_validate(data)  # type: ignore[no-any-return]

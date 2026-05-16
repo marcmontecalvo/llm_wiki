@@ -496,14 +496,15 @@ If the exported file is too large:
 ### Missing Extraction Data
 
 If extraction sections are empty:
-- Run content extraction first: `llm-wiki extract claims` and `llm-wiki extract relationships`
+- Run content extraction first: `llm-wiki claims extract --page <page-id>`
 - Check that extraction files exist in `wiki_system/index/`
+- Relationships are loaded from the relationship index file automatically; there is no separate relationship extraction CLI command
 
 ### Broken Links
 
 If many broken links appear:
 - Verify all referenced pages exist
-- Run backlink index rebuild: `llm-wiki index rebuild-backlinks`
+- Run backlink index rebuild: `llm-wiki govern update-backlinks`
 
 ## Performance
 
