@@ -350,7 +350,7 @@ All references should be updated to point to the shared version.
                 # We prepend "shared/" to indicate the page is now in shared space
                 updated_content = wiki_link_pattern.sub(
                     lambda m: f"[[shared/{m.group(1)}]]" if m.group(1) == page_id else m.group(0),
-                    content
+                    content,
                 )
 
                 # Also update any direct references without the prefix to maintain backward compat
@@ -380,7 +380,7 @@ All references should be updated to point to the shared version.
                 # Update links in the promoted page to shared namespace
                 updated_content = wiki_link_pattern.sub(
                     lambda m: f"[[shared/{m.group(1)}]]" if m.group(1) != page_id else m.group(0),
-                    content
+                    content,
                 )
 
                 # Only write if changed
@@ -412,7 +412,7 @@ All references should be updated to point to the shared version.
             # This allows the resolver to check both domain-local and shared
             for ref_page_id in backlinks:
                 # Get forward links from referring page
-                forward_links = self.backlinks.get_forward_links(ref_page_id)
+                self.backlinks.get_forward_links(ref_page_id)
 
                 # The index already tracks that ref_page_id links to page_id
                 # We need to ensure the resolver knows to check shared/ too
@@ -446,9 +446,7 @@ All references should be updated to point to the shared version.
         except Exception as e:
             logger.warning(f"Failed to remap backlinks for {page_id}: {e}")
 
-    def _rollback_promotion(
-        self, page_id: str, source_domain: str, actions: list[str]
-    ) -> None:
+    def _rollback_promotion(self, page_id: str, source_domain: str, actions: list[str]) -> None:
         """Rollback promotion on failure.
 
         Args:
@@ -487,18 +485,14 @@ All references should be updated to point to the shared version.
             try:
                 # Note: We can't easily undo reference updates without keeping backup
                 # Just log that manual cleanup may be needed
-                logger.warning(
-                    f"Reference updates may need manual rollback for {page_id}"
-                )
+                logger.warning(f"Reference updates may need manual rollback for {page_id}")
             except Exception as e:
                 logger.warning(f"Failed to rollback references: {e}")
 
         if "tombstone" in actions:
             try:
                 # Restore original page from shared copy
-                source_path = (
-                    self.wiki_base / "domains" / source_domain / "pages" / f"{page_id}.md"
-                )
+                source_path = self.wiki_base / "domains" / source_domain / "pages" / f"{page_id}.md"
                 shared_path = self.shared_dir / f"{page_id}.md"
                 if shared_path.exists():
                     content = shared_path.read_text(encoding="utf-8")

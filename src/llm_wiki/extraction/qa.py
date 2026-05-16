@@ -25,9 +25,7 @@ class QAExtractor:
         """
         self.client = client
 
-    def extract_qa_pairs(
-        self, content: str, metadata: dict[str, Any]
-    ) -> list[dict[str, Any]]:
+    def extract_qa_pairs(self, content: str, metadata: dict[str, Any]) -> list[dict[str, Any]]:
         """Extract Q&A pairs from content.
 
         Args:
@@ -83,7 +81,11 @@ Respond with JSON of this exact shape:
                 if not question or not answer:
                     continue
                 tags_raw = pair.get("tags", [])
-                tags = [str(t).strip() for t in tags_raw if str(t).strip()] if isinstance(tags_raw, list) else []
+                tags = (
+                    [str(t).strip() for t in tags_raw if str(t).strip()]
+                    if isinstance(tags_raw, list)
+                    else []
+                )
                 validated.append(
                     {
                         "question": question,

@@ -185,9 +185,7 @@ class TestIntegrationFlow:
         # Should detect conflicts when auto_resolve is False
         assert result.success  # Integration still succeeds
 
-    def test_integration_with_custom_strategies(
-        self, integrator, existing_page_with_content
-    ):
+    def test_integration_with_custom_strategies(self, integrator, existing_page_with_content):
         """Test integration with custom merge strategies."""
         strategies = MergeStrategies(
             title="use_extracted",
@@ -221,20 +219,16 @@ class TestIntegrationFlow:
             "sources": ["new-source"],
         }
 
-        result = custom_integrator.integrate(
-            "test-page", existing_page_with_content, extracted
-        )
+        result = custom_integrator.integrate("test-page", existing_page_with_content, extracted)
 
         assert result.success
         # Tags should be merged
         assert "new-tag" in existing_page_with_content["tags"]
         assert "new-source" in existing_page_with_content["sources"]
 
-    def test_integration_rollback(
-        self, integrator, existing_page_with_content, extracted_data_v2
-    ):
+    def test_integration_rollback(self, integrator, existing_page_with_content, extracted_data_v2):
         """Test rollback functionality."""
-        result1 = integrator.integrate(
+        integrator.integrate(
             "test-rollback",
             copy.deepcopy(existing_page_with_content),
             copy.deepcopy(extracted_data_v2),
@@ -245,7 +239,7 @@ class TestIntegrationFlow:
         assert len(history) > 0
 
         # Rollback
-        rollback_result = integrator.rollback("test-rollback")
+        integrator.rollback("test-rollback")
 
         # After rollback, history should be cleared for that page
         history_after = integrator.get_history("test-rollback")
@@ -294,9 +288,7 @@ class TestIntegrationConflictResolution:
             "confidence": 0.87,
         }
 
-        result = integrator.integrate(
-            "test", existing, extracted, auto_resolve_conflicts=True
-        )
+        integrator.integrate("test", existing, extracted, auto_resolve_conflicts=True)
 
         # Should keep original on auto-resolve
         assert existing["summary"] == "Original summary"
@@ -311,9 +303,7 @@ class TestIntegrationConflictResolution:
         }
         extracted = {"summary": "New", "confidence": 0.87}
 
-        result = integrator.integrate(
-            "test", existing, extracted, auto_resolve_conflicts=False
-        )
+        result = integrator.integrate("test", existing, extracted, auto_resolve_conflicts=False)
 
         # Conflicts should be detected
         assert len(result.conflicts) > 0 or existing["summary"] == "Original"
@@ -331,7 +321,7 @@ class TestIntegrationConflictResolution:
             "confidence": 0.95,
         }
 
-        result = integrator.integrate("test", existing, extracted, auto_resolve_conflicts=False)
+        integrator.integrate("test", existing, extracted, auto_resolve_conflicts=False)
 
         # Higher confidence should win
         assert existing["summary"] == "Better summary"

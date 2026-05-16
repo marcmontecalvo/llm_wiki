@@ -10,9 +10,7 @@ class PageFrontmatter(BaseModel):
     """Base frontmatter schema for all wiki pages."""
 
     id: str = Field(..., description="Unique page identifier")
-    kind: Literal["page", "entity", "concept", "source", "qa"] = Field(
-        ..., description="Page type"
-    )
+    kind: Literal["page", "entity", "concept", "source", "qa"] = Field(..., description="Page type")
     title: str = Field(..., description="Page title")
     domain: str = Field(..., description="Domain this page belongs to")
     status: Literal["draft", "published", "archived", "review"] = Field(

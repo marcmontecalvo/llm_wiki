@@ -331,9 +331,9 @@ Strict schemas for all data structures:
 - No loose dict soup
 
 ### 5. Append-Only Operations
-- Preserve history (future)
-- Change logs (future)
-- Reversible operations
+- Preserve history via change log (implemented)
+- Change logs with list/diff/show/stats (implemented)
+- Reversible operations via integration rollback (implemented)
 
 ## Integration Module
 
@@ -422,7 +422,7 @@ Every integration produces detailed change records:
 class Change:
     field: str           # Field name
     old_value: Any       # Original value
-    new_value: Any      # New value  
+    new_value: Any      # New value
     change_type: str    # "added", "removed", "updated", "merged"
     timestamp: datetime
     reason: str         # Why the change was made
@@ -559,9 +559,6 @@ class CustomExporter:
 
 See `IMPLEMENTATION_STATUS.md` for planned features:
 - Enhanced daemon scheduler (#82)
-- Contradiction detection (#70)
-- Review queue (#71)
-- Claims extraction (#66)
-- Relationships extraction (#67)
-- Backlink tracking (#69)
-- Promotion logic (#68)
+- Markdown exports without frontmatter
+- RSS feeds for change tracking
+- HTML static site generation

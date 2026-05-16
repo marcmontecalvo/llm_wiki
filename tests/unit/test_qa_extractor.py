@@ -89,11 +89,7 @@ class TestQAExtractor:
 
     def test_cap_at_20_pairs(self):
         """Returns at most 20 pairs."""
-        payload = {
-            "pairs": [
-                {"question": f"Q{i}", "answer": f"A{i}"} for i in range(50)
-            ]
-        }
+        payload = {"pairs": [{"question": f"Q{i}", "answer": f"A{i}"} for i in range(50)]}
         client = _FakeClient(json.dumps(payload))
         extractor = QAExtractor(client)
 

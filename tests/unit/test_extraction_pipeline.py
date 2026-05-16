@@ -283,9 +283,7 @@ Links to [[other-page]] and [[another-page]].
         # Responses: ContentExtractor + ClaimsExtractor + RelationshipExtractor
         # calls return "safe" values; last QA call returns our JSON. Any
         # extras exhaust side_effect → exception → extractor returns [].
-        responses: Iterator[str] = iter(
-            ["page", "[]", "stub", "[]", "[]", qa_json, qa_json]
-        )
+        responses: Iterator[str] = iter(["page", "[]", "stub", "[]", "[]", qa_json, qa_json])
 
         def _next_response(*args, **kwargs):
             try:

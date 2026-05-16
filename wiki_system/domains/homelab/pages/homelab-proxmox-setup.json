@@ -1,0 +1,13 @@
+{
+  "domain": "homelab",
+  "id": "homelab-proxmox-setup",
+  "kind": "source",
+  "source_type": "markdown",
+  "status": "published",
+  "title": "Proxmox Setup",
+  "_computed": {
+    "word_count": 4,
+    "char_count": 25,
+    "has_content": true
+  }
+}

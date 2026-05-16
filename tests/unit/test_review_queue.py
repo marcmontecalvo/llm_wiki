@@ -1,6 +1,5 @@
 """Tests for the review queue."""
 
-import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -237,7 +236,7 @@ class TestReviewQueue:
     def test_list_pending(self, queue: ReviewQueue):
         """Test listing pending items."""
         now = datetime.now(UTC)
-        
+
         # Create some items
         for i in range(3):
             item = ReviewItem(

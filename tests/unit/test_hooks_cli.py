@@ -41,9 +41,7 @@ class TestHooksInstall:
         cwd = os.getcwd()
         try:
             os.chdir(tmp_path)
-            result = runner.invoke(
-                main, ["hooks", "install", "--scope", "project"]
-            )
+            result = runner.invoke(main, ["hooks", "install", "--scope", "project"])
         finally:
             os.chdir(cwd)
 
@@ -77,9 +75,7 @@ class TestHooksInstall:
                         "SessionEnd": [
                             {
                                 "matcher": "",
-                                "hooks": [
-                                    {"type": "command", "command": "echo unrelated"}
-                                ],
+                                "hooks": [{"type": "command", "command": "echo unrelated"}],
                             }
                         ],
                     }
@@ -97,11 +93,7 @@ class TestHooksInstall:
 
         assert result.exit_code == 0, result.output
         data = json.loads(settings.read_text(encoding="utf-8"))
-        commands = [
-            h["command"]
-            for item in data["hooks"]["SessionEnd"]
-            for h in item["hooks"]
-        ]
+        commands = [h["command"] for item in data["hooks"]["SessionEnd"] for h in item["hooks"]]
         assert any("echo unrelated" in c for c in commands)
         assert any("capture_session.py" in c for c in commands)
 
@@ -116,9 +108,7 @@ class TestHooksInstall:
         finally:
             os.chdir(cwd)
 
-        data = json.loads(
-            (tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8")
-        )
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
         capture_count = sum(
             1
             for item in data["hooks"]["SessionEnd"]
@@ -149,16 +139,12 @@ class TestHooksUninstall:
             )
             settings.write_text(json.dumps(data), encoding="utf-8")
 
-            result = runner.invoke(
-                main, ["hooks", "uninstall", "--scope", "project"]
-            )
+            result = runner.invoke(main, ["hooks", "uninstall", "--scope", "project"])
         finally:
             os.chdir(cwd)
 
         assert result.exit_code == 0, result.output
-        data = json.loads(
-            (tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8")
-        )
+        data = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
         # SessionEnd still has the unrelated hook; capture_session.py gone.
         remaining = data.get("hooks", {}).get("SessionEnd", [])
         commands = [h["command"] for item in remaining for h in item["hooks"]]
@@ -173,9 +159,7 @@ class TestHooksUninstall:
         cwd = os.getcwd()
         try:
             os.chdir(tmp_path)
-            result = runner.invoke(
-                main, ["hooks", "uninstall", "--scope", "project"]
-            )
+            result = runner.invoke(main, ["hooks", "uninstall", "--scope", "project"])
         finally:
             os.chdir(cwd)
         assert result.exit_code == 0

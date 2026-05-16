@@ -1,12 +1,11 @@
 """Review queue population daemon job."""
 
-import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewStatus, ReviewType
+from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewType
 from llm_wiki.review.queue import ReviewQueue
 from llm_wiki.utils.frontmatter import parse_frontmatter
 

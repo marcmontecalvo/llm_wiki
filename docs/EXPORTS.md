@@ -375,7 +375,7 @@ All exports are validated before writing:
 
 See `IMPLEMENTATION_STATUS.md` for planned export features:
 
-- **llms-full.txt** (#73): Comprehensive export with all metadata
+- ~~**llms-full.txt** (#73)~~: Complete — use `llm-wiki export llmsfull`
 - **Markdown exports**: Cleaned markdown without frontmatter
 - **RSS feeds**: Change feeds for updates
 - **HTML generation**: Static site generation

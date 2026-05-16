@@ -1,230 +1,136 @@
 # Implementation Status
 
-**Last updated:** 2026-04-14
-**Current version:** v0.1.0 (Core system complete, enhancements in progress)
+**Last updated:** 2026-05-16
+**Current version:** v0.1.0 (Core system complete)
 
-## 📊 Current State Summary
+## Current State Summary
 
-- **Total Tests:** 534 (523 unit + 11 integration)
+- **Total Tests:** 500+ unit + integration tests passing
 - **Code Coverage:** 93%
-- **Issues Closed:** 26
-- **Epics Completed:** 12/12 (100%)
-- **System Status:** ✅ **Fully Functional** (enhancements tracked separately)
+- **System Status:** Fully Functional
 
----
+## Completed Features
 
-## ✅ Completed Epics (All 12)
+### Foundation & Core Pipeline
+- Project structure and configuration
+- Pydantic models and schemas
+- Ingest pipeline (inbox watcher, adapters, routing)
+- Basic extraction (entities, concepts, metadata)
+- Storage (domains, queue, pages)
 
-### Epic 1-6: Foundation & Core Pipeline ✅
-**Status:** Complete
-**Commits:** Early development
+### Indexing & Search
+- Metadata index (tags, kind, domain lookups)
+- Fulltext search with TF-IDF scoring
+- Unified query interface (WikiQuery)
+- Index rebuild job
+- Backlink index
+- Relationship index (bidirectional, typed edges)
 
-- ✅ Project structure and configuration
-- ✅ Pydantic models and schemas
-- ✅ Ingest pipeline (inbox watcher, adapters, routing)
-- ✅ Basic extraction (entities, concepts, metadata)
-- ✅ Storage (domains, queue, pages)
+### Governance & Maintenance
+- Metadata linter (validation, orphan detection)
+- Staleness detector (age-based, time-sensitive content)
+- Quality scorer (multi-factor assessment)
+- Governance job with markdown reports
+- **Contradiction detection** (negation, numerical, semantic)
+- **Duplicate entity detection**
+- **Routing mistake detection**
+- **Clean broken links**
+- **Backlink index maintenance**
 
-### Epic 7: Indexing & Search ✅
-**Status:** Complete
-**Commit:** 88cea50
-**Tests:** 67 tests, 85-98% coverage
+### Export Pipeline
+- llms.txt exporter (LLM-optimized format)
+- llms-full.txt exporter (comprehensive page data)
+- JSON sidecar exporter (per-page metadata)
+- Graph exporter (nodes + edges)
+- Sitemap generator (XML)
+- Export job orchestration
 
-- ✅ Metadata index (tags, kind, domain lookups)
-- ✅ Fulltext search with TF-IDF scoring
-- ✅ Unified query interface (WikiQuery)
-- ✅ Index rebuild job
-
-### Epic 8: Governance & Maintenance ✅
-**Status:** Complete
-**Commit:** beb5c37
-**Tests:** 56 tests, 97-100% coverage
-
-- ✅ Metadata linter (validation, orphan detection)
-- ✅ Staleness detector (age-based, time-sensitive content)
-- ✅ Quality scorer (multi-factor assessment)
-- ✅ Governance job with markdown reports
-
-### Epic 9: Export Pipeline ✅
-**Status:** Complete
-**Commit:** 5acfc03
-**Tests:** 11 tests, 93% coverage
-
-- ✅ llms.txt exporter (LLM-optimized format)
-- ✅ JSON sidecar exporter (per-page metadata)
-- ✅ Graph exporter (nodes + edges)
-- ✅ Sitemap generator (XML)
-- ✅ Export job orchestration
-
-### Epic 10: Agent Compatibility ✅
-**Status:** Complete
-**Commit:** 6e4adc9
-
-- ✅ Claude Code skills (/wiki, /ingest, /govern, /export)
-- ✅ Agent bootstrap (.claude/bootstrap.md)
-- ✅ Cross-agent conventions (AGENT_CONVENTIONS.md)
-- ✅ Example workflows
-
-### Epic 11: Testing & Quality ✅
-**Status:** Complete
-**Commits:** 6e4adc9, 6b0362c
-
-- ✅ CI/CD pipeline (GitHub Actions, Python 3.11 & 3.12)
-- ✅ Integration smoke tests (11 tests)
-- ✅ Automated linting, formatting, type checking
-- ✅ Coverage reporting (Codecov)
-
-### Epic 12: Documentation & Examples ✅
-**Status:** Complete
-**Commit:** 6e4adc9
-
-- ✅ Setup guide (SETUP.md)
-- ✅ Architecture documentation (ARCHITECTURE.md)
-- ✅ Agent conventions (AGENT_CONVENTIONS.md)
-- ✅ Example workflows (6 examples + README)
-
-### Additional: CLI Commands ✅
-**Status:** Complete
-**Commit:** 092e053
-**Tests:** 20 tests
-
-- ✅ `llm-wiki init` - Initialize wiki
-- ✅ `llm-wiki search query` - Search with filters
-- ✅ `llm-wiki search get` - Get specific page
-- ✅ `llm-wiki ingest file` - Ingest files
-- ✅ `llm-wiki ingest text` - Create from text
-- ✅ `llm-wiki govern check` - Run governance
-- ✅ `llm-wiki govern rebuild-index` - Rebuild indexes
-- ✅ `llm-wiki export all` - Export all formats
-- ✅ `llm-wiki export llmstxt` - Export llms.txt
-- ✅ `llm-wiki export graph` - Export graph
-
-### Additional: Bootstrap Script ✅
-**Status:** Complete
-**Commit:** 69a750d
-**Tests:** 3 tests
-
-- ✅ Dynamic domain reading from config
-- ✅ No hardcoded domains (reads domains.yaml)
-- ✅ Fallback to defaults if config missing
-
----
-
-## 🔨 Current Capabilities
-
-### ✅ What Works Now
-
-**Ingestion:**
-- Drop files in inbox for automatic processing
-- Markdown and text adapters
-- Domain routing (explicit, pattern-based, fallback)
-- Frontmatter normalization
-
-**Extraction:**
-- Entity extraction (people, tech, tools)
-- Concept extraction (ideas, methodologies)
-- Metadata extraction (title, tags, summary)
-
-**Search & Query:**
-- Fulltext search (TF-IDF scoring)
-- Filter by domain, kind, tags
-- Get specific pages by ID
-- Index rebuilding
-
-**Governance:**
-- Metadata validation
-- Staleness detection
-- Quality scoring
-- Orphan page detection
-- Automated reporting
-
-**Export:**
-- llms.txt for LLM consumption
-- JSON sidecars for programmatic access
-- Graph export (nodes + edges)
-- XML sitemap
-
-**CLI:**
-- Full command suite (init, search, ingest, govern, export)
-- Well-tested (20 CLI tests)
-
-**Agent Integration:**
-- Claude Code skills and bootstrap
-- Documented conventions
-
-**Quality:**
-- 534 tests (93% coverage)
-- Automated CI/CD
-- Pre-commit hooks
-
----
-
-## 🚧 Enhancement Features (Tracked in Issues)
-
-These are **enhancements** beyond the core system. The wiki is fully functional without them.
-
-### Data & Extraction
-- **#66:** Claims extraction (factual statements with confidence)
-- **#67:** Relationship extraction (entity relationships)
+### Claims Processing
+- Factual claim extraction from pages
+- Claim listing and indexing
+- Claim search across all pages
+- Contradiction detection on claims
 
 ### Promotion & Sharing
-- **#68:** Promotion logic ✅ Complete — see `docs/PROMOTION.md`
-- **#69:** Backlink tracking (bidirectional links, broken link detection)
+- Promotion scoring algorithm (cross-domain references, quality, age)
+- Promotion candidates check
+- Auto-promote or review queue workflow
+- Page promotion to shared space
+- Page unpromotion
+- Tombstone creation on original pages
 
-### Advanced Governance
-- **#70:** Contradiction detection ✅ Complete — see `docs/CONTRADICTION_DETECTION.md`
-- **#71:** Review queue system (manual review workflow)
-- **#72:** Duplicate entity detection (deduplication)
-- **#74:** Retry failed ingests (automatic retry with backoff)
-- **#75:** Routing mistake detection (domain mismatch)
+### Review Queue
+- Full review workflow states (pending, approved, rejected, deferred)
+- Manual review item creation
+- Approve, reject, defer operations
+- Review queue statistics and listing
+- Cleanup of old resolved items
 
-### Export & Visualization
-- **#73:** llms-full.txt export ✅ Complete — see `docs/export/llms-full-txt.md`
-- **#79:** Graph edge index (fast relationship queries)
+### Deterministic Integration
+- Page integration with conflict resolution
+- Integration history tracking
+- Rollback to previous states
+- Merge strategy configuration
+- Preview integration without applying
 
-### Integration & History
-- **#80:** Deterministic integration ✅ Complete
-- **#81:** Change log and diff tracking (audit trail)
+### Change Log & Diff Tracking
+- Append-only change log
+- Recent changes listing
+- Page diff in time windows
+- Change entry details
+- Change log statistics
 
-### Developer Experience
-- **#76:** Cursor IDE bootstrap ✅ Complete — see `docs/CURSOR_SETUP.md`
-- **#77:** GitHub Copilot integration ✅ Complete — see `docs/COPILOT_SETUP.md`
-- **#78:** Obsidian vault import adapter ✅ Complete
+### Obsidian Import
+- Obsidian vault import adapter
+- Full vault migration to wiki structure
 
-### Infrastructure
-- **#82:** Enhanced daemon scheduler (cron, prioritization, retry)
+### Agent Integration
+- Claude Code skills (/wiki, /ingest, /govern, /export)
+- Agent bootstrap (.claude/bootstrap.md)
+- Cross-agent conventions (AGENT_CONVENTIONS.md)
+- GitHub Copilot integration
+- Cursor IDE bootstrap and rules
 
----
+### CLI Command Suite
+| Command | Description |
+|---------|-------------|
+| `init` | Initialize wiki instance |
+| `daemon` [start/status/jobs] | Start/manage daemon |
+| `search query/get/backlinks` | Search and retrieve pages |
+| `ingest file/text/obsidian/failed/stats` | Ingest content into wiki |
+| `claims extract/list/search` | Extract and query factual claims |
+| `govern check/contradictions/duplicates/merge-duplicates/routing-mistakes/rebuild-index/update-backlinks/clean-broken-links` | Governance checks |
+| `export all/llmstxt/llmsfull/graph` | Export wiki content |
+| `graph edges/neighbors/path/stats/subgraph` | Query graph edges |
+| `promote check/process` | Page promotion to shared space |
+| `query relationships/rebuild-relationships` | Query relationships |
+| `review add/list/show/approve/reject/defer/stats/cleanup` | Manage review queue |
+| `integrate apply/check/history/rollback/strategies` | Deterministic page integration |
+| `changes list/diff/show/stats` | Change log queries |
+| `trigger` | Run daemon jobs manually |
+| `hooks install/uninstall` | Claude Code session capture hooks |
 
-## 🎯 System Status: COMPLETE ✅
+### Daemon Jobs
+| Job | Description |
+|-----|-------------|
+| `inbox-scan` | Scan inbox for new files |
+| `queue-to-pages` | Migrate queued files to published pages |
+| `governance` | Run governance checks |
+| `export` | Re-run all export formats |
+| `index-rebuild` | Rebuild all search indexes |
+| `retry-failed-ingests` | Retry previously failed ingestions |
+| `review-queue` | Populate the review queue |
+| `promotion` | Run page promotion checks |
 
-The core LLM wiki system is **fully implemented and functional**:
+## Remaining Work
 
-✅ **All 12 original epics completed**
-✅ **534 tests passing (93% coverage)**
-✅ **Full CLI interface**
-✅ **Complete documentation**
-✅ **CI/CD pipeline**
-✅ **Agent integration (Claude Code, Cursor IDE, GitHub Copilot)**
-✅ **Enhancement features: promotion (#68), contradiction detection (#70), llms-full.txt (#73), deterministic integration (#80), Obsidian import (#78)**
+No blocking issues remain. The system is fully functional. Future enhancements may include:
+- Refined LLM integration for claim extraction and contradiction detection
+- Additional export formats (Markdown without frontmatter, RSS, HTML)
+- Enhanced graph visualization
+- Obsidian vault wire-up for browsing
 
-## 🚀 Open Enhancements
-
-Remaining work tracked in GitHub issues:
-
-- **#66-67:** Claims and relationship extraction
-- **#69:** Backlink tracking
-- **#71:** Review queue system
-- **#72:** Duplicate entity detection
-- **#74:** Retry failed ingests
-- **#75:** Routing mistake detection
-- **#79:** Graph edge index
-- **#81:** Change log and diff tracking
-- **#82:** Enhanced daemon scheduler
-
----
-
-## 📚 Related Documentation
+## Related Documentation
 
 - **Setup:** `docs/SETUP.md`
 - **Architecture:** `docs/ARCHITECTURE.md`
@@ -234,4 +140,3 @@ Remaining work tracked in GitHub issues:
 - **Exports:** `docs/EXPORTS.md`
 - **Promotion:** `docs/PROMOTION.md`
 - **Contradiction Detection:** `docs/CONTRADICTION_DETECTION.md`
-- **Examples:** `examples/README.md`

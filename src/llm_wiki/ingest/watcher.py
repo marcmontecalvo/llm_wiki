@@ -3,6 +3,7 @@
 import logging
 import shutil
 from pathlib import Path
+from typing import Any
 
 from llm_wiki.adapters.base import AdapterRegistry
 from llm_wiki.adapters.claude_session import ClaudeSessionAdapter
@@ -56,7 +57,7 @@ class InboxWatcher:
         registry = AdapterRegistry()
         registry.register(ClaudeSessionAdapter)  # Claude Code session transcripts
         registry.register(ObsidianVaultAdapter)  # Try Obsidian first (checks for obsidian markers)
-        registry.register(MarkdownAdapter)      # Fall back to standard markdown
+        registry.register(MarkdownAdapter)  # Fall back to standard markdown
         registry.register(TextAdapter)
         self.pipeline = NormalizationPipeline(registry, config_dir)
 
@@ -186,3 +187,19 @@ class InboxWatcher:
 
         # Default to unknown
         return FailureReason.UNKNOWN
+
+
+def run_inbox_scan(wiki_base: Path | None = None) -> dict[str, Any]:
+    """Scan the inbox for new files and process them.
+
+    This function is called by the daemon scheduler.
+
+    Args:
+        wiki_base: Base wiki directory (defaults to wiki_system/)
+
+    Returns:
+        Dictionary with processing stats
+    """
+    wb = wiki_base or Path("wiki_system")
+    watcher = InboxWatcher(inbox_dir=wb / "inbox")
+    return watcher.scan()

@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from llm_wiki.utils.frontmatter import parse_frontmatter
+from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewType
 from llm_wiki.review.queue import ReviewQueue
-from llm_wiki.review.models import ReviewItem, ReviewType, ReviewPriority, ReviewStatus
+from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
 
@@ -370,7 +370,7 @@ class DuplicateDetector:
             return True
 
         # Check if name is an expansion of a known abbreviation
-        for abbrev, expansion in KNOWN_ABBREVIATIONS.items():
+        for _abbrev, expansion in KNOWN_ABBREVIATIONS.items():
             if norm_name == self._normalize_name(expansion):
                 return True
 
@@ -393,7 +393,7 @@ class DuplicateDetector:
         if norm_name in KNOWN_ABBREVIATIONS:
             return True
         # Check if it's an expansion of a known abbreviation
-        for abbrev, expansion in KNOWN_ABBREVIATIONS.items():
+        for _abbrev, expansion in KNOWN_ABBREVIATIONS.items():
             if norm_name == self._normalize_name(expansion):
                 return True
         return False
@@ -506,11 +506,7 @@ class DuplicateDetector:
         created_items: list[ReviewItem] = []
 
         # Get candidates above threshold
-        all_candidates = (
-            report.high_confidence
-            + report.medium_confidence
-            + report.low_confidence
-        )
+        all_candidates = report.high_confidence + report.medium_confidence + report.low_confidence
         candidates_to_add = [c for c in all_candidates if c.duplicate_score >= min_score]
 
         for candidate in candidates_to_add:
@@ -621,9 +617,7 @@ class DuplicateDetector:
         secondary_title = secondary_meta.get("title", secondary_page)
 
         # Create merged content - append secondary content as a section
-        merged_body = self._merge_content(
-            primary_body, secondary_body, secondary_title
-        )
+        merged_body = self._merge_content(primary_body, secondary_body, secondary_title)
 
         # Update primary page metadata - merge tags, aliases
         merged_meta = self._merge_metadata(primary_meta, secondary_meta)
@@ -633,9 +627,7 @@ class DuplicateDetector:
         primary_path.write_text(merged_frontmatter, encoding="utf-8")
 
         # Update backlinks from other pages
-        updated_backlinks = self._update_backlinks(
-            secondary_page, primary_page, wiki_base
-        )
+        updated_backlinks = self._update_backlinks(secondary_page, primary_page, wiki_base)
 
         # Create redirect file for secondary page
         redirect_path = secondary_path.with_suffix(".md.redirect")
@@ -761,9 +753,7 @@ This page has been merged into [[{primary_page}]].
 
         return path_1, path_2
 
-    def _merge_content(
-        self, primary_body: str, secondary_body: str, secondary_title: str
-    ) -> str:
+    def _merge_content(self, primary_body: str, secondary_body: str, secondary_title: str) -> str:
         """Merge secondary content into primary.
 
         Args:
@@ -783,9 +773,7 @@ This page has been merged into [[{primary_page}]].
 
         return merged
 
-    def _merge_metadata(
-        self, primary_meta: dict, secondary_meta: dict
-    ) -> dict:
+    def _merge_metadata(self, primary_meta: dict, secondary_meta: dict) -> dict:
         """Merge metadata from secondary into primary.
 
         Args:
@@ -862,9 +850,7 @@ This page has been merged into [[{primary_page}]].
         frontmatter = "---\n" + "\n".join(fm_parts) + "\n---\n"
         return frontmatter + body
 
-    def _update_backlinks(
-        self, from_page: str, to_page: str, wiki_base: Path
-    ) -> int:
+    def _update_backlinks(self, from_page: str, to_page: str, wiki_base: Path) -> int:
         """Update all backlinks that point to from_page to instead point to to_page.
 
         Args:
@@ -907,9 +893,7 @@ This page has been merged into [[{primary_page}]].
                     if has_link:
                         # Replace links
                         updated_body = body
-                        updated_body = updated_body.replace(
-                            f"[[{from_page}]]", f"[[{to_page}]]"
-                        )
+                        updated_body = updated_body.replace(f"[[{from_page}]]", f"[[{to_page}]]")
                         # Handle wiki links with alias: [[page|display]]
                         import re
 
@@ -929,9 +913,7 @@ This page has been merged into [[{primary_page}]].
                                 metadata["backlinks"] = backlinks
 
                             # Write updated content
-                            updated_content = self._create_frontmatter(
-                                metadata, updated_body
-                            )
+                            updated_content = self._create_frontmatter(metadata, updated_body)
                             page_file.write_text(updated_content, encoding="utf-8")
                             updated_count += 1
 

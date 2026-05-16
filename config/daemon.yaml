@@ -1,5 +1,6 @@
 daemon:
   inbox_poll_seconds: 15
+  migrate_queue_every_minutes: 15
   retry_failed_ingests_every_minutes: 30
   rebuild_index_every_minutes: 30
   lint_every_minutes: 60

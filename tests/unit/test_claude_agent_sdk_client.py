@@ -70,9 +70,7 @@ class TestClaudeAgentSDKClientMissingSDK:
                 return None
 
         blocker = _Blocker()
-        monkeypatch.setattr(
-            sys, "meta_path", [blocker] + sys.meta_path, raising=False
-        )
+        monkeypatch.setattr(sys, "meta_path", [blocker] + sys.meta_path, raising=False)
 
         config = ModelProviderConfig(provider="claude_agent_sdk", model="m")
         with pytest.raises(ModelClientError, match="claude-agent-sdk"):

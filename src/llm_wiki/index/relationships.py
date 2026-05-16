@@ -57,24 +57,28 @@ class RelationshipIndex:
         # Index by subject
         if source_key not in self.by_subject:
             self.by_subject[source_key] = []
-        self.by_subject[source_key].append({
-            "relationship_type": rel_type,
-            "target": target_entity,
-            "source_page": source_page,
-            "confidence": confidence,
-            "description": relationship.get("description"),
-        })
+        self.by_subject[source_key].append(
+            {
+                "relationship_type": rel_type,
+                "target": target_entity,
+                "source_page": source_page,
+                "confidence": confidence,
+                "description": relationship.get("description"),
+            }
+        )
 
         # Index by target (for reverse lookups)
         if target_key not in self.by_target:
             self.by_target[target_key] = []
-        self.by_target[target_key].append({
-            "relationship_type": rel_type,
-            "subject": source_entity,
-            "source_page": source_page,
-            "confidence": confidence,
-            "description": relationship.get("description"),
-        })
+        self.by_target[target_key].append(
+            {
+                "relationship_type": rel_type,
+                "subject": source_entity,
+                "source_page": source_page,
+                "confidence": confidence,
+                "description": relationship.get("description"),
+            }
+        )
 
         # Index by relationship type
         if rel_type_key not in self.by_type:
@@ -137,11 +141,13 @@ class RelationshipIndex:
             # Get full relationship data from by_subject
             for rel in self.by_subject.get(source_key, []):
                 if rel["target"].lower() == target_key and rel["source_page"] == source_page:
-                    results.append({
-                        "subject": source_key,
-                        "target": target_key,
-                        **rel,
-                    })
+                    results.append(
+                        {
+                            "subject": source_key,
+                            "target": target_key,
+                            **rel,
+                        }
+                    )
         return results
 
     def get_all_relationships(self, entity: str) -> list[dict[str, Any]]:
@@ -185,15 +191,11 @@ class RelationshipIndex:
         # Filter by relationship type if specified
         if rel_type:
             all_rels = [
-                r for r in all_rels
-                if r.get("relationship_type", "").lower() == rel_type.lower()
+                r for r in all_rels if r.get("relationship_type", "").lower() == rel_type.lower()
             ]
 
         # Filter by confidence
-        all_rels = [
-            r for r in all_rels
-            if r.get("confidence", 0.0) >= min_confidence
-        ]
+        all_rels = [r for r in all_rels if r.get("confidence", 0.0) >= min_confidence]
 
         return all_rels
 
@@ -243,7 +245,7 @@ class RelationshipIndex:
         by_type_data = data.get("by_type", {})
         self.by_type = {}
         for k, v_list in by_type_data.items():
-            self.by_type[k] = set(tuple(v) if isinstance(v, list) else v for v in v_list)
+            self.by_type[k] = {tuple(v) if isinstance(v, list) else v for v in v_list}
 
         stats = self.get_stats()
         logger.info(f"Loaded relationship index ({stats['total_relationships']} relationships)")

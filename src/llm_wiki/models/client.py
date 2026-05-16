@@ -241,8 +241,7 @@ class ClaudeAgentSDKClient(ModelClient):
             import claude_agent_sdk  # type: ignore[import-not-found]
         except ImportError as e:
             raise ModelClientError(
-                "claude-agent-sdk not installed. "
-                "Install with: pip install 'llm-wiki[claude-agent]'"
+                "claude-agent-sdk not installed. Install with: pip install 'llm-wiki[claude-agent]'"
             ) from e
 
         self._sdk = claude_agent_sdk

@@ -212,6 +212,101 @@ def daemon_jobs_history(job_name: str, limit: int, wiki_base: Path):
             click.echo(f"      error: {ex.error}")
 
 
+# Mapping of CLI job names to trigger functions.
+# Each entry is (module_name, function_name, extra_kwargs_import).
+# extra_kwargs_import is like ("Duplic gutenConfig", "llm_wiki.models.config")
+#   meaning import the class and pass it as the 'config' kwarg.
+_JOB_DISPATCH: dict[str, tuple[str, str, str | None]] = {
+    "inbox-scan": ("llm_wiki.ingest.watcher", "run_inbox_scan", None),
+    "queue-to-pages": ("llm_wiki.daemon.jobs.queue_to_pages", "run_queue_to_pages", None),
+    "governance": ("llm_wiki.daemon.jobs.governance", "run_governance_check", None),
+    "export": ("llm_wiki.daemon.jobs.export", "run_export_job", None),
+    "index-rebuild": ("llm_wiki.daemon.jobs.index_rebuild", "run_index_rebuild", None),
+    "retry-failed-ingests": (
+        "llm_wiki.daemon.jobs.retry_failed_ingests",
+        "run_retry_failed_ingests",
+        None,
+    ),
+    "review-queue": ("llm_wiki.daemon.jobs.review_queue", "run_review_queue_job", None),
+    "promotion": (
+        "llm_wiki.daemon.jobs.promotion",
+        "run_promotion_check",
+        "PromotionConfig:llm_wiki.promotion.config",
+    ),
+    "duplicates": (
+        "llm_wiki.daemon.jobs.duplicates",
+        "run_duplicate_detection",
+        "DuplicatesConfig:llm_wiki.models.config",
+    ),
+}
+
+
+@main.command("trigger")
+@click.argument("job_name")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def trigger_job(job_name: str, wiki_base: Path):
+    """Run a daemon job manually from the command line.
+
+    Available jobs:
+    \b
+     inbox-scan           Scan inbox for new files
+     queue-to-pages       Migrate queued files to published pages
+     governance           Run governance checks on published pages
+     export               Re-run all export formats
+     index-rebuild        Rebuild all search indexes
+     retry-failed-ingests Retry previously failed ingestions
+     review-queue         Populate the review queue
+     promotion            Run page promotion checks
+     duplicates           Detect duplicate pages
+
+    Results are printed to stdout as JSON for scripting.
+    """
+    import importlib as _imp
+    import json as _json
+
+    entry = _JOB_DISPATCH.get(job_name)
+    if entry is None:
+        known = ", ".join(sorted(_JOB_DISPATCH))
+        click.echo(f"Unknown job '{job_name}'. Available: {known}", err=True)
+        raise click.Abort()
+
+    mod_name, fn_name = entry[0], entry[1]
+    try:
+        mod = _imp.import_module(mod_name)
+    except ImportError as e:
+        click.echo(f"Failed to import {mod_name}: {e}", err=True)
+        raise click.Abort() from e
+
+    fn = getattr(mod, fn_name, None)
+    if fn is None:
+        click.echo(f"{mod_name} has no {fn_name}", err=True)
+        raise click.Abort()
+
+    click.echo(f"Running '{job_name}' at {wiki_base}...")
+
+    # Resolve extra kwargs if the trigger function needs them
+    kwargs = {"wiki_base": wiki_base}
+    if entry[2] is not None:
+        class_name, cfg_mod_name = entry[2].split(":", 1)
+        cfg_mod = _imp.import_module(cfg_mod_name)
+        cls = getattr(cfg_mod, class_name)
+        kwargs["config"] = cls()
+
+    try:
+        result = fn(**kwargs)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort() from e
+
+    click.echo("\nResult:")
+    click.echo(_json.dumps(result, indent=2, default=str))
+
+
 @main.group()
 def search():
     """Search and query wiki content."""
@@ -482,7 +577,6 @@ def ingest_obsidian(vault_path: Path, domain: str, wiki_base: Path):
     VAULT_PATH: Path to the Obsidian vault directory.
     """
     import shutil
-    from pathlib import Path
 
     # Find all markdown files in the vault
     md_files = list(vault_path.rglob("*.md"))
@@ -850,7 +944,11 @@ def govern_contradictions(wiki_base: Path, min_confidence: float, output: Path |
     help="Minimum score to add duplicates to review queue",
 )
 def govern_duplicates(
-    wiki_base: Path, min_score: float, output: Path | None, add_to_queue: bool, queue_min_score: float
+    wiki_base: Path,
+    min_score: float,
+    output: Path | None,
+    add_to_queue: bool,
+    queue_min_score: float,
 ):
     """Detect and report duplicate entity pages."""
     from llm_wiki.governance.duplicates import DuplicateDetector
@@ -945,7 +1043,7 @@ def govern_merge_duplicate(wiki_base: Path, page_1: str, page_2: str, primary_pa
         detector = DuplicateDetector(wiki_base=wiki_base)
         result = detector.merge_duplicate(page_1, page_2, primary_page, wiki_base)
 
-        click.echo(f"\n✓ Merge complete!")
+        click.echo("\n✓ Merge complete!")
         click.echo(f"  - Primary page: {result['primary_page']}")
         click.echo(f"  - Secondary page: {result['secondary_page']}")
         click.echo(f"  - Backlinks updated: {result['backlinks_updated']}")
@@ -1448,13 +1546,9 @@ def query_relationships(
     for rel in results:
         direction = rel.get("direction", "unknown")
         if direction == "outgoing":
-            click.echo(
-                f"  → {rel['relationship_type']} → {rel.get('target', 'unknown')}"
-            )
+            click.echo(f"  → {rel['relationship_type']} → {rel.get('target', 'unknown')}")
         else:
-            click.echo(
-                f"  ← {rel['relationship_type']} ← {rel.get('subject', 'unknown')}"
-            )
+            click.echo(f"  ← {rel['relationship_type']} ← {rel.get('subject', 'unknown')}")
         click.echo(f"    Source page: {rel.get('source_page', 'unknown')}")
         click.echo(f"    Confidence: {rel.get('confidence', 0.9):.2f}")
         if rel.get("description"):
@@ -2137,7 +2231,16 @@ def review():
     "--type",
     "item_type",
     type=click.Choice(
-        ["page", "claim", "contradiction", "promotion", "duplicate", "routing_mistake", "sourceless_claim", "manual"]
+        [
+            "page",
+            "claim",
+            "contradiction",
+            "promotion",
+            "duplicate",
+            "routing_mistake",
+            "sourceless_claim",
+            "manual",
+        ]
     ),
     default=None,
     help="Filter by type",
@@ -2192,7 +2295,9 @@ def review_list(status: str, item_type: str | None, priority: str | None, wiki_b
 
     for item in items[:50]:
         created_str = item.created_at.strftime("%Y-%m-%d %H:%M")
-        click.echo(f"{item.id:<25} {item.type.value:<20} {item.priority.value:<10} {item.target_id:<30} {created_str}")
+        click.echo(
+            f"{item.id:<25} {item.type.value:<20} {item.priority.value:<10} {item.target_id:<30} {created_str}"
+        )
 
     if len(items) > 50:
         click.echo(f"\n... and {len(items) - 50} more items")
@@ -2235,7 +2340,7 @@ def review_show(item_id: str, wiki_base: Path):
         click.echo(f"Notes:      {item.notes}")
 
     if item.metadata:
-        click.echo(f"\nMetadata:")
+        click.echo("\nMetadata:")
         for key, value in item.metadata.items():
             click.echo(f"  {key}: {value}")
 
@@ -2271,7 +2376,7 @@ def review_approve(item_id: str, notes: str | None, reviewed_by: str, wiki_base:
             click.echo(f"  Notes: {notes}")
     except ValueError as e:
         click.echo(f"Error: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e
 
 
 @review.command("reject")
@@ -2305,7 +2410,7 @@ def review_reject(item_id: str, notes: str | None, reviewed_by: str, wiki_base: 
             click.echo(f"  Reason: {notes}")
     except ValueError as e:
         click.echo(f"Error: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e
 
 
 @review.command("defer")
@@ -2334,7 +2439,7 @@ def review_defer(item_id: str, notes: str | None, wiki_base: Path):
             click.echo(f"  Notes: {notes}")
     except ValueError as e:
         click.echo(f"Error: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e
 
 
 @review.command("stats")
@@ -2371,7 +2476,21 @@ def review_stats(wiki_base: Path):
 
 
 @review.command("add")
-@click.argument("item-type", type=click.Choice(["page", "claim", "contradiction", "promotion", "duplicate", "routing_mistake", "sourceless_claim", "manual"]))
+@click.argument(
+    "item-type",
+    type=click.Choice(
+        [
+            "page",
+            "claim",
+            "contradiction",
+            "promotion",
+            "duplicate",
+            "routing_mistake",
+            "sourceless_claim",
+            "manual",
+        ]
+    ),
+)
 @click.argument("target-id")
 @click.argument("reason")
 @click.option(
@@ -2414,7 +2533,7 @@ def review_add(item_type: str, target_id: str, reason: str, priority: str, wiki_
         click.echo(f"  Reason: {reason}")
     except ValueError as e:
         click.echo(f"Error: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e
 
 
 @review.command("cleanup")
@@ -2517,13 +2636,15 @@ def integrate_check(page_id: str, extracted: str, auto_resolve: bool, wiki_base:
     if result.conflicts:
         click.echo(f"\nConflicts ({len(result.conflicts)}):")
         for conflict in result.conflicts:
-            click.echo(f"  - {conflict.field}: {conflict.existing_value} vs {conflict.extracted_value}")
+            click.echo(
+                f"  - {conflict.field}: {conflict.existing_value} vs {conflict.extracted_value}"
+            )
             click.echo(f"    Reason: {conflict.reason}")
     else:
         click.echo("\nNo conflicts detected")
 
     # Summary
-    click.echo(f"\nSummary:")
+    click.echo("\nSummary:")
     click.echo(f"  Fields changed: {result.fields_changed}")
     click.echo(f"  Fields merged: {result.fields_merged}")
     click.echo(f"  Conflicts: {result.conflicts_detected}")
@@ -2810,9 +2931,7 @@ def hooks_install(scope: str, wiki_base: Path, dry_run: bool):
         # Use the current interpreter (``sys.executable``) — installs made
         # under a venv or uv environment must invoke that same Python, not
         # bare "python" from PATH.
-        command = (
-            f'"{_sys.executable}" "{capture_script}" {hook_name} "{inbox_dir}"'
-        )
+        command = f'"{_sys.executable}" "{capture_script}" {hook_name} "{inbox_dir}"'
         # SessionEnd / PreCompact entries do not use ``matcher`` (that's a
         # PreToolUse/PostToolUse field). Omit it to stay schema-correct.
         return {
@@ -2830,8 +2949,7 @@ def hooks_install(scope: str, wiki_base: Path, dry_run: bool):
                 if not (
                     isinstance(item, dict)
                     and any(
-                        isinstance(h, dict)
-                        and "capture_session.py" in str(h.get("command", ""))
+                        isinstance(h, dict) and "capture_session.py" in str(h.get("command", ""))
                         for h in item.get("hooks", [])
                     )
                 )
@@ -2892,8 +3010,7 @@ def hooks_uninstall(scope: str):
             if not (
                 isinstance(item, dict)
                 and any(
-                    isinstance(h, dict)
-                    and "capture_session.py" in str(h.get("command", ""))
+                    isinstance(h, dict) and "capture_session.py" in str(h.get("command", ""))
                     for h in item.get("hooks", [])
                 )
             )

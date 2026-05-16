@@ -36,18 +36,30 @@ Creates directory structure based on `config/domains.yaml`.
 
 ### `llm-wiki daemon`
 
-Start the wiki daemon for continuous processing.
+Start the wiki daemon, or manage daemon jobs.
 
 ```bash
-llm-wiki daemon [--config-dir PATH]
+llm-wiki daemon [SUBCOMMAND] [OPTIONS]
 ```
+
+**Subcommands:**
+- `start` — Start the wiki daemon (explicit form)
+- `status` — Show daemon status and recent job execution summary
+- `jobs` — Inspect and manage individual daemon jobs
 
 **Options:**
 - `--config-dir`: Path to configuration directory (default: `config`)
 
 **Example:**
 ```bash
+# Start daemon (default)
 uv run llm-wiki daemon
+
+# Start explicitly
+uv run llm-wiki daemon start
+
+# Check status
+uv run llm-wiki daemon status
 ```
 
 **Note:** The daemon runs continuously. Use Ctrl+C to stop.
@@ -67,7 +79,7 @@ llm-wiki search query [QUERY_TEXT] [OPTIONS]
 
 **Options:**
 - `--domain`: Filter by domain
-- `--kind`: Filter by kind (page, entity, concept)
+- `--kind`: Filter by kind (page, entity, concept, source, qa)
 - `--tags`: Filter by tags (can be repeated)
 - `--limit`: Maximum results (default: 10)
 - `--wiki-base`: Path to wiki base directory (default: `wiki_system`)
@@ -87,26 +99,9 @@ uv run llm-wiki search query --tags python --tags api
 uv run llm-wiki search query "API design" --domain vulpine-solutions --limit 5
 ```
 
----
-
-### `llm-wiki search get`
-
-Get a specific page by ID.
-
-```bash
-llm-wiki search get PAGE_ID [OPTIONS]
-```
-
-**Arguments:**
-- `PAGE_ID`: Page identifier (kebab-case)
-
-**Options:**
-- `--wiki-base`: Path to wiki base directory (default: `wiki_system`)
-
-**Example:**
-```bash
-uv run llm-wiki search get python-programming
-```
+**Other search subcommands:**
+- `llm-wiki search get PAGE_ID` — Get a specific page by ID
+- `llm-wiki search backlinks PAGE_ID` — Show all pages linking to a given page
 
 ---
 
@@ -161,6 +156,110 @@ uv run llm-wiki ingest text "Python is a programming language" \
 
 ---
 
+### `llm-wiki ingest obsidian`
+
+Import an Obsidian vault into the wiki.
+
+```bash
+llm-wiki ingest obsidian VAULT_PATH [OPTIONS]
+```
+
+**Arguments:**
+- `VAULT_PATH`: Path to Obsidian vault directory
+
+---
+
+### `llm-wiki ingest failed`
+
+Manage failed ingestions.
+
+**Subcommands:**
+- `list` — List failed ingests
+- `retry` — Retry a failed ingestion
+- `approve` — Mark a failed ingestion as approved despite failure
+- `discard` — Discard a failed ingestion
+
+---
+
+### `llm-wiki ingest stats`
+
+Show ingestion statistics including failed files.
+
+---
+
+### `llm-wiki claims extract`
+
+Extract factual claims from a wiki page.
+
+```bash
+llm-wiki claims extract PAGE_ID [OPTIONS]
+```
+
+**Options:**
+- `--wiki-base`: Path to wiki base (default: `wiki_system`)
+
+---
+
+### `llm-wiki claims list`
+
+List all indexed claims for a wiki page.
+
+```bash
+llm-wiki claims list PAGE_ID [OPTIONS]
+```
+
+---
+
+### `llm-wiki claims search`
+
+Search claims across all wiki pages.
+
+```bash
+llm-wiki claims search QUERY [OPTIONS]
+```
+
+---
+
+### `llm-wiki changes list`
+
+List recent changes across all pages (or for a specific page).
+
+```bash
+llm-wiki changes list [OPTIONS]
+```
+
+---
+
+### `llm-wiki changes diff`
+
+Show a diff of all changes to a page in a time window.
+
+```bash
+llm-wiki changes diff PAGE_ID --from DATE --to DATE
+```
+
+---
+
+### `llm-wiki changes show`
+
+Show full details of a single change entry.
+
+```bash
+llm-wiki changes show CHANGE_ID
+```
+
+---
+
+### `llm-wiki changes stats`
+
+Show change log statistics.
+
+```bash
+llm-wiki changes stats [OPTIONS]
+```
+
+---
+
 ### `llm-wiki govern check`
 
 Run governance checks and generate report.
@@ -185,6 +284,51 @@ uv run llm-wiki govern check
 
 ---
 
+### `llm-wiki govern contradictions`
+
+Detect and report contradictions across pages.
+
+```bash
+llm-wiki govern contradictions [OPTIONS]
+```
+
+**Options:**
+- `--wiki-base`: Path to wiki base directory (default: `wiki_system`)
+- `--min-confidence`: Minimum confidence threshold (default: `0.6`)
+- `--output`: Custom output file path
+
+---
+
+### `llm-wiki govern duplicates`
+
+Detect and report duplicate entity pages.
+
+```bash
+llm-wiki govern duplicates [OPTIONS]
+```
+
+---
+
+### `llm-wiki govern merge-duplicate`
+
+Merge a duplicate page into the primary page.
+
+```bash
+llm-wiki govern merge-duplicate DUPLICATE_ID PRIMARY_ID [OPTIONS]
+```
+
+---
+
+### `llm-wiki govern routing-mistakes`
+
+Detect pages that may be routed to the wrong domain.
+
+```bash
+llm-wiki govern routing-mistakes [OPTIONS]
+```
+
+---
+
 ### `llm-wiki govern rebuild-index`
 
 Rebuild search indexes.
@@ -196,14 +340,29 @@ llm-wiki govern rebuild-index [OPTIONS]
 **Options:**
 - `--wiki-base`: Path to wiki base directory (default: `wiki_system`)
 
-**Example:**
-```bash
-uv run llm-wiki govern rebuild-index
-```
-
 **Output:**
 - Metadata index pages count
 - Fulltext index documents count
+
+---
+
+### `llm-wiki govern update-backlinks`
+
+Update the backlink index for pages that have changed.
+
+```bash
+llm-wiki govern update-backlinks [OPTIONS]
+```
+
+---
+
+### `llm-wiki govern clean-broken-links`
+
+Remove stale broken links from the backlink index.
+
+```bash
+llm-wiki govern clean-broken-links [OPTIONS]
+```
 
 ---
 
@@ -243,9 +402,14 @@ llm-wiki export llmstxt [OPTIONS]
 - `--output`: Output file path (default: `wiki_system/exports/llms.txt`)
 - `--wiki-base`: Path to wiki base directory (default: `wiki_system`)
 
-**Example:**
+---
+
+### `llm-wiki export llmsfull`
+
+Export to llms-full.txt format with comprehensive page data.
+
 ```bash
-uv run llm-wiki export llmstxt --output custom-output.txt
+llm-wiki export llmsfull [OPTIONS]
 ```
 
 ---
@@ -258,14 +422,249 @@ Export graph of page relationships.
 llm-wiki export graph [OPTIONS]
 ```
 
-**Options:**
-- `--output`: Output file path (default: `wiki_system/exports/graph.json`)
-- `--wiki-base`: Path to wiki base directory (default: `wiki_system`)
+---
 
-**Example:**
+### `llm-wiki graph edges`
+
+Show edges from/to a node in the graph.
+
 ```bash
-uv run llm-wiki export graph --output my-graph.json
+llm-wiki graph edges NODE_ID [OPTIONS]
 ```
+
+---
+
+### `llm-wiki graph neighbors`
+
+Find all nodes reachable within N hops.
+
+```bash
+llm-wiki graph neighbors NODE_ID [OPTIONS]
+```
+
+---
+
+### `llm-wiki graph path`
+
+Find directed paths between two nodes.
+
+```bash
+llm-wiki graph path SOURCE TARGET [OPTIONS]
+```
+
+---
+
+### `llm-wiki graph stats`
+
+Show graph edge index statistics.
+
+```bash
+llm-wiki graph stats [OPTIONS]
+```
+
+---
+
+### `llm-wiki graph subgraph`
+
+Extract the subgraph containing the given nodes.
+
+```bash
+llm-wiki graph subgraph NODE1 NODE2 [OPTIONS]
+```
+
+---
+
+### `llm-wiki promote check`
+
+Check for pages eligible for promotion to shared space.
+
+```bash
+llm-wiki promote check [OPTIONS]
+```
+
+Shows all pages eligible for promotion with scores and cross-domain references.
+
+---
+
+### `llm-wiki promote process`
+
+Process all promotion candidates.
+
+```bash
+llm-wiki promote process [OPTIONS]
+```
+
+Auto-promotes eligible pages or adds them to the review queue.
+
+---
+
+### `llm-wiki query relationships`
+
+Query relationships in the wiki.
+
+```bash
+llm-wiki query relationships [OPTIONS]
+```
+
+---
+
+### `llm-wiki query rebuild-relationships`
+
+Rebuild the relationship index from all wiki pages.
+
+```bash
+llm-wiki query rebuild-relationships [OPTIONS]
+```
+
+---
+
+### `llm-wiki review add`
+
+Manually add an item to the review queue.
+
+```bash
+llm-wiki review add [OPTIONS]
+```
+
+---
+
+### `llm-wiki review list`
+
+List review queue items.
+
+```bash
+llm-wiki review list [OPTIONS]
+```
+
+---
+
+### `llm-wiki review show`
+
+Show details of a review item.
+
+```bash
+llm-wiki review show ITEM_ID
+```
+
+---
+
+### `llm-wiki review approve`
+
+Approve a review item.
+
+```bash
+llm-wiki review approve ITEM_ID [OPTIONS]
+```
+
+---
+
+### `llm-wiki review reject`
+
+Reject a review item.
+
+```bash
+llm-wiki review reject ITEM_ID [OPTIONS]
+```
+
+---
+
+### `llm-wiki review defer`
+
+Defer a review item for later.
+
+```bash
+llm-wiki review defer ITEM_ID [OPTIONS]
+```
+
+---
+
+### `llm-wiki review stats`
+
+Show review queue statistics.
+
+```bash
+llm-wiki review stats [OPTIONS]
+```
+
+---
+
+### `llm-wiki review cleanup`
+
+Clean up old resolved review items.
+
+```bash
+llm-wiki review cleanup [OPTIONS]
+```
+
+---
+
+### `llm-wiki integrate apply`
+
+Apply integration to a page.
+
+```bash
+llm-wiki integrate apply PAGE_ID [OPTIONS]
+```
+
+---
+
+### `llm-wiki integrate check`
+
+Preview integration result without applying changes.
+
+```bash
+llm-wiki integrate check PAGE_ID [OPTIONS]
+```
+
+---
+
+### `llm-wiki integrate history`
+
+Show integration history for a page.
+
+```bash
+llm-wiki integrate history PAGE_ID
+```
+
+---
+
+### `llm-wiki integrate rollback`
+
+Rollback integration to previous state.
+
+```bash
+llm-wiki integrate rollback PAGE_ID [OPTIONS]
+```
+
+---
+
+### `llm-wiki integrate strategies`
+
+Show merge strategy configuration.
+
+```bash
+llm-wiki integrate strategies
+```
+
+---
+
+### `llm-wiki trigger JOB_NAME`
+
+Run a daemon job manually from the command line.
+
+```bash
+llm-wiki trigger JOB_NAME [OPTIONS]
+```
+
+**Available jobs:**
+- `inbox-scan` — Scan inbox for new files
+- `queue-to-pages` — Migrate queued files to published pages
+- `governance` — Run governance checks on published pages
+- `export` — Re-run all export formats
+- `index-rebuild` — Rebuild all search indexes
+- `retry-failed-ingests` — Retry previously failed ingestions
+- `review-queue` — Populate the review queue
+- `promotion` — Run page promotion checks
 
 ---
 
@@ -361,16 +760,40 @@ uv run llm-wiki search query "API" --domain vulpine-solutions
 uv run llm-wiki search get python-programming
 ```
 
-### Maintenance
+### Governance
 ```bash
-# Check quality
+# Full governance check
 uv run llm-wiki govern check
 
-# Rebuild indexes if needed
+# Rebuild indexes
 uv run llm-wiki govern rebuild-index
+
+# Check for contradictions
+uv run llm-wiki govern contradictions
 
 # Export for LLM context
 uv run llm-wiki export all
+```
+
+### Review Queue
+```bash
+# View pending items
+uv run llm-wiki review list
+
+# Approve an item
+uv run llm-wiki review approve item-id
+
+# Check for promotion candidates
+uv run llm-wiki promote check
+```
+
+### Integration
+```bash
+# Preview integration
+uv run llm-wiki integrate check page-id
+
+# Apply integration
+uv run llm-wiki integrate apply page-id
 ```
 
 ---
@@ -386,7 +809,7 @@ uv run llm-wiki export all
 
 None required for basic operation.
 
-For LLM extraction (future):
+For LLM extraction:
 - `OPENAI_API_KEY`: OpenAI API key
 - `ANTHROPIC_API_KEY`: Anthropic API key
 

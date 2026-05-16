@@ -87,7 +87,8 @@ class WikiDaemon:
             self.scheduler.add_job(
                 func=run_duplicate_detection,
                 job_name="duplicates_check",
-                interval_seconds=self.config.daemon.daemon.duplicates.duplicates_check_every_hours * 3600,
+                interval_seconds=self.config.daemon.daemon.duplicates.duplicates_check_every_hours
+                * 3600,
                 wiki_base=wiki_base,
                 config=self.config.daemon.daemon.duplicates,
             )
@@ -128,6 +129,33 @@ class WikiDaemon:
                 interval_seconds=self.config.daemon.daemon.review_queue_every_minutes * 60,
                 wiki_base=wiki_base,
             )
+
+        # Register inbox scan job (runs after scheduler starts to avoid races)
+        from llm_wiki.ingest.watcher import run_inbox_scan
+
+        self.scheduler.add_job(
+            func=run_inbox_scan,
+            job_name="inbox_scan",
+            interval_seconds=self.config.daemon.daemon.inbox_poll_seconds,
+            wiki_base=wiki_base,
+        )
+        logger.info(
+            f"Registered inbox_scan job (every {self.config.daemon.daemon.inbox_poll_seconds}s)"
+        )
+
+        # Register queue-to-pages job
+        from llm_wiki.daemon.jobs.queue_to_pages import run_queue_to_pages
+
+        self.scheduler.add_job(
+            func=run_queue_to_pages,
+            job_name="queue_to_pages",
+            interval_seconds=self.config.daemon.daemon.migrate_queue_every_minutes * 60,
+            wiki_base=wiki_base,
+        )
+        logger.info(
+            f"Registered queue_to_pages job "
+            f"(every {self.config.daemon.daemon.migrate_queue_every_minutes}m)"
+        )
 
         # Start scheduler
         self.scheduler.start()

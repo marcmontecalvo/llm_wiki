@@ -150,12 +150,14 @@ class TestPromotionWorkflow:
             ref_content2 = ref_page2.read_text()
 
             # The references should now have "shared/" prefix
-            assert "[[shared/distributed-systems]]" in ref_content1 or "[[shared/distributed-systems" in ref_content1, (
-                f"Reference not updated in microservices-arch. Content: {ref_content1[:200]}"
-            )
-            assert "[[shared/distributed-systems]]" in ref_content2 or "[[shared/distributed-systems" in ref_content2, (
-                f"Reference not updated in kubernetes-deploy. Content: {ref_content2[:200]}"
-            )
+            assert (
+                "[[shared/distributed-systems]]" in ref_content1
+                or "[[shared/distributed-systems" in ref_content1
+            ), f"Reference not updated in microservices-arch. Content: {ref_content1[:200]}"
+            assert (
+                "[[shared/distributed-systems]]" in ref_content2
+                or "[[shared/distributed-systems" in ref_content2
+            ), f"Reference not updated in kubernetes-deploy. Content: {ref_content2[:200]}"
 
     def test_promotion_with_multiple_references_from_same_domain(
         self, wiki_setup: tuple[Path, Path, Path]

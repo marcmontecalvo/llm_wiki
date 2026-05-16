@@ -35,7 +35,7 @@ class ObsidianVaultAdapter(SourceAdapter):
         r"(\[\[([^\]|]+)(?:\|[^\]]+)?\]\])|"  # wikilinks [[...]]
         r"(!\[\[([^\]|]+)(?:\|[^\]]+)?\]\])|"  # embedded ![[...]]
         r"(#[a-zA-Z0-9_\-]+)",  # hashtags #tag
-        re.MULTILINE
+        re.MULTILINE,
     )
 
     @classmethod

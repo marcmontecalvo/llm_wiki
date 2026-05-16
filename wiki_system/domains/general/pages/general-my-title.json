@@ -1,0 +1,17 @@
+{
+  "author": "John Doe",
+  "domain": "general",
+  "id": "general-my-title",
+  "kind": "source",
+  "source_type": "markdown",
+  "status": "published",
+  "tags": [
+    "test"
+  ],
+  "title": "My Title",
+  "_computed": {
+    "word_count": 1,
+    "char_count": 8,
+    "has_content": true
+  }
+}

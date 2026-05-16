@@ -47,16 +47,12 @@ class DuplicateDetectionJob:
             # Run detection
             report = detector.analyze_all_pages(self.wiki_base)
 
-            logger.info(
-                f"Duplicate detection complete: {report.total_candidates} candidates found"
-            )
+            logger.info(f"Duplicate detection complete: {report.total_candidates} candidates found")
 
             # Optionally add to review queue if enabled
             added_to_queue = 0
             if self.config.require_review:
-                added_to_queue = len(
-                    detector.add_to_review_queue(report, min_score=0.5)
-                )
+                added_to_queue = len(detector.add_to_review_queue(report, min_score=0.5))
                 logger.info(f"Added {added_to_queue} duplicates to review queue")
 
             # Optionally auto-merge if enabled

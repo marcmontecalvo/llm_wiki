@@ -172,7 +172,7 @@ if result.success:
 ### Check for Candidates
 
 ```bash
-llm-wiki promote check
+llm-wiki promote check [OPTIONS]
 ```
 
 Shows all pages eligible for promotion with scores and cross-domain references.
@@ -180,34 +180,23 @@ Shows all pages eligible for promotion with scores and cross-domain references.
 ### Process Promotions
 
 ```bash
-llm-wiki promote process
+llm-wiki promote process [OPTIONS]
 ```
 
-Automatically promotes eligible pages or adds them to review queue.
+Automatically promotes eligible pages or adds them to the review queue for approval.
 
-### Promote Specific Page
+**Options:**
+- `--wiki-base`: Path to wiki base directory
+- `--config`: Path to daemon config (default: `config/daemon.yaml`)
+- `--dry-run`: Process candidates without making changes
+
+### Daemon Job
+
+The promotion job also runs automatically as part of the daemon:
 
 ```bash
-llm-wiki promote promote test-page --domain domain1
+uv run llm-wiki trigger promotion
 ```
-
-Manually promote a specific page.
-
-### Un-promote Page
-
-```bash
-llm-wiki promote unpromote test-page --domain domain1
-```
-
-Move a shared page back to domain-local.
-
-### Dry-Run Mode
-
-```bash
-llm-wiki promote promote test-page --domain domain1 --dry-run
-```
-
-Simulates promotion without making changes.
 
 ## Integration with Review Queue
 

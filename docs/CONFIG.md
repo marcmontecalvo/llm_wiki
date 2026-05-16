@@ -228,26 +228,29 @@ jobs:
 **Example:**
 ```yaml
 daemon:
-  check_interval: 60            # Check for work every 60 seconds
-  max_concurrent_jobs: 3        # Run up to 3 jobs in parallel
-  log_level: INFO               # Log level
+  inbox_poll_seconds: 15         # Poll inbox every 15 seconds
+  migrate_queue_every_minutes: 15 # Process queue to pages every 15 min
+  retry_failed_ingests_every_minutes: 30
+  rebuild_index_every_minutes: 30
+  lint_every_minutes: 60         # Governance lint every hour
+  stale_check_every_hours: 24    # Staleness check every day
+  export_every_minutes: 60       # Export every hour
+  duplicates_check_every_hours: 24
+  review_queue_every_minutes: 60 # Populate review queue every hour
+  review_queue_min_page_quality: 0.4
+  review_queue_min_claim_confidence: 0.5
+  review_queue_max_pending: 1000
+  review_queue_retention_days: 30
+  max_parallel_jobs: 2           # Run up to 2 jobs in parallel
+  log_level: INFO                # Log verbosity
+  review_queue_enabled: true
 
-jobs:
-  inbox_watcher:
-    enabled: true
-    interval: 30                # Check inbox every 30 seconds
-
-  index_rebuild:
-    enabled: true
-    interval: 3600              # Rebuild indexes every hour
-
-  governance:
-    enabled: true
-    interval: 7200              # Run governance every 2 hours
-
-  export:
-    enabled: true
-    interval: 3600              # Export every hour
+duplicates:
+  enabled: true
+  detection_interval: 86400      # Daily check
+  min_score_to_flag: 0.5
+  auto_merge_threshold: 0.9
+  require_review: true
 ```
 
 **Field Reference:**

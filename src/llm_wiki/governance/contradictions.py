@@ -135,22 +135,30 @@ class ContradictionDetector:
             Contradiction if detected, None otherwise
         """
         # Try negation detection first (high precision)
-        negation_result = self._detect_negation_contradiction(claim_1, page_id_1, claim_2, page_id_2)
+        negation_result = self._detect_negation_contradiction(
+            claim_1, page_id_1, claim_2, page_id_2
+        )
         if negation_result:
             return negation_result
 
         # Try temporal contradictions
-        temporal_result = self._detect_temporal_contradiction(claim_1, page_id_1, claim_2, page_id_2)
+        temporal_result = self._detect_temporal_contradiction(
+            claim_1, page_id_1, claim_2, page_id_2
+        )
         if temporal_result:
             return temporal_result
 
         # Try numerical contradictions
-        numerical_result = self._detect_numerical_contradiction(claim_1, page_id_1, claim_2, page_id_2)
+        numerical_result = self._detect_numerical_contradiction(
+            claim_1, page_id_1, claim_2, page_id_2
+        )
         if numerical_result:
             return numerical_result
 
         # Try semantic contradiction (requires similarity check)
-        semantic_result = self._detect_semantic_contradiction(claim_1, page_id_1, claim_2, page_id_2)
+        semantic_result = self._detect_semantic_contradiction(
+            claim_1, page_id_1, claim_2, page_id_2
+        )
         if semantic_result:
             return semantic_result
 
@@ -358,14 +366,14 @@ Respond with JSON:
             Contradiction if detected
         """
         # Get temporal context from claims if available
-        temporal_1 = getattr(claim_1, 'temporal_context', None)
-        temporal_2 = getattr(claim_2, 'temporal_context', None)
+        temporal_1 = getattr(claim_1, "temporal_context", None)
+        temporal_2 = getattr(claim_2, "temporal_context", None)
 
         # Check for explicit temporal keywords
         temporal_patterns = [
-            r'\b(before|after|during)\b',
-            r'\b(earlier|later|previously|formerly)\b',
-            r'\b(then|now|originally|subsequently)\b',
+            r"\b(before|after|during)\b",
+            r"\b(earlier|later|previously|formerly)\b",
+            r"\b(then|now|originally|subsequently)\b",
         ]
 
         text_1 = claim_1.claim.lower()
@@ -378,16 +386,24 @@ Respond with JSON:
         if has_temporal_1 and has_temporal_2:
             # Check for direct temporal opposition
             temporal_opposition = [
-                ('before', 'after'),
-                ('earlier', 'later'),
-                ('formerly', 'now'),
+                ("before", "after"),
+                ("earlier", "later"),
+                ("formerly", "now"),
             ]
 
             for opp1, opp2 in temporal_opposition:
                 if (opp1 in text_1 and opp2 in text_2) or (opp2 in text_1 and opp1 in text_2):
                     similarity = self._simple_similarity(
-                        re.sub(r'\b(before|after|during|earlier|later|previously|formerly|then|now|originally|subsequently)\b', '', text_1),
-                        re.sub(r'\b(before|after|during|earlier|later|previously|formerly|then|now|originally|subsequently)\b', '', text_2)
+                        re.sub(
+                            r"\b(before|after|during|earlier|later|previously|formerly|then|now|originally|subsequently)\b",
+                            "",
+                            text_1,
+                        ),
+                        re.sub(
+                            r"\b(before|after|during|earlier|later|previously|formerly|then|now|originally|subsequently)\b",
+                            "",
+                            text_2,
+                        ),
                     )
                     if similarity > 0.7:
                         confidence = 0.75 + similarity * 0.15

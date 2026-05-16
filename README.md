@@ -114,10 +114,11 @@ Do **not** start with 20 domains. Start with 4-6.
 
 **✅ v0.1.0 - Core system complete!**
 
-- 534 tests (93% coverage)
-- Full CLI interface (`llm-wiki --help`)
-- Complete ingestion, search, governance, export, and contradiction detection pipeline
+- 500+ tests (93% coverage)
+- Full CLI interface (`llm-wiki --help`) — 24 commands across 14 subcommands
+- Complete ingestion, search, governance, export, claims, contradiction detection, promotion, review queue, deterministic integration, change log, graph queries, Obsidian import, and daemon job management pipeline
 - CI/CD with GitHub Actions
+- Ruff linting + formatting (pyproject.toml + .pre-commit-config.yaml)
 
 ## Getting Started
 

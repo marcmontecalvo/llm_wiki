@@ -90,7 +90,8 @@ class DuplicatesConfig(BaseModel):
         default_factory=lambda: ["tech", "general"], description="Domains to check for duplicates"
     )
     exclude_kinds: list[str] = Field(
-        default_factory=lambda: ["source"], description="Page kinds to exclude from duplicate checking"
+        default_factory=lambda: ["source"],
+        description="Page kinds to exclude from duplicate checking",
     )
 
 
@@ -98,6 +99,9 @@ class DaemonConfig(BaseModel):
     """Configuration for the wiki daemon."""
 
     inbox_poll_seconds: int = Field(default=15, ge=1, description="Seconds between inbox polls")
+    migrate_queue_every_minutes: int = Field(
+        default=15, ge=1, description="Minutes between queue-to-pages migrations"
+    )
     retry_failed_ingests_every_minutes: int = Field(
         default=30, ge=1, description="Minutes between retry attempts"
     )

@@ -270,36 +270,20 @@ Generated: 2024-01-15 14:30:00
 
 ---
 
-## Planned Governance Features
+## All Governance Subcommands
 
-See `IMPLEMENTATION_STATUS.md` for future enhancements:
+| Command | Description |
+|---------|-------------|
+| `llm-wiki govern check` | Run lint, staleness, quality, orphan checks |
+| `llm-wiki govern contradictions --min-confidence 0.6` | Detect conflicting claims |
+| `llm-wiki govern duplicates` | Find near-duplicate pages |
+| `llm-wiki govern merge-duplicate DUP_PRIM` | Merge duplicate into primary |
+| `llm-wiki govern routing-mistakes` | Detect pages in wrong domain |
+| `llm-wiki govern rebuild-index` | Rebuild search indexes |
+| `llm-wiki govern update-backlinks` | Update backlink index |
+| `llm-wiki govern clean-broken-links` | Remove stale backlink refs |
 
-### Contradiction Detection (#70)
-- Detect conflicting claims across pages
-- Semantic similarity analysis
-- Negation detection
-- Confidence scoring
-
-### Review Queue (#71)
-- Manual review workflow
-- Review states (pending, approved, rejected)
-- Reviewer assignment
-- Review history
-
-### Duplicate Detection (#72)
-- Find duplicate entities/concepts
-- Suggest merges
-- Deduplication tools
-
-### Retry Failed Ingests (#74)
-- Track ingestion failures
-- Automatic retry with backoff
-- Error categorization
-
-### Routing Mistakes (#75)
-- Detect misrouted content
-- Suggest rerouting
-- Domain mismatch alerts
+All governance features are implemented and functional. No planned governance features remain outstanding.
 
 ---
 

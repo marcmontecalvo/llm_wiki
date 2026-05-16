@@ -1,0 +1,13 @@
+{
+  "domain": "general",
+  "id": "general-doc1",
+  "kind": "source",
+  "source_type": "markdown",
+  "status": "published",
+  "title": "Doc1",
+  "_computed": {
+    "word_count": 4,
+    "char_count": 22,
+    "has_content": true
+  }
+}

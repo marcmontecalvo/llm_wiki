@@ -360,9 +360,7 @@ class TestContradictionEdgeCases:
             source_reference="section 2",
         )
 
-        contradiction = detector._detect_negation_contradiction(
-            claim_1, "page1", claim_2, "page2"
-        )
+        contradiction = detector._detect_negation_contradiction(claim_1, "page1", claim_2, "page2")
 
         assert contradiction is not None
 
@@ -379,9 +377,7 @@ class TestContradictionEdgeCases:
             source_reference="section 2",
         )
 
-        contradiction = detector._detect_negation_contradiction(
-            claim_1, "page1", claim_2, "page2"
-        )
+        contradiction = detector._detect_negation_contradiction(claim_1, "page1", claim_2, "page2")
 
         assert contradiction is not None
 

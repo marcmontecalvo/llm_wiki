@@ -2,9 +2,8 @@
 
 import logging
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
-
-from datetime import datetime, timezone
 
 from llm_wiki.extraction.claims import ClaimsExtractor
 from llm_wiki.extraction.concepts import ConceptExtractor
@@ -222,7 +221,7 @@ class ExtractionPipeline:
         if not pairs:
             return
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         parent_sources = parent_metadata.get("sources", []) or []
 
         for pair in pairs:

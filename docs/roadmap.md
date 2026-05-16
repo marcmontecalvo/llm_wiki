@@ -29,6 +29,23 @@ Must-have:
 - scheduled lint/index jobs
 - transcript + markdown adapters
 - exports: `llms.txt`, JSON sidecars, simple graph export
+- claims extraction and contradiction detection
+- reverse link tracking and backlink index
+- page duplication detection
+- change log and diff tracking
+- deterministic page integration
+- Obsidian import support
+- Claims extraction, listing, and search
+- Change log (list, diff, show, stats)
+- Graph edge index (edges, neighbors, path, stats, subgraph)
+- Promotion to shared space with scoring and review
+- Review queue with full lifecycle (add, approve, reject, defer, cleanup)
+- Integration management (apply, check, rollback, strategy config)
+- Governance: contradiction detection, duplicate detection, routing mistakes, backlink maintenance
+- LLM provider abstraction (OpenAI, Anthropic, Claude Agent SDK)
+- Claude Code session capture hooks
+- Agent integration (Claude Code, GitHub Copilot, Cursor IDE)
+- Clean architecture (CLI.md, CONFIG.md, ARCHITECTURE.md, etc.)
 
 Borrow from:
 - Labhund
@@ -40,6 +57,8 @@ Exit criteria:
 - can keep 4-6 domains clean
 - can rebuild index deterministically
 - can survive model swaps with acceptable drift
+
+**Status: Complete** — All V1 must-haves implemented with 500+ tests and 93% coverage.
 
 ## V2 - trust and review layer
 

@@ -13,7 +13,7 @@ from llm_wiki.governance.staleness import StalenessDetector
 from llm_wiki.index.backlinks import BacklinkIndex
 from llm_wiki.index.metadata import MetadataIndex
 from llm_wiki.models.client import ModelClient
-from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewStatus, ReviewType
+from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewType
 from llm_wiki.review.queue import ReviewQueue
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
@@ -296,7 +296,9 @@ class GovernanceJob:
             for pid in orphan_pages[:limit]:
                 lines.append(f"- {pid}")
             if len(orphan_pages) > limit:
-                lines.append(f"- ... and {len(orphan_pages) - limit} more (use --limit flag to see more)")
+                lines.append(
+                    f"- ... and {len(orphan_pages) - limit} more (use --limit flag to see more)"
+                )
             lines.append("")
 
         # Duplicates section
@@ -500,7 +502,8 @@ class GovernanceJob:
                     id=item_id,
                     type=ReviewType.DUPLICATE,
                     target_id=pair_id,
-                    reason=candidate.suggested_action or f"Potential duplicate of {candidate.primary_page}",
+                    reason=candidate.suggested_action
+                    or f"Potential duplicate of {candidate.primary_page}",
                     priority=ReviewPriority.MEDIUM,
                     created_at=datetime.now(UTC),
                     metadata={

@@ -1,7 +1,7 @@
 """Tests for relationship extraction and index."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -47,7 +47,7 @@ class TestRelationshipExtractor:
         """Test extraction with entity context."""
         mock_client.chat_completion.return_value = '{"relationships": []}'
 
-        result = extractor.extract_relationships(
+        extractor.extract_relationships(
             "Python uses Docker",
             {"title": "Test"},
             available_entities=["Python", "Docker"],

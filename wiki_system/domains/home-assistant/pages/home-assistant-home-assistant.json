@@ -1,0 +1,13 @@
+{
+  "domain": "home-assistant",
+  "id": "home-assistant-home-assistant",
+  "kind": "source",
+  "source_type": "markdown",
+  "status": "published",
+  "title": "Home Assistant",
+  "_computed": {
+    "word_count": 4,
+    "char_count": 26,
+    "has_content": true
+  }
+}
