@@ -16,6 +16,18 @@ This wiki supports multiple AI agents:
 
 See [docs/AGENT_SUPPORT_MATRIX.md](docs/AGENT_SUPPORT_MATRIX.md) for full list.
 
+## How LLM Wiki fits in your stack
+
+LLM Wiki is a **structured knowledge store**, not a memory system. These are complementary, not competing roles:
+
+| Layer | Tool | Purpose |
+|-------|------|---------|
+| Agent harness | OpenClaw, Hermes-agent, Agent Zero, Homefront | Orchestrates agent behavior and tool use |
+| Session memory | Honcho (or similar) | Manages conversational context and continuity |
+| Knowledge store | **LLM Wiki** | Compiled, governed domain knowledge that compounds over time |
+
+An agent harness uses Honcho and LLM Wiki simultaneously for different purposes. Honcho answers "what were we just talking about?"; LLM Wiki answers "what do we know about X?" — pre-synthesized, with provenance and contradiction awareness, not re-derived from scratch on every query.
+
 ## Why this design
 
 A pure skill-only wiki is too fragile. Behavior drifts by model, prompt, and tool discipline.

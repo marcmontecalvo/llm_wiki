@@ -1,564 +1,243 @@
-# LLM Wiki Architecture
+# LLM Wiki — Architecture
 
-System architecture and design overview.
+## System Overview
 
-## High-Level Architecture
+LLM Wiki is a monolithic Python application with a single process daemon that owns all background work. The architecture is deliberately simple: files on disk are the source of truth, a daemon maintains derived state (indexes, exports, reports), and a CLI provides the user interface.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         LLM Wiki System                          │
-├─────────────────────────────────────────────────────────────────┤
+│                          CLI (Click)                            │
+│   llm-wiki init / daemon / search / ingest / govern / export   │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────────────────┐
+│                     WikiDaemon                                   │
+│   APScheduler BackgroundScheduler + ThreadPoolExecutor (max 2)  │
+│                                                                  │
+│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────────────┐ │
+│  │ Inbox Poll  │  │ Index Rebuild│  │ Governance + Export     │ │
+│  │ (15s)       │  │ (30min)      │  │ (60min each)            │ │
+│  └──────┬──────┘  └──────┬───────┘  └───────────┬─────────────┘ │
+│         │                │                       │               │
+└─────────┼────────────────┼───────────────────────┼───────────────┘
+          │                │                       │
+┌─────────▼────────────────▼───────────────────────▼───────────────┐
+│                     File System (wiki_system/)                    │
 │                                                                   │
-│  ┌──────────┐    ┌───────────┐    ┌──────────┐    ┌──────────┐ │
-│  │  Ingest  │───▶│ Extraction│───▶│   Index  │───▶│  Export  │ │
-│  └──────────┘    └───────────┘    └──────────┘    └──────────┘ │
-│       │               │                 │               │        │
-│       ▼               ▼                 ▼               ▼        │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              Federated Wiki Storage                      │  │
-│  │  (domains configured in config/domains.yaml)             │  │
-│  └──────────────────────────────────────────────────────┘  │
+│  inbox/          domains/           index/        exports/        │
+│  ├── new/        ├── {domain}/      ├── fulltext  ├── llms.txt    │
+│  ├── processing/ │   ├── queue/     ├── vector    ├── graph.json  │
+│  ├── done/       │   └── pages/     ├── metadata  └── sitemap.xml │
+│  └── failed/     └── shared/       └── backlinks                 │
 │                                                                   │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │         Governance Layer (Lint, Quality, Staleness)      │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                   │
-└─────────────────────────────────────────────────────────────────┘
+│  reports/        review_queue/     state/         logs/           │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
-## Core Components
+## Component Architecture
 
-### 1. Ingest Pipeline
+### 1. Entry Points
 
-**Purpose**: Normalize diverse inputs into standard wiki format.
+**CLI** (`src/llm_wiki/cli.py`, ~2,912 lines)
+- Single Click group with 15 command subgroups
+- All commands are thin wrappers: load config, instantiate the relevant service/index, call it, format output
+- No business logic in cli.py itself
 
-**Components**:
-- **Inbox Watcher**: Monitors `wiki_system/inbox/` for new files
-- **Source Adapters**: Convert inputs to markdown
-  - `MarkdownAdapter`: Process .md files
-  - `TextAdapter`: Process .txt files
-- **Domain Router**: Assign content to appropriate domain
-- **Normalizer**: Create standard frontmatter
+**Daemon** (`src/llm_wiki/daemon/main.py`)
+- `WikiDaemon` class: validates config on init, registers 9 APScheduler jobs on start
+- `run()` blocks on SIGINT/SIGTERM
+- `health()` returns a dict describing scheduler state and job last-run times
 
-**Flow**:
-```
-inbox/ → adapter → router → normalize → domains/{domain}/queue/
-```
-
-**Key Files**:
-- `src/llm_wiki/ingest/watcher.py`
-- `src/llm_wiki/adapters/*.py`
-- `src/llm_wiki/ingest/router.py`
-
-**Source adapters** (registration order matters — first match wins):
-
-1. `ClaudeSessionAdapter` — `session-*.jsonl` / `session-*.json` transcripts
-   produced by Claude Code `SessionEnd`/`PreCompact` hooks. Tags with
-   `capture_hook`, source_type `claude-session`.
-2. `ObsidianVaultAdapter` — markdown with wikilinks, embeds, `#hashtags`.
-3. `MarkdownAdapter` — plain markdown fallback.
-4. `TextAdapter` — bare `.txt`.
-
-### 2. Extraction Pipeline
-
-**Purpose**: Extract structured metadata from content.
-
-**Components**:
-- **Content Extractor**: Extract basic metadata (title, tags, kind)
-- **Entity Extractor**: Identify entities (people, tech, tools)
-- **Concept Extractor**: Identify concepts (ideas, methodologies)
-- **Claims Extractor**: Extract atomic claims with source refs
-- **Q&A Extractor**: Extract question/answer pairs and emit each as a
-  standalone `kind: qa` page with `related_pages` linking to parent source
-- **Page Enricher**: Merge extracted data into pages
-
-**Flow**:
-```
-queue/ → extract metadata → extract entities/concepts/claims →
-         enrich → pages/ → emit qa pages for each Q&A pair
-```
-
-**Key Files**:
-- `src/llm_wiki/extraction/service.py`
-- `src/llm_wiki/extraction/entities.py`
-- `src/llm_wiki/extraction/concepts.py`
-- `src/llm_wiki/extraction/claims.py`
-- `src/llm_wiki/extraction/qa.py`
-- `src/llm_wiki/extraction/enrichment.py`
-
-### 3. Index System
-
-**Purpose**: Enable fast searching and querying.
-
-**Components**:
-- **Metadata Index**: Tag, kind, domain lookups
-- **Fulltext Index**: TF-IDF search with inverted index
-- **Query Interface**: Unified search API
-
-**Data Structures**:
-```python
-# Metadata Index
-{
-  "pages": {"page-id": {metadata}},
-  "by_tag": {"python": {"page1", "page2"}},
-  "by_kind": {"entity": {"page1"}},
-  "by_domain": {"tech": {"page1", "page2"}}
-}
-
-# Fulltext Index
-{
-  "inverted_index": {"word": {"page-id": count}},
-  "documents": {"page-id": {metadata}}
-}
-```
-
-**Key Files**:
-- `src/llm_wiki/index/metadata.py`
-- `src/llm_wiki/index/fulltext.py`
-- `src/llm_wiki/query/search.py`
-
-### 4. Governance System
-
-**Purpose**: Maintain wiki quality and health.
-
-**Components**:
-- **Metadata Linter**: Validate frontmatter, check citations
-- **Staleness Detector**: Find outdated content
-- **Quality Scorer**: Multi-factor quality assessment
-- **Duplicate Detector**: Find duplicate entity pages across domains
-- **Governance Job**: Orchestrate checks, generate reports
-
-**Checks**:
-- Required fields present
-- Valid field types
-- Citation presence
-- Page age and updates
-- Content quality (length, structure)
-- Duplicate entity detection
-- Orphan detection
-
-**Key Files**:
-- `src/llm_wiki/governance/linter.py`
-- `src/llm_wiki/governance/staleness.py`
-- `src/llm_wiki/governance/quality.py`
-- `src/llm_wiki/governance/duplicates.py`
-- `src/llm_wiki/daemon/jobs/governance.py`
-
-### 4.1 Duplicate Entity Detection
-
-The Duplicate Detector identifies when the same entity is documented in multiple pages across domains. It uses multiple detection strategies:
-
-**Detection Strategies**:
-- **Exact Name Match**: Case-insensitive comparison of normalized titles
-- **Alias/Synonym Matching**: Check if one page's title appears in another's aliases, including KNOWN_ABBREVIATIONS (e.g., AWS → Amazon Web Services, npm → Node Package Manager)
-- **Metadata Correlation**: Same source_url or github_url indicates duplicates
-- **Tag Overlap**: 3+ common tags suggest related content
-- **Content Similarity**: Word-based Jaccard similarity (requires 30%+ match)
-
-**Scoring Formula**:
-```
-duplicate_score = name_similarity * 0.4 + alias_match * 0.3 + metadata_overlap * 0.2 + tag_overlap * 0.1 + content_similarity * 0.1
-```
-
-**Configuration** (in `config/daemon.yaml`):
-```yaml
-duplicates:
-  enabled: true
-  duplicates_check_every_hours: 24  # Run every 24 hours
-  min_score_to_flag: 0.5
-  auto_merge_threshold: 0.9  # Auto-merge only at >0.9
-  require_review: true
-  check_domains: [tech, general]
-  exclude_kinds: [source]
-```
-
-**Confidence Levels**:
-- **High**: score > 0.8 → likely duplicate, suggest merge
-- **Medium**: score 0.5-0.8 → possible duplicate, suggest redirect
-- **Low**: score 0.3-0.5 → review recommended, keep both
-
-**Merge Workflow**:
-1. Choose primary page (most backlinks, longest content)
-2. Merge content (secondary appended as section)
-3. Update all backlinks to point to primary
-4. Create redirect from secondary ID
-5. Archive secondary page
-6. Log merge action
-
-**Auto-Merge**:
-- Automatically merges duplicates when score > auto_merge_threshold (default 0.9)
-- Only runs in daemon when enabled in config
-
-**Review Queue Integration**:
-High-confidence duplicates can be automatically added to the review queue for manual approval before merging.
-
-**Daemon Job**:
-- Registered as `duplicates_check` job in daemon scheduler
-- Runs independently based on `duplicates_check_every_hours` config
-
-**Key Files**:
-- `src/llm_wiki/governance/duplicates.py`
-- `src/llm_wiki/daemon/jobs/duplicates.py`
-- `config/daemon.yaml` (duplicates config)
-
-### 5. Export System
-
-**Purpose**: Generate machine-readable outputs.
-
-**Formats**:
-- **llms.txt**: LLM-optimized context files
-- **JSON Sidecars**: Per-page metadata
-- **Graph**: Nodes and edges representation
-- **Sitemap**: XML sitemap for navigation
-
-**Key Files**:
-- `src/llm_wiki/export/llmstxt.py`
-- `src/llm_wiki/export/json_sidecar.py`
-- `src/llm_wiki/export/graph.py`
-- `src/llm_wiki/export/sitemap.py`
-
-## Data Flow
-
-### Ingest to Active Page
+### 2. Ingestion Pipeline
 
 ```
-1. File dropped in inbox/
-2. Watcher detects new file
-3. Adapter normalizes to markdown
-4. Router assigns domain
-5. File moved to domains/{domain}/queue/
-6. Content extractor analyzes content
-7. Entity/concept extractors run (if applicable)
-8. Page enricher merges metadata
-9. File moved to domains/{domain}/pages/
-10. Indexes updated
+new/ file
+  ↓
+InboxWatcher (watchdog FileSystemEventHandler)
+  ↓
+Adapter selection (by file extension / content heuristic)
+  ├── MarkdownAdapter
+  ├── TextAdapter
+  ├── ObsidianAdapter
+  └── ClaudeSessionAdapter
+  ↓
+Normalizer → produces NormalizedDocument
+  ↓
+DomainRouter → selects target domain from routing.yaml rules
+  ↓
+{domain}/queue/ (staging area)
+  ↓
+DeterministicIntegrator → merges with existing page if present
+  ├── merge strategies: keep_existing, union, prefer_newer
+  └── rollback on failure
+  ↓
+Extraction Service (LLM-led, parallel)
+  ├── claims.py       → factual claim extraction
+  ├── entities.py     → named entity extraction
+  ├── concepts.py     → concept/topic extraction
+  ├── relationships.py → entity relationship extraction
+  └── qa.py           → QA pair generation
+  ↓
+Index updates (FulltextIndex + VectorIndex + MetadataIndex + BacklinkIndex + GraphEdgeIndex)
+  ↓
+{domain}/pages/ (approved page)
 ```
 
-### Search Query
+**FailedIngestionTracker**: Tracks files that failed normalization/routing. Retry job runs every 30min.
+
+### 3. Index Subsystem
+
+Four live indexes, all JSON-backed (except FAISS binary):
+
+| Index | File | Purpose |
+|-------|------|---------|
+| `FulltextIndex` | `fulltext.json` | TF-IDF inverted index, BM25-style scoring |
+| `VectorIndex` | `vector_index.faiss` + `vector_meta.json` | FAISS IndexFlatL2, 384-dim sentence-transformers |
+| `MetadataIndex` | `metadata.json` | Tag, kind, domain, status lookups |
+| `BacklinkIndex` | `backlinks.json` | Reverse link tracking (page_id → pages linking to it) |
+| `GraphEdgeIndex` | `graph_edges.json` | Bidirectional typed edges for graph queries |
+| `RelationshipIndex` | `relationships.json` | Extracted entity relationships |
+
+**WikiQuery** (`src/llm_wiki/query/search.py`) — unified search interface:
+1. Fulltext search (BM25-style TF-IDF, limit × 2 candidates)
+2. Vector search (FAISS cosine similarity, limit × 2 candidates)
+3. RRF fusion: `score += 1 / (60 + rank + 1)` per result from each ranker
+4. Metadata post-filter by domain / kind / tags
+
+**Rebuild strategy**: `IndexRebuildJob` (30min interval) does a full scan of `domains/*/pages/*.md` and rebuilds all indexes from scratch. Incremental updates happen at ingest time; the rebuild job is a safety net.
+
+### 4. Search Query Flow
 
 ```
-1. Query submitted via WikiQuery
-2. Fulltext index searched (if query text provided)
-3. Metadata filters applied (domain, kind, tags)
-4. Results scored and ranked
-5. Top N results returned
+WikiQuery.search(query, domain=None, kind=None, tags=None, limit=10)
+  ├── FulltextIndex.search(query, limit=20)   → [{page_id, title, score}, ...]
+  ├── VectorIndex.search(query, limit=20)     → [{page_id, title, domain, score}, ...]
+  ├── RRF fusion                              → sorted candidate_ids
+  ├── MetadataIndex filter (domain/kind/tags)
+  └── Page content load for top N hits       → [{page_id, title, content, ...}, ...]
 ```
 
-### Export Generation
+### 5. Governance Pipeline
+
+Runs every 60min via `GovernanceJob`. Produces a markdown report in `reports/`.
+
+| Checker | Purpose |
+|---------|---------|
+| `linter.py` | Validates frontmatter: required fields, valid kind/status, orphan detection |
+| `staleness.py` | Flags pages not updated within threshold; detects time-sensitive content |
+| `quality.py` | Multi-factor quality score (completeness, link density, claim density) |
+| `contradictions.py` | Detects negation, numerical, and semantic contradictions between claims |
+| `duplicates.py` | Near-duplicate detection using TF-IDF cosine similarity |
+| `routing_mistakes.py` | Detects pages in wrong domain based on content signals |
+
+### 6. Export Pipeline
+
+Runs every 60min via `ExportJob`.
+
+| Exporter | Output | Format |
+|----------|--------|--------|
+| `LlmsTextExporter` | `exports/llms.txt` | LLM-optimized format (llms.txt standard) |
+| `LlmsFullExporter` | `exports/llms-full.txt` | Full page data, all metadata |
+| `JsonSidecarExporter` | `exports/{page_id}.json` | Per-page JSON metadata |
+| `GraphExporter` | `exports/graph.json` | Nodes + edges for visualization |
+| `SitemapExporter` | `exports/sitemap.xml` | XML sitemap |
+
+### 7. Promotion System
+
+Pages that accumulate cross-domain references above a threshold are candidates for promotion to `shared/`.
 
 ```
-1. Export job triggered
-2. All domains scanned
-3. Each exporter generates output:
-   - llms.txt: Concatenated markdown
-   - JSON: Per-page metadata
-   - Graph: Nodes + edges
-   - Sitemap: XML file list
-4. Files written to exports/
+PromotionScorer.score(page) → float
+  ├── cross_domain_refs: how many other domains link to this page
+  ├── quality_score: from QualityChecker
+  ├── age: pages older than 30 days get a bonus
+  └── weighted sum → promotion_score
+
+PromotionEngine.process()
+  ├── score >= auto_promote_threshold (10.0) → auto-promote to shared/
+  ├── score >= suggest_threshold (5.0)       → add to review queue
+  └── else                                   → no action
 ```
 
-## Storage Layout
+### 8. Review Queue
+
+Full lifecycle state machine: `pending → approved / rejected / deferred`
+
+- Items enter via: governance findings, promotion suggestions, or manual `llm-wiki review add`
+- Items resolve via: `review approve/reject/defer`
+- `ReviewQueueJob` (60min) runs `PromotionEngine.process()` to populate the queue automatically
+
+### 9. Config System
+
+Four YAML files, all validated by Pydantic on daemon startup:
 
 ```
-wiki_system/
-├── inbox/              # Drop zone for new files
-├── domains/            # Domain-specific wikis (configured in config/domains.yaml)
-│   ├── vulpine-solutions/
-│   │   ├── queue/      # Pending extraction
-│   │   └── pages/      # Active wiki pages
-│   ├── home-assistant/
-│   │   ├── queue/
-│   │   └── pages/
-│   ├── homelab/
-│   │   ├── queue/
-│   │   └── pages/
-│   ├── personal/
-│   │   ├── queue/
-│   │   └── pages/
-│   └── general/
-│       ├── queue/
-│       └── pages/
-├── index/              # Search indexes
-│   ├── metadata.json
-│   └── fulltext.json
-├── exports/            # Generated exports
-│   ├── llms.txt
-│   ├── graph.json
-│   └── sitemap.xml
-├── reports/            # Governance reports
-│   └── governance_*.md
-├── logs/               # Daemon logs
-└── state/              # System state
+config/
+├── daemon.yaml   → DaemonConfig (intervals, worker count)
+├── domains.yaml  → DomainsYAML (list of DomainConfig)
+├── models.yaml   → ModelsYAML (LLM provider settings per task)
+└── routing.yaml  → RoutingYAML (source path → domain rules)
 ```
 
-## Configuration
+`WikiConfig` aggregates all four. `ConfigValidator` validates the merged config at startup, raising `ConfigError` for invalid state.
 
-### Config Files
+## Daemon Scheduling
 
-- `config/domains.yaml`: Domain definitions
-- `config/routing.yaml`: Auto-routing rules
-- `config/models.yaml`: LLM provider settings
-- `config/daemon.yaml`: Daemon job schedules
+| Job | Class | Interval | Workers |
+|-----|-------|----------|---------|
+| Inbox scan | `InboxScanJob` | 15s | Shared pool |
+| Queue-to-pages | `QueueToPagesJob` | 15min | Shared pool |
+| Retry failed ingests | `RetryFailedIngestsJob` | 30min | Shared pool |
+| Index rebuild | `IndexRebuildJob` | 30min | Shared pool |
+| Export | `ExportJob` | 60min | Shared pool |
+| Governance/lint | `GovernanceJob` | 60min | Shared pool |
+| Review queue | `ReviewQueueJob` | 60min | Shared pool |
+| Staleness check | `StalenessJob` | 24h | Shared pool |
+| Duplicate detection | `DuplicatesJob` | 24h | Shared pool |
 
-### Pydantic Models
+`ThreadPoolExecutor(max_workers=2)` — all jobs compete for the same 2 worker slots. This is intentional: prevents resource exhaustion, but means governance + index rebuild cannot run simultaneously without queuing.
 
-Strict schemas for all data structures:
-- `models/domain.py`: Domain configuration
-- `models/page.py`: Page frontmatter
-- `models/extraction.py`: Extraction outputs
-- `models/config.py`: Model provider config
+**Known concurrency risk**: Two workers can both write to the same JSON index file. Fix planned (P0-2): add `threading.Lock` per index file.
 
-## Design Principles
+## Data Flow Summary
 
-### 1. Local-First
-- All operations work offline
-- No required cloud dependencies
-- Optional LLM for extraction
-
-### 2. Federated Architecture
-- Multiple domain-specific wikis
-- Shared infrastructure
-- Independent evolution
-
-### 3. Deterministic Processing
-- Same input → same output
-- Re-runnable pipelines
-- No silent rewrites
-
-### 4. Structured Data
-- Strict schemas (Pydantic)
-- Validated at every step
-- No loose dict soup
-
-### 5. Append-Only Operations
-- Preserve history via change log (implemented)
-- Change logs with list/diff/show/stats (implemented)
-- Reversible operations via integration rollback (implemented)
-
-## Integration Module
-
-The integration module provides deterministic merging of extracted metadata into existing wiki pages without data loss or conflicts.
-
-### Core Concepts
-
-**Integration Principles:**
-- **Deterministic**: Same input always produces same output
-- **Additive**: Never delete existing data without explicit reason
-- **Conflict-aware**: Detect and flag conflicts, don't silently overwrite
-- **Traceable**: Log all integration decisions
-
-### Usage
-
-```python
-from llm_wiki.integration import DeterministicIntegrator
-from llm_wiki.models.integration import MergeStrategies
-
-# Create integrator with custom strategies
-integrator = DeterministicIntegrator(
-    MergeStrategies(
-        title="keep_existing",  # Never change title
-        tags="union",        # Combine all tags
-        summary="prefer_newer",  # Use higher confidence
-        entities="union",
-        concepts="union",
-    )
-)
-
-# Integrate extracted data into existing page
-result = integrator.integrate(
-    page_id="my-page-id",
-    existing_page={"title": "My Page", "tags": ["python"]},
-    extracted_data={"tags": ["python", "coding"], "confidence": 0.9},
-    auto_resolve_conflicts=False,
-)
-
-# Check result
-if result.conflicts:
-    # Handle conflicts manually
-    for conflict in result.conflicts:
-        print(f"Conflict in {conflict.field}: {conflict.reason}")
-
-# View changes
-for change in result.changes:
-    print(f"{change.change_type}: {change.field}")
+```
+External input (files/text/session)
+  └─► Inbox (new/) → Adapter → Normalize → Route → Queue
+                                                      │
+                                           DeterministicIntegrator
+                                            (merge strategies)
+                                                      │
+                                           Extraction (LLM async)
+                                            claims / entities / concepts
+                                                      │
+                                           Index writes (5 indexes)
+                                                      │
+                             ┌────────────────────────┤
+                             │                        │
+                        GovernanceJob            ExportJob
+                        (lint/stale/dup)        (llms.txt/graph)
+                             │                        │
+                        reports/             exports/
 ```
 
-### CLI Commands
+## Architecture Decisions
 
-```bash
-# Preview integration without applying
-llm-wiki integrate check PAGE_ID --extracted '{"tags": ["python"]}'
+| Decision | Rationale |
+|----------|-----------|
+| No external database | Local-first; files are version-controllable; JSON is readable |
+| APScheduler not Celery | Single-process, no broker needed; simpler ops |
+| TF-IDF not Elasticsearch | Local-first; no external service; good enough for <100k pages |
+| FAISS IndexFlatL2 not HNSW | Exact search correctness for small corpora; HNSW saves <50ms at scale |
+| OpenAI-compatible API | Works with OpenAI, Anthropic, Ollama, LM Studio — same interface |
+| Optional vector deps | Users without GPU/large disk still get fulltext search |
+| Pydantic for config | Validation at startup catches config errors before the daemon runs |
 
-# Apply integration
-llm-wiki integrate apply PAGE_ID --extracted '{"tags": ["python"]}' --auto-resolve
+## Known Architectural Issues (P0)
 
-# Show integration history
-llm-wiki integrate history PAGE_ID
+1. **Non-atomic JSON writes** — index saves write directly to file; crash mid-write corrupts index. Fix: `tmp → os.replace()` pattern (exists in `JobExecutionStore`).
+2. **No write mutex** — concurrent daemon workers can corrupt JSON indexes. Fix: `threading.Lock` per index.
+3. **Stuck inbox files** — crash during processing orphans files in `inbox/processing/`. Fix: on startup, move to `new/` or `failed/`.
+4. **No HTTP API** — CLI-only; agent harness uses subprocess. Fix: FastAPI optional dep (Priority 1 roadmap item).
 
-# Rollback integration
-llm-wiki integrate rollback PAGE_ID --steps 2
-
-# View strategy configuration
-llm-wiki integrate strategies --tags union --entities deduplicate_merge
-```
-
-### Merge Strategies
-
-| Strategy | Description | Common Fields |
-|----------|-------------|---------------|
-| `keep_existing` | Never change field | title, domain, source |
-| `use_extracted` | Always replace with new | summary (when high confidence) |
-| `union` | Combine all items (no duplicates) | tags, entities, concepts, relationships, links |
-| `deduplicate_merge` | Merge with deduplication | claims, relationships |
-| `prefer_newer` | Use higher confidence value | summary, confidence |
-| `set_to_now` | Set to current timestamp | updated |
-
-### Change Tracking
-
-Every integration produces detailed change records:
-
-```python
-@dataclass
-class Change:
-    field: str           # Field name
-    old_value: Any       # Original value
-    new_value: Any      # New value
-    change_type: str    # "added", "removed", "updated", "merged"
-    timestamp: datetime
-    reason: str         # Why the change was made
-```
-
-### Conflict Detection
-
-Conflicts are detected when:
-- Same field has different values with similar confidence
-- Contradictory claims in content
-- Incompatible relationships
-- Metadata inconsistencies
-
-```python
-@dataclass
-class IntegrationConflict:
-    field: str
-    existing_value: Any
-    extracted_value: Any
-    resolution: str     # "keep_existing", "use_extracted", "manual_review"
-    reason: str         # Why this is a conflict
-    confidence_diff: float
-```
-
-### Rollback Support
-
-The integrator maintains history for rollback:
-
-```python
-# Get integration history
-history = integrator.get_history("page-id")
-
-# Rollback to previous state
-result = integrator.rollback("page-id", steps=2)
-```
-
-## Extension Points
-
-### Adding Adapters
-
-```python
-from llm_wiki.adapters.base import BaseAdapter
-
-class CustomAdapter(BaseAdapter):
-    def can_parse(self, filepath: Path) -> bool:
-        return filepath.suffix == ".custom"
-
-    def extract_metadata(self, filepath: Path) -> dict:
-        # Extract metadata
-        return {"title": "...", ...}
-
-    def normalize_to_markdown(self, filepath: Path, content: str) -> str:
-        # Convert to markdown
-        return "# Title\n\nContent..."
-```
-
-### Adding Extractors
-
-```python
-from typing import Any
-
-class CustomExtractor:
-    def extract(self, content: str, metadata: dict) -> list[dict[str, Any]]:
-        # Extract custom data
-        return [{"name": "...", "type": "..."}]
-```
-
-### Adding Exporters
-
-```python
-from pathlib import Path
-
-class CustomExporter:
-    def __init__(self, wiki_base: Path):
-        self.wiki_base = wiki_base
-
-    def export(self, output_file: Path) -> Path:
-        # Generate custom export
-        return output_file
-```
-
-## Performance Considerations
-
-### Indexing
-- Incremental updates supported
-- Full rebuild available
-- Indexes cached on disk
-
-### Search
-- TF-IDF scoring: O(n) where n = matching docs
-- Metadata filtering: O(1) lookup via indexes
-- Combined: Fast for typical queries
-
-### Extraction
-- Runs asynchronously in queue
-- Batching possible (not implemented)
-- LLM calls are bottleneck
-
-## Security
-
-### Input Validation
-- All inputs validated against Pydantic schemas
-- File paths sanitized
-- No code execution from content
-
-### API Keys
-- Stored in environment variables
-- Never committed to repo
-- Provider-agnostic design
-
-### Isolation
-- Each domain isolated on filesystem
-- No cross-domain writes
-- Promotion requires explicit action
-
-## Testing
-
-### Unit Tests
-- 523 tests, 93% coverage
-- Comprehensive mocking
-- Fast execution (<15s)
-
-### Integration Tests
-- End-to-end pipelines
-- Real file I/O
-- Slower but realistic
-
-### Fixtures
-- `temp_dir`: Isolated test directories
-- Mock LLM clients
-- Sample wiki structures
-
-## Future Enhancements
-
-See `IMPLEMENTATION_STATUS.md` for planned features:
-- Enhanced daemon scheduler (#82)
-- Markdown exports without frontmatter
-- RSS feeds for change tracking
-- HTML static site generation
+See `docs/bmad/ROADMAP_REMAINING.md` for full remediation plan.

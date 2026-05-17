@@ -1,0 +1,68 @@
+{
+  "workflow_version": "1.2.0",
+  "timestamps": {
+    "started": "2026-05-16T00:00:00Z",
+    "last_updated": "2026-05-16T00:00:00Z"
+  },
+  "mode": "initial_scan",
+  "scan_level": "exhaustive",
+  "project_root": "/Users/marc/repos/llm_wiki",
+  "project_knowledge": "/Users/marc/repos/llm_wiki/docs",
+  "completed_steps": [
+    {"step": "step_0.5", "status": "completed", "timestamp": "2026-05-16T00:01:00Z", "summary": "Loaded documentation requirements for 12 project types"},
+    {"step": "step_0.6", "status": "completed", "timestamp": "2026-05-16T00:02:00Z", "summary": "No existing index.md found, workflow_mode=initial_scan, scan_level=exhaustive"},
+    {"step": "step_1", "status": "completed", "timestamp": "2026-05-16T00:03:00Z", "summary": "Classified as monolith, 1 part, project_type=cli+library, Python 3.11"},
+    {"step": "step_2", "status": "completed", "timestamp": "2026-05-16T00:04:00Z", "summary": "Found 20 existing docs in docs/ (ARCHITECTURE.md, CLI.md, CONFIG.md, GOVERNANCE.md, etc.)"},
+    {"step": "step_3", "status": "completed", "timestamp": "2026-05-16T00:05:00Z", "summary": "Tech stack: Python 3.11, Click, Pydantic, APScheduler, FAISS, sentence-transformers, uv"},
+    {"step": "step_4", "status": "completed", "timestamp": "2026-05-16T00:30:00Z", "summary": "Exhaustive scan complete: 80 source files read across 15 modules. Data models extracted, CLI commands cataloged, daemon jobs documented."},
+    {"step": "step_5", "status": "completed", "timestamp": "2026-05-16T00:35:00Z", "summary": "Source tree documented with all 15 modules annotated"},
+    {"step": "step_6", "status": "completed", "timestamp": "2026-05-16T00:36:00Z", "summary": "Dev setup, CI/CD (GitHub Actions), pre-commit hooks documented"},
+    {"step": "step_7", "status": "skipped", "timestamp": "2026-05-16T00:36:00Z", "summary": "Skipped: single-part project, no multi-part integration needed"},
+    {"step": "step_8", "status": "completed", "timestamp": "2026-05-16T00:40:00Z", "summary": "Architecture documentation written for 1 part"},
+    {"step": "step_9", "status": "completed", "timestamp": "2026-05-16T00:50:00Z", "summary": "All supporting docs written: project-overview.md, source-tree-analysis.md, development-guide.md, deployment-guide.md, data-models.md"},
+    {"step": "step_10", "status": "completed", "timestamp": "2026-05-16T00:51:00Z", "summary": "Master index generated: index.md"},
+    {"step": "step_11", "status": "completed", "timestamp": "2026-05-16T00:52:00Z", "summary": "Validation complete, no incomplete markers"},
+    {"step": "step_12", "status": "completed", "timestamp": "2026-05-16T00:53:00Z", "summary": "Workflow complete"}
+  ],
+  "current_step": "completed",
+  "project_types": [
+    {
+      "part_id": "main",
+      "project_type_id": "cli",
+      "display_name": "CLI Application + Library"
+    }
+  ],
+  "findings": {
+    "project_classification": "monolith, 1 part, cli+library, Python 3.11+",
+    "technology_stack": "Python 3.11 on Click+Pydantic+APScheduler+FAISS+sentence-transformers",
+    "source_files_scanned": 80,
+    "existing_docs_count": 20,
+    "batches_completed": [
+      {"path": "src/llm_wiki/adapters", "files_scanned": 5, "summary": "ClaudeSession, Obsidian, Markdown, Text adapters"},
+      {"path": "src/llm_wiki/changelog", "files_scanned": 2, "summary": "Append-only operation log"},
+      {"path": "src/llm_wiki/config", "files_scanned": 3, "summary": "Pydantic config schemas, loader, validator"},
+      {"path": "src/llm_wiki/daemon", "files_scanned": 12, "summary": "APScheduler, ThreadPoolExecutor, 9 registered jobs"},
+      {"path": "src/llm_wiki/export", "files_scanned": 5, "summary": "llmstxt, llmsfull, graph, sitemap, json-sidecar exporters"},
+      {"path": "src/llm_wiki/extraction", "files_scanned": 7, "summary": "LLM-led claims, entities, concepts, relationships, QA, enrichment"},
+      {"path": "src/llm_wiki/governance", "files_scanned": 6, "summary": "lint, staleness, quality, contradictions, duplicates, routing-mistakes"},
+      {"path": "src/llm_wiki/index", "files_scanned": 6, "summary": "fulltext TF-IDF, FAISS vector, metadata, backlinks, graph-edges, relationships"},
+      {"path": "src/llm_wiki/ingest", "files_scanned": 4, "summary": "InboxWatcher, normalizer, router, failed-tracker"},
+      {"path": "src/llm_wiki/integration", "files_scanned": 2, "summary": "DeterministicIntegrator with merge strategies"},
+      {"path": "src/llm_wiki/models", "files_scanned": 6, "summary": "Pydantic schemas: PageFrontmatter, 4 subtypes, WikiConfig, ModelProviderConfig"},
+      {"path": "src/llm_wiki/query", "files_scanned": 2, "summary": "WikiQuery: fulltext+vector RRF fusion"},
+      {"path": "src/llm_wiki/promotion", "files_scanned": 4, "summary": "Scoring algorithm, engine, auto-promote/review-queue workflow"},
+      {"path": "src/llm_wiki/review", "files_scanned": 2, "summary": "ReviewQueue: full lifecycle pending->approved/rejected/deferred"}
+    ]
+  },
+  "outputs_generated": [
+    "project-scan-report.json",
+    "project-overview.md",
+    "architecture.md",
+    "source-tree-analysis.md",
+    "development-guide.md",
+    "deployment-guide.md",
+    "data-models.md",
+    "index.md"
+  ],
+  "resume_instructions": "Workflow complete. All documentation generated."
+}
