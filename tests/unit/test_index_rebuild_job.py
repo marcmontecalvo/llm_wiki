@@ -35,6 +35,7 @@ class TestIndexRebuildJob:
         assert result["status"] == "success"
         assert result["metadata_pages"] == 0
         assert result["fulltext_documents"] == 0
+        assert result["vector_documents"] == 0
 
     def test_execute_with_pages(self, job: IndexRebuildJob, wiki_base: Path):
         """Test executing rebuild with wiki pages."""
@@ -200,6 +201,7 @@ Content
         assert result["status"] == "success"
         assert result["metadata_pages"] == 0
         assert result["fulltext_documents"] == 0
+        assert result["vector_documents"] == 0
         assert result["backlink_count"] == 0
 
     def test_execute_rebuilds_backlink_index(self, job: IndexRebuildJob, wiki_base: Path):

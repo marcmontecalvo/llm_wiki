@@ -41,6 +41,10 @@ dev = [
 claude-agent = [
     "claude-agent-sdk>=0.1",
 ]
+vector = [
+    "faiss-cpu>=1.8",
+    "sentence-transformers>=3.0",
+]
 
 [project.scripts]
 llm-wiki = "llm_wiki.cli:main"
@@ -66,6 +70,7 @@ select = [
 ]
 ignore = [
     "E501",  # line too long (handled by formatter)
+    "B904",  # allow raise SystemExit(1) in CLI exception handlers
 ]
 
 [tool.ruff.format]

@@ -17,9 +17,10 @@ class TestWikiQuery:
         return WikiQuery(wiki_base=wiki_base)
 
     def test_init_creates_indexes(self, wiki_query: WikiQuery):
-        """Test that initialization creates both indexes."""
+        """Test that initialization creates all indexes."""
         assert wiki_query.metadata_index is not None
         assert wiki_query.fulltext_index is not None
+        assert wiki_query.vector_index is not None
 
     def test_add_page(self, wiki_query: WikiQuery):
         """Test adding a page to indexes."""
@@ -33,9 +34,10 @@ class TestWikiQuery:
 
         wiki_query.add_page("test", "Test Page", "Test content", metadata)
 
-        # Should be in both indexes
+        # Should be in all indexes
         assert wiki_query.metadata_index.get_page("test") is not None
         assert "test" in wiki_query.fulltext_index.documents
+        assert "test" in wiki_query.vector_index.doc_ids
 
     def test_remove_page(self, wiki_query: WikiQuery):
         """Test removing a page from indexes."""
@@ -46,6 +48,7 @@ class TestWikiQuery:
 
         assert wiki_query.metadata_index.get_page("test") is None
         assert "test" not in wiki_query.fulltext_index.documents
+        assert wiki_query.vector_index.id_to_idx.get("test") is None
 
     def test_get_page(self, wiki_query: WikiQuery):
         """Test getting page by ID."""
@@ -268,10 +271,11 @@ Test content
         )
 
         # Rebuild
-        metadata_count, fulltext_count = wiki_query.rebuild_indexes()
+        metadata_count, fulltext_count, vector_count = wiki_query.rebuild_indexes()
 
         assert metadata_count == 1
         assert fulltext_count == 1
+        assert vector_count == 1
 
         # Should be searchable
         results = wiki_query.search(query="test")

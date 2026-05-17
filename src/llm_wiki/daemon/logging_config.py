@@ -1,11 +1,50 @@
 """Logging configuration for daemon."""
 
+import json
 import logging
 import sys
+import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from llm_wiki.models.config import DaemonConfig
+
+
+class JSONFormatter(logging.Formatter):
+    """Structured JSON log formatter.
+
+    Emits one JSON object per log record with fields suitable for log aggregation
+    (e.g. Splunk, Datadog, Loki).
+    """
+
+    def __init__(self, logger_name: str = "llm_wiki") -> None:
+        """Initialize JSON formatter.
+
+        Args:
+            logger_name: Name attributed to the service producing logs.
+        """
+        super().__init__()
+        self.logger_name = logger_name
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format a log record as a JSON string."""
+        # Capture extra fields if present
+        extra: dict = {}
+        if hasattr(record, "extra_data") and record.extra_data:
+            extra = record.extra_data  # type: ignore[assignment]
+
+        if record.exc_info and record.exc_info[0] is not None:
+            extra["exception"] = self.formatException(record.exc_info)
+
+        entry = {
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(record.created))
+            + f".{int(record.created % 1 * 1000):03d}Z",
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+            **extra,
+        }
+        return json.dumps(entry)
 
 
 def setup_logging(
@@ -13,7 +52,10 @@ def setup_logging(
     log_file: Path | str | None = None,
     console_output: bool = True,
 ) -> None:
-    """Configure logging for the daemon.
+    """Configure logging with text and JSON formatters for both console and file.
+
+    File logs use JSON for structured aggregation. Console uses text for readability
+    during development.
 
     Args:
         config: Daemon configuration with log_level setting
@@ -32,30 +74,33 @@ def setup_logging(
     # Get log level from config
     log_level = getattr(logging, config.log_level, logging.INFO)
 
-    # Create formatter
-    formatter = logging.Formatter(
+    # Text formatter for console
+    text_formatter = logging.Formatter(
         fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    # JSON formatter for file logs
+    json_formatter = JSONFormatter()
+
     # Create handlers
     handlers: list[logging.Handler] = []
 
-    # File handler with rotation
+    # File handler with rotation (JSON)
     file_handler = RotatingFileHandler(
         filename=log_file,
         maxBytes=10 * 1024 * 1024,  # 10 MB
         backupCount=5,  # Keep 5 old files
         encoding="utf-8",
     )
-    file_handler.setFormatter(formatter)
+    file_handler.setFormatter(json_formatter)
     file_handler.setLevel(log_level)
     handlers.append(file_handler)
 
-    # Console handler for development
+    # Console handler (text)
     if console_output:
         console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(formatter)
+        console_handler.setFormatter(text_formatter)
         console_handler.setLevel(log_level)
         handlers.append(console_handler)
 

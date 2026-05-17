@@ -210,3 +210,140 @@ class TestGetLogger:
         logger2 = get_logger("test.module")
 
         assert logger1 is logger2
+
+
+class TestJSONFormatter:
+    """Tests for the JSONFormatter used in file logging."""
+
+    def test_format_basic_record(self, daemon_config: DaemonConfig, temp_dir: Path):
+        """Test JSONFormatter emits valid JSON with core fields."""
+        import json
+
+        from llm_wiki.daemon.logging_config import JSONFormatter
+
+        formatter = JSONFormatter("test-service")
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg="hello world",
+            args=(),
+            exc_info=None,
+        )
+        line = formatter.format(record)
+        entry = json.loads(line)
+
+        assert entry["logger"] == "test"
+        assert entry["level"] == "INFO"
+        assert entry["msg"] == "hello world"
+        assert "ts" in entry
+        # Timestamp should be parseable ISO-8601
+        assert entry["ts"].endswith("Z")
+
+    def test_format_with_extra_data(self, daemon_config: DaemonConfig, temp_dir: Path):
+        """Test JSONFormatter includes extra_data fields in output."""
+        import json
+
+        from llm_wiki.daemon.logging_config import JSONFormatter
+
+        formatter = JSONFormatter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg="job completed",
+            args=(),
+            exc_info=None,
+        )
+        record.extra_data = {"job": "export", "duration_seconds": 3.14}  # type: ignore[attr-defined]
+
+        entry = json.loads(formatter.format(record))
+
+        assert entry["msg"] == "job completed"
+        assert entry["job"] == "export"
+        assert entry["duration_seconds"] == 3.14
+
+    def test_format_with_exception(self, daemon_config: DaemonConfig, temp_dir: Path):
+        """Test JSONFormatter includes exception info."""
+        import json
+
+        from llm_wiki.daemon.logging_config import JSONFormatter
+
+        formatter = JSONFormatter()
+        try:
+            raise ValueError("boom")
+        except ValueError:
+            import sys
+
+            excetype, excvalue, tb = sys.exc_info()
+            record = logging.LogRecord(
+                name="test",
+                level=logging.ERROR,
+                pathname="test.py",
+                lineno=1,
+                msg="job failed",
+                args=(),
+                exc_info=(excetype, excvalue, tb),
+            )
+
+        entry = json.loads(formatter.format(record))
+        assert "exception" in entry
+        assert "ValueError" in entry["exception"]
+
+    def test_format_empty_extra_data_ignored(self, daemon_config: DaemonConfig, temp_dir: Path):
+        """Test empty extra_data does not pollute the JSON output."""
+        import json
+
+        from llm_wiki.daemon.logging_config import JSONFormatter
+
+        formatter = JSONFormatter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg="plain",
+            args=(),
+            exc_info=None,
+        )
+        record.extra_data = {}  # type: ignore[attr-defined]
+
+        entry = json.loads(formatter.format(record))
+        assert len([k for k in entry if k not in ("ts", "level", "logger", "msg")]) == 0
+
+    def test_file_logs_are_json(self, daemon_config: DaemonConfig, temp_dir: Path):
+        """Test that file log entries are valid JSON."""
+        import json
+
+        log_file = temp_dir / "test.log"
+        setup_logging(daemon_config, log_file=log_file, console_output=False)
+
+        logger = logging.getLogger("json_test")
+        logger.info("structured message")
+
+        lines = log_file.read_text().strip().splitlines()
+        assert len(lines) >= 1
+        # The first line is from setup_logging itself, then our message
+        entry = json.loads(lines[-1])
+        assert entry["msg"] == "structured message"
+        assert entry["logger"] == "json_test"
+
+    def test_file_logs_include_extra_data(self, daemon_config: DaemonConfig, temp_dir: Path):
+        """Test file logs carry structured extra_data."""
+        import json
+
+        log_file = temp_dir / "test.log"
+        setup_logging(daemon_config, log_file=log_file, console_output=False)
+
+        logger = logging.getLogger("json_extra")
+        logger.info(
+            "job done",
+            extra={"extra_data": {"execution_id": "abc-123", "duration_seconds": 7}},
+        )
+
+        lines = log_file.read_text().strip().splitlines()
+        entry = json.loads(lines[-1])
+        assert entry["execution_id"] == "abc-123"
+        assert entry["duration_seconds"] == 7

@@ -23,7 +23,6 @@ duplicates:
   auto_merge_threshold: 0.9
   require_review: true
   check_domains:
-    - tech
     - general
   exclude_kinds:
     - source  # Don't check source docs

@@ -3,6 +3,7 @@
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import click
 
@@ -2590,7 +2591,7 @@ def integrate_check(page_id: str, extracted: str, auto_resolve: bool, wiki_base:
     import json
 
     from llm_wiki.integration import DeterministicIntegrator
-    from llm_wiki.models.page import WikiPage
+    from llm_wiki.models.page import WikiPage  # type: ignore[attr-defined]
 
     # Load extracted data
     if Path(extracted).exists():
@@ -2675,7 +2676,7 @@ def integrate_apply(page_id: str, extracted: str, auto_resolve: bool, wiki_base:
     import json
 
     from llm_wiki.integration import DeterministicIntegrator
-    from llm_wiki.models.page import WikiPage
+    from llm_wiki.models.page import WikiPage  # type: ignore[attr-defined]
 
     # Load extracted data
     if Path(extracted).exists():
@@ -2759,7 +2760,7 @@ def integrate_history(page_id: str):
 def integrate_rollback(page_id: str, steps: int, wiki_base: Path):
     """Rollback integration to previous state."""
     from llm_wiki.integration import DeterministicIntegrator
-    from llm_wiki.models.page import WikiPage
+    from llm_wiki.models.page import WikiPage  # type: ignore[attr-defined]
 
     before_page = WikiPage.load(page_id, wiki_base)
 
@@ -2831,15 +2832,15 @@ def integrate_strategies(
     relationships: str,
 ):
     """Show merge strategy configuration."""
-    from llm_wiki.models.integration import MergeStrategies
+    from llm_wiki.models.integration import MergeStrategies, MergeStrategy
 
     strategies = MergeStrategies(
-        title=title,
-        tags=tags,
-        summary=summary,
-        entities=entities,
-        concepts=concepts,
-        relationships=relationships,
+        title=cast(MergeStrategy, title),
+        tags=cast(MergeStrategy, tags),
+        summary=cast(MergeStrategy, summary),
+        entities=cast(MergeStrategy, entities),
+        concepts=cast(MergeStrategy, concepts),
+        relationships=cast(MergeStrategy, relationships),
     )
 
     click.echo("Merge Strategy Configuration:")
@@ -3023,6 +3024,65 @@ def hooks_uninstall(scope: str):
 
     settings_path.write_text(_json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     click.echo(f"✓ Removed {removed} llm-wiki hook entries from {settings_path}")
+
+
+##########
+# Health #
+##########
+
+
+@main.command("health")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def health(wiki_base: Path):
+    """Show daemon health status (config + execution store)."""
+    from llm_wiki.config.loader import load_config
+    from llm_wiki.config.validator import validate_config
+    from llm_wiki.daemon.execution_store import JobExecutionStore
+
+    config_dir = wiki_base / "config"
+    try:
+        report = validate_config(config_dir)
+    except Exception as exc:
+        click.echo(f"Config error: {exc}", err=True)
+        raise SystemExit(1) from exc
+    if not report.is_valid:
+        for e in report.errors:
+            click.secho(f"  ERROR: {e}", fg="red")
+        raise SystemExit(1)
+
+    try:
+        load_config(config_dir)
+    except Exception as exc:
+        click.echo(f"Error loading config: {exc}", err=True)
+        raise SystemExit(1) from exc
+
+    store = JobExecutionStore()
+
+    click.secho("  config: ", nl=False, fg="cyan")
+    click.secho("OK", fg="green")
+
+    # Execution store summary
+    all_history = store.get_all_history()
+    total_executions = sum(len(h.executions) for h in all_history)
+    failed = sum(1 for h in all_history for ex in h.executions if ex.status.value == "failed")
+    recent_errors = sum(
+        1 for h in all_history if h.executions and h.executions[0].status.value == "failed"
+    )
+
+    click.secho("  execution_store: ", nl=False, fg="cyan")
+    click.secho("OK", fg="green")
+    click.echo(f"    total_executions: {total_executions}")
+    click.echo(f"    failed_executions: {failed}")
+    click.echo(f"    recent_errors: {recent_errors}")
+
+    ok = report.is_valid and total_executions > 0 or total_executions == 0
+    click.secho("\n  overall: ", nl=False, fg="cyan")
+    click.secho("GREEN" if ok else "RED", fg="green" if ok else "red")
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ class IndexRebuildJob:
         logger.info("Starting index rebuild job")
 
         try:
-            metadata_count, fulltext_count = self.wiki_query.rebuild_indexes()
+            metadata_count, fulltext_count, vector_count = self.wiki_query.rebuild_indexes()
 
             backlink_count = self.backlink_index.rebuild_from_pages(self.wiki_base)
             self.backlink_index.save()
@@ -44,13 +44,14 @@ class IndexRebuildJob:
 
             logger.info(
                 f"Index rebuild complete: {metadata_count} metadata, "
-                f"{fulltext_count} fulltext, {backlink_count} backlinks, "
-                f"{graph_edge_count} graph edge pages"
+                f"{fulltext_count} fulltext, {vector_count} vector, "
+                f"{backlink_count} backlinks, {graph_edge_count} graph edge pages"
             )
 
             return {
                 "metadata_pages": metadata_count,
                 "fulltext_documents": fulltext_count,
+                "vector_documents": vector_count,
                 "backlink_count": backlink_count,
                 "graph_edge_count": graph_edge_count,
                 "status": "success",
@@ -61,6 +62,7 @@ class IndexRebuildJob:
             return {
                 "metadata_pages": 0,
                 "fulltext_documents": 0,
+                "vector_documents": 0,
                 "backlink_count": 0,
                 "graph_edge_count": 0,
                 "status": "error",

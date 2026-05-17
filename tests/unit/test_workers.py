@@ -48,7 +48,9 @@ class TestWorkerPool:
         """Test starting already started pool raises error."""
         worker_pool.start()
 
-        with pytest.raises(RuntimeError, match="already started"):
+        from llm_wiki.daemon.errors import WorkerPoolAlreadyStartedError
+
+        with pytest.raises(WorkerPoolAlreadyStartedError, match="already started"):
             worker_pool.start()
 
         # Cleanup
@@ -135,7 +137,9 @@ class TestWorkerPool:
         """Test submitting job without starting pool raises error."""
         mock_func = Mock()
 
-        with pytest.raises(RuntimeError, match="not started"):
+        from llm_wiki.daemon.errors import WorkerPoolNotStartedError
+
+        with pytest.raises(WorkerPoolNotStartedError, match="not started"):
             worker_pool.submit(mock_func)
 
     def test_job_exception_doesnt_crash_pool(self, worker_pool: WorkerPool):

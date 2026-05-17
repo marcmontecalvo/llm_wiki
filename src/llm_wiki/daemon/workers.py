@@ -5,6 +5,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import Any
 
+from llm_wiki.daemon.errors import WorkerPoolAlreadyStartedError, WorkerPoolNotStartedError
 from llm_wiki.models.config import DaemonConfig
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ class WorkerPool:
             RuntimeError: If pool is already started
         """
         if self._executor is not None:
-            raise RuntimeError("Worker pool is already started")
+            raise WorkerPoolAlreadyStartedError("Worker pool is already started")
 
         self._executor = ThreadPoolExecutor(
             max_workers=self.max_workers,
@@ -94,7 +95,7 @@ class WorkerPool:
             RuntimeError: If pool is not started
         """
         if self._executor is None:
-            raise RuntimeError("Worker pool is not started. Call start() first.")
+            raise WorkerPoolNotStartedError("Worker pool is not started. Call start() first.")
 
         try:
             future = self._executor.submit(func, *args, **kwargs)
@@ -144,16 +145,21 @@ class WorkerPool:
         # Count active futures
         return sum(1 for f in self._futures if not f.done())
 
-    def get_queue_size(self) -> int:
-        """Get number of pending jobs.
+    def health(self) -> dict[str, Any]:
+        """Return health status of the worker pool."""
+        is_running = self.is_running()
+        return {
+            "running": is_running,
+            "active_jobs": self.get_active_count() if is_running else 0,
+            "pending_jobs": self.get_queue_size() if is_running else 0,
+            "max_workers": self.max_workers,
+        }
 
-        Returns:
-            Number of jobs waiting to execute
-        """
+    def get_queue_size(self) -> int:
+        """Get number of pending jobs."""
         if self._executor is None:
             return 0
-
-        # Pending = total futures - completed
+        # Pending = total futures queued but not running/done
         return len([f for f in self._futures if not f.running() and not f.done()])
 
     def wait_for_completion(self, timeout: float | None = None) -> bool:

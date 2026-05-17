@@ -6,8 +6,11 @@ from typing import Any
 
 from llm_wiki.index.fulltext import FulltextIndex
 from llm_wiki.index.metadata import MetadataIndex
+from llm_wiki.index.vector import VectorIndex
 
 logger = logging.getLogger(__name__)
+
+_RRF_K = 60  # standard Reciprocal Rank Fusion constant
 
 
 class WikiQuery:
@@ -26,6 +29,7 @@ class WikiQuery:
         # Initialize indexes
         self.metadata_index = MetadataIndex(index_dir=self.index_dir)
         self.fulltext_index = FulltextIndex(index_dir=self.index_dir)
+        self.vector_index = VectorIndex(index_dir=self.index_dir)
 
         # Load indexes
         self._load_indexes()
@@ -35,6 +39,7 @@ class WikiQuery:
         try:
             self.metadata_index.load()
             self.fulltext_index.load()
+            self.vector_index.load()
             logger.info("Loaded wiki indexes")
         except Exception as e:
             logger.warning(f"Failed to load indexes: {e}")
@@ -49,57 +54,44 @@ class WikiQuery:
     ) -> list[dict[str, Any]]:
         """Search for wiki pages.
 
-        Combines metadata and fulltext search. If query is provided, performs
-        fulltext search and filters by metadata. Otherwise, performs metadata
-        lookup only.
-
-        Args:
-            query: Fulltext search query
-            tags: Filter by tags (AND operation - all tags must match)
-            kind: Filter by page kind
-            domain: Filter by domain
-            limit: Maximum results to return
-
-        Returns:
-            List of search results with page_id, title, domain, score
+        Combines metadata, fulltext, and vector (semantic) search. If query
+        is provided, merges fulltext and vector results via Reciprocal Rank
+        Fusion, then applies metadata filters.
         """
-        # If fulltext query provided, start with fulltext search
         if query:
-            results = self.fulltext_index.search(query, domain=domain, limit=limit * 2)
-            page_ids = {r["page_id"] for r in results}
+            ft_results = self.fulltext_index.search(query, domain=None, limit=limit * 2)
+            vec_results = self.vector_index.search(query, domain=None, limit=limit * 2)
+
+            # Reciprocal Rank Fusion
+            rrf_scores: dict[str, float] = {}
+            for rank, r in enumerate(ft_results + vec_results):
+                pid = r["page_id"]
+                rrf_scores[pid] = rrf_scores.get(pid, 0.0) + 1.0 / (_RRF_K + rank + 1)
+
+            # Collect candidate page_ids from fused ranking
+            candidate_ids = sorted(rrf_scores, key=lambda k: rrf_scores[k], reverse=True)
         else:
-            # No fulltext query - get all pages from metadata
-            page_ids = set(self.metadata_index.pages.keys())
-            results = []
+            candidate_ids = list(self.metadata_index.pages.keys())
 
         # Apply metadata filters
         filtered_results = []
-
-        for page_id in page_ids:
+        for page_id in candidate_ids:
             metadata = self.metadata_index.get_page(page_id)
             if not metadata:
                 continue
-
-            # Apply filters
             if domain and metadata.get("domain") != domain:
                 continue
-
             if kind and metadata.get("kind") != kind:
                 continue
-
             if tags:
                 page_tags = {str(t).lower() for t in metadata.get("tags", [])}
                 required_tags = {t.lower() for t in tags}
                 if not required_tags.issubset(page_tags):
                     continue
 
-            # Get score from fulltext results, or 0 if metadata-only query
             score = 0.0
-            if query:
-                for r in results:
-                    if r["page_id"] == page_id:
-                        score = r["score"]
-                        break
+            if query and rrf_scores:
+                score = rrf_scores.get(page_id, 0.0)
 
             filtered_results.append(
                 {
@@ -113,109 +105,67 @@ class WikiQuery:
                 }
             )
 
-        # Sort by score (descending)
         filtered_results.sort(key=lambda x: x["score"], reverse=True)
-
         return filtered_results[:limit]
 
     def get_page(self, page_id: str) -> dict[str, Any] | None:
-        """Get page metadata by ID.
-
-        Args:
-            page_id: Page identifier
-
-        Returns:
-            Page metadata or None if not found
-        """
+        """Get page metadata by ID."""
         return self.metadata_index.get_page(page_id)
 
     def find_by_tag(self, tag: str) -> list[dict[str, Any]]:
-        """Find pages by tag.
-
-        Args:
-            tag: Tag to search for
-
-        Returns:
-            List of page metadata dictionaries
-        """
+        """Find pages by tag."""
         return self.metadata_index.find_by_tag(tag)
 
     def find_by_kind(self, kind: str) -> list[dict[str, Any]]:
-        """Find pages by kind.
-
-        Args:
-            kind: Page kind (entity, concept, page, source)
-
-        Returns:
-            List of page metadata dictionaries
-        """
+        """Find pages by kind."""
         return self.metadata_index.find_by_kind(kind)
 
     def find_by_domain(self, domain: str) -> list[dict[str, Any]]:
-        """Find pages by domain.
-
-        Args:
-            domain: Domain identifier
-
-        Returns:
-            List of page metadata dictionaries
-        """
+        """Find pages by domain."""
         return self.metadata_index.find_by_domain(domain)
 
     def get_all_tags(self) -> list[str]:
-        """Get all unique tags in the wiki.
-
-        Returns:
-            Sorted list of tags
-        """
+        """Get all unique tags in the wiki."""
         return self.metadata_index.get_all_tags()
 
-    def rebuild_indexes(self) -> tuple[int, int]:
-        """Rebuild both indexes from wiki pages.
+    def rebuild_indexes(self) -> tuple[int, int, int]:
+        """Rebuild all indexes from wiki pages.
 
         Returns:
-            Tuple of (metadata_count, fulltext_count)
+            Tuple of (metadata_count, fulltext_count, vector_count)
         """
         logger.info("Rebuilding wiki indexes")
 
         metadata_count = self.metadata_index.rebuild_from_pages(self.wiki_base)
         fulltext_count = self.fulltext_index.rebuild_from_pages(self.wiki_base)
+        vector_count = self.vector_index.rebuild_from_pages(self.wiki_base)
 
-        # Save indexes
         self.metadata_index.save()
         self.fulltext_index.save()
+        self.vector_index.save()
 
-        logger.info(f"Rebuilt indexes: {metadata_count} metadata, {fulltext_count} fulltext")
+        logger.info(
+            f"Rebuilt indexes: {metadata_count} metadata, "
+            f"{fulltext_count} fulltext, {vector_count} vector"
+        )
 
-        return metadata_count, fulltext_count
+        return metadata_count, fulltext_count, vector_count
 
     def add_page(self, page_id: str, title: str, content: str, metadata: dict[str, Any]) -> None:
-        """Add or update a page in indexes.
-
-        Args:
-            page_id: Page identifier
-            title: Page title
-            content: Page content (markdown)
-            metadata: Page metadata (frontmatter)
-        """
+        """Add or update a page in indexes."""
         domain = metadata.get("domain", "general")
-
-        # Add to metadata index
         self.metadata_index.add_page(page_id, metadata)
-
-        # Add to fulltext index
         self.fulltext_index.add_document(page_id, title, content, domain)
+        self.vector_index.add_document(page_id, title, content, domain)
 
     def remove_page(self, page_id: str) -> None:
-        """Remove a page from indexes.
-
-        Args:
-            page_id: Page identifier
-        """
+        """Remove a page from indexes."""
         self.metadata_index.remove_page(page_id)
         self.fulltext_index.remove_document(page_id)
+        self.vector_index.remove_document(page_id)
 
     def save_indexes(self) -> None:
         """Save indexes to disk."""
         self.metadata_index.save()
         self.fulltext_index.save()
+        self.vector_index.save()

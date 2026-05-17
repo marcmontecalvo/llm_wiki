@@ -5,9 +5,11 @@ import signal
 import sys
 import threading
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
 from llm_wiki.config.loader import load_config
+from llm_wiki.config.validator import validate_config
+from llm_wiki.daemon.errors import ConfigError
 from llm_wiki.daemon.logging_config import setup_logging
 from llm_wiki.daemon.scheduler import JobScheduler
 from llm_wiki.daemon.workers import WorkerPool
@@ -25,6 +27,13 @@ class WikiDaemon:
             config_dir: Path to configuration directory
         """
         self.config_dir = Path(config_dir)
+        report = validate_config(self.config_dir)
+        for w in report.warnings:
+            logger.warning("Config warning: %s", w)
+        if not report.is_valid:
+            for e in report.errors:
+                logger.error("Config error: %s", e)
+            raise ConfigError(f"Invalid configuration: {'; '.join(report.errors)}")
         self.config = load_config(self.config_dir)
         self.scheduler: JobScheduler | None = None
         self.worker_pool: WorkerPool | None = None
@@ -257,6 +266,24 @@ class WikiDaemon:
             True if daemon is running
         """
         return self._running
+
+    def health(self) -> dict[str, Any]:
+        """Return comprehensive health status.
+
+        Returns:
+            Dict with daemon-level and subsystem health data.
+        """
+        parts: dict[str, Any] = {"running": self._running}
+        if self.scheduler:
+            parts["scheduler"] = self.scheduler.health()
+        if self.worker_pool:
+            parts["worker_pool"] = self.worker_pool.health()
+        parts["ok"] = self._running and all(
+            s.get("running", False)
+            for s in (parts.get("scheduler") or {}).values()
+            if isinstance(s, dict) and "running" in s
+        )
+        return parts
 
 
 def run_daemon(config_dir: Path | str = "config") -> NoReturn:

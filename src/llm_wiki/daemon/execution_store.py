@@ -138,6 +138,16 @@ class JobExecutionStore:
             }
         return stats
 
+    def get_all_history(self) -> list[JobExecutionHistory]:
+        """Return execution history for every job that has recorded an execution."""
+        return [self.get_history(n) for n in self.job_names()]
+
+    def job_names(self) -> list[str]:
+        """Return names of all jobs that have recorded executions."""
+        if not self.state_dir.exists():
+            return []
+        return [p.stem for p in self.state_dir.iterdir() if p.suffix == ".json"]
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

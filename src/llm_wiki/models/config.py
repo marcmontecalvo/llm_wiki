@@ -87,7 +87,8 @@ class DuplicatesConfig(BaseModel):
         default=True, description="Whether duplicates require review before merging"
     )
     check_domains: list[str] = Field(
-        default_factory=lambda: ["tech", "general"], description="Domains to check for duplicates"
+        default_factory=list,
+        description="Domains to check for duplicates (empty = all configured domains)",
     )
     exclude_kinds: list[str] = Field(
         default_factory=lambda: ["source"],

@@ -138,7 +138,9 @@ class TestJobScheduler:
         """Test starting already running scheduler raises error."""
         scheduler.start()
 
-        with pytest.raises(RuntimeError, match="already running"):
+        from llm_wiki.daemon.errors import SchedulerAlreadyRunningError
+
+        with pytest.raises(SchedulerAlreadyRunningError, match="already running"):
             scheduler.start()
 
         # Cleanup
@@ -463,15 +465,21 @@ class TestPauseResumeRunNow:
         scheduler.shutdown(wait=False)
 
     def test_pause_nonexistent_raises(self, scheduler: JobScheduler):
-        with pytest.raises(KeyError):
+        from llm_wiki.daemon.errors import JobNotFoundError
+
+        with pytest.raises(JobNotFoundError):
             scheduler.pause_job("ghost")
 
     def test_resume_nonexistent_raises(self, scheduler: JobScheduler):
-        with pytest.raises(KeyError):
+        from llm_wiki.daemon.errors import JobNotFoundError
+
+        with pytest.raises(JobNotFoundError):
             scheduler.resume_job("ghost")
 
     def test_run_now_nonexistent_raises(self, scheduler: JobScheduler):
-        with pytest.raises(KeyError):
+        from llm_wiki.daemon.errors import JobNotFoundError
+
+        with pytest.raises(JobNotFoundError):
             scheduler.run_now("ghost")
 
     def test_run_now_triggers_execution(self, scheduler: JobScheduler, store: JobExecutionStore):

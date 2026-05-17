@@ -10,6 +10,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from llm_wiki.daemon.errors import JobNotFoundError, SchedulerAlreadyRunningError
 from llm_wiki.daemon.execution_store import JobExecutionStore
 from llm_wiki.daemon.models import JobDefinition, JobExecution, JobStatus
 from llm_wiki.models.config import DaemonConfig
@@ -42,6 +43,7 @@ class JobScheduler:
         self._jobs: dict[str, str] = {}  # job_name -> APScheduler job_id
         self._definitions: dict[str, JobDefinition] = {}  # job_name -> definition
         self.execution_store = execution_store or JobExecutionStore()
+        self._started_at: datetime | None = None
 
     # ------------------------------------------------------------------
     # Job registration
@@ -234,7 +236,7 @@ class JobScheduler:
             KeyError: If job not found
         """
         if job_name not in self._jobs:
-            raise KeyError(f"Job '{job_name}' not found")
+            raise JobNotFoundError(f"Job '{job_name}' not found")
         self.scheduler.pause_job(self._jobs[job_name])
         logger.info("Paused job '%s'", job_name)
 
@@ -248,7 +250,7 @@ class JobScheduler:
             KeyError: If job not found
         """
         if job_name not in self._jobs:
-            raise KeyError(f"Job '{job_name}' not found")
+            raise JobNotFoundError(f"Job '{job_name}' not found")
         self.scheduler.resume_job(self._jobs[job_name])
         logger.info("Resumed job '%s'", job_name)
 
@@ -264,7 +266,7 @@ class JobScheduler:
             KeyError: If job not found
         """
         if job_name not in self._jobs:
-            raise KeyError(f"Job '{job_name}' not found")
+            raise JobNotFoundError(f"Job '{job_name}' not found")
         self.scheduler.modify_job(self._jobs[job_name], next_run_time=datetime.now(UTC))
         logger.info("Triggered immediate run of job '%s'", job_name)
 
@@ -279,10 +281,11 @@ class JobScheduler:
             RuntimeError: If scheduler is already running
         """
         if self.scheduler.running:
-            raise RuntimeError("Scheduler is already running")
+            raise SchedulerAlreadyRunningError("Scheduler is already running")
 
         try:
             self.scheduler.start()
+            self._started_at = datetime.now(UTC)
             logger.info("Scheduler started with %d jobs", len(self._jobs))
         except Exception as exc:
             logger.error("Failed to start scheduler: %s", exc)
@@ -391,6 +394,37 @@ class JobScheduler:
         return [ex.to_dict() for ex in reversed(history.executions)]
 
     # ------------------------------------------------------------------
+    # Health
+    # ------------------------------------------------------------------
+
+    def health(self) -> dict[str, Any]:
+        """Return health status of the scheduler.
+
+        Returns:
+            Dict with ``running``, ``job_count``, and ``uptime_seconds``.
+        """
+        running = self.scheduler.running
+        uptime: float | None = None
+        if running and self._started_at:
+            uptime = (datetime.now(UTC) - self._started_at).total_seconds()
+
+        # Collect last-execution summary across all jobs
+        fresh_jobs = self.get_jobs()
+        recent_errors = 0
+        for name in fresh_jobs:
+            info = self.get_job_info(name)
+            if info and info.get("last_status") == "failed":
+                recent_errors += 1
+
+        return {
+            "running": running,
+            "job_count": len(fresh_jobs),
+            "uptime_seconds": round(uptime, 2) if uptime is not None else None,
+            "recent_errors": recent_errors,
+            "jobs": {name: self.get_job_info(name) for name in fresh_jobs},
+        }
+
+    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
@@ -415,14 +449,38 @@ class JobScheduler:
             execution = JobExecution.create(job_name, execution_id)
             store.record_start(execution)
 
+            logger.info(
+                "Job started",
+                extra={"extra_data": {"job": job_name, "execution_id": execution_id}},
+            )
+
             try:
                 result = func(**kwargs)
                 result_dict = result if isinstance(result, dict) else {"result": str(result)}
                 execution.complete(status=JobStatus.COMPLETED, result=result_dict)
+                logger.info(
+                    "Job completed",
+                    extra={
+                        "extra_data": {
+                            "job": job_name,
+                            "execution_id": execution_id,
+                            "duration_seconds": execution.duration_seconds,
+                        },
+                    },
+                )
                 return result
             except Exception as exc:
                 execution.complete(status=JobStatus.FAILED, error=str(exc))
-                logger.exception("Job '%s' raised an exception", job_name)
+                logger.exception(
+                    "Job failed",
+                    extra={
+                        "extra_data": {
+                            "job": job_name,
+                            "execution_id": execution_id,
+                            "error": str(exc),
+                        },
+                    },
+                )
                 raise
             finally:
                 store.record_complete(execution)
