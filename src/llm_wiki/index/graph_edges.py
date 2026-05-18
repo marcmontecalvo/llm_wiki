@@ -3,6 +3,8 @@
 import hashlib
 import json
 import logging
+import os
+import tempfile
 from collections import deque
 from pathlib import Path
 from typing import Any
@@ -399,7 +401,7 @@ class GraphEdgeIndex:
     # ------------------------------------------------------------------
 
     def save(self) -> None:
-        """Persist index to ``wiki_system/index/edges.json``."""
+        """Persist index to ``wiki_system/index/edges.json`` atomically (tmp + os.replace)."""
         index_file = self.index_dir / "edges.json"
         data = {
             "edges": self.edges,
@@ -407,8 +409,17 @@ class GraphEdgeIndex:
             "by_target": self.by_target,
             "by_type": self.by_type,
         }
-        with index_file.open("w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, sort_keys=True)
+        fd = tempfile.NamedTemporaryFile(
+            "w", dir=self.index_dir, delete=False, suffix=".tmp", encoding="utf-8"
+        )
+        try:
+            json.dump(data, fd, indent=2, sort_keys=True)
+            fd.close()
+            os.replace(fd.name, index_file)
+        except BaseException:
+            fd.close()
+            os.unlink(fd.name)
+            raise
         logger.info(f"Saved graph edge index ({len(self.edges)} edges)")
 
     def load(self) -> None:

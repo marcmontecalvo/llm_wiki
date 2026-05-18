@@ -2,7 +2,9 @@
 
 import json
 import logging
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -360,7 +362,7 @@ class BacklinkIndex:
         }
 
     def save(self) -> None:
-        """Save index to disk."""
+        """Save index to disk atomically (tmp + os.replace)."""
         index_file = self.index_dir / "backlinks.json"
 
         # Convert sets to lists for JSON serialization
@@ -372,8 +374,17 @@ class BacklinkIndex:
                 "broken_links": sorted(page_data["broken_links"]),
             }
 
-        with index_file.open("w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        fd = tempfile.NamedTemporaryFile(
+            "w", dir=self.index_dir, delete=False, suffix=".tmp", encoding="utf-8"
+        )
+        try:
+            json.dump(data, fd, indent=2)
+            fd.close()
+            os.replace(fd.name, index_file)
+        except BaseException:
+            fd.close()
+            os.unlink(fd.name)
+            raise
 
         logger.info(f"Saved backlink index ({len(self.index)} pages)")
 

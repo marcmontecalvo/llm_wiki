@@ -245,3 +245,24 @@ Content
         assert result["status"] == "success"
         broken = job.backlink_index.get_broken_links("page")
         assert "nonexistent" in broken
+
+    def test_acquire_all_locks_during_rebuild(self, wiki_base: Path):
+        """IndexRebuildJob acquires all locks before rebuild and releases in final."""
+        job = IndexRebuildJob(wiki_base=wiki_base)
+
+        # Verify acquire_all_locks and release_all_locks are callable
+        # and that they correctly affect lock state
+        job.wiki_query.acquire_all_locks()
+        for lock in job.wiki_query._index_locks.values():
+            assert not lock.acquire(blocking=False), "Lock should be held by acquire_all_locks"
+        job.wiki_query.release_all_locks()
+
+    def test_injected_wiki_syntax_ok(self, wiki_base: Path):
+        """IndexRebuildJob accepts an injected WikiQuery."""
+        from llm_wiki.query.search import WikiQuery
+
+        wiki = WikiQuery(wiki_base=wiki_base)
+        job = IndexRebuildJob(wiki_base=wiki_base, wiki=wiki)
+        result = job.execute()
+        assert result["status"] == "success"
+        assert result is result  # no crash

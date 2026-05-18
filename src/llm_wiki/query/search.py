@@ -1,6 +1,7 @@
 """Unified search interface for wiki queries."""
 
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -31,8 +32,33 @@ class WikiQuery:
         self.fulltext_index = FulltextIndex(index_dir=self.index_dir)
         self.vector_index = VectorIndex(index_dir=self.index_dir)
 
+        # Central lock registry -- one lock per incrementally-written index
+        # backlinks and graph_edges are rebuild-only (derived indexes); they
+        # are never written by add_page()/remove_page().  Their exclusivity
+        # is guaranteed by IndexRebuildJob holding all three locks.
+        self._index_locks: dict[str, threading.Lock] = {
+            "fulltext": threading.Lock(),
+            "vector": threading.Lock(),
+            "metadata": threading.Lock(),
+        }
+
         # Load indexes
         self._load_indexes()
+
+    def acquire_all_locks(self) -> None:
+        """Acquire all index locks. Used by IndexRebuildJob before full rebuild."""
+        for lock in self._index_locks.values():
+            lock.acquire()
+
+    def release_all_locks(self) -> None:
+        """Release all index locks. Called in IndexRebuildJob.execute() finally block."""
+        for lock in self._index_locks.values():
+            lock.release()
+
+    def reload_vector_index(self) -> None:
+        """Reload FAISS index from disk into memory. Called after IndexRebuildJob completes."""
+        with self._index_locks["vector"]:
+            self.vector_index.load()
 
     def _load_indexes(self) -> None:
         """Load indexes from disk."""
@@ -131,6 +157,10 @@ class WikiQuery:
     def rebuild_indexes(self) -> tuple[int, int, int]:
         """Rebuild all indexes from wiki pages.
 
+        Each save is protected by its per-index lock.  IndexRebuildJob
+        bypasses this method (it holds all locks directly) to avoid
+        deadlocks.
+
         Returns:
             Tuple of (metadata_count, fulltext_count, vector_count)
         """
@@ -140,9 +170,12 @@ class WikiQuery:
         fulltext_count = self.fulltext_index.rebuild_from_pages(self.wiki_base)
         vector_count = self.vector_index.rebuild_from_pages(self.wiki_base)
 
-        self.metadata_index.save()
-        self.fulltext_index.save()
-        self.vector_index.save()
+        with self._index_locks["metadata"]:
+            self.metadata_index.save()
+        with self._index_locks["fulltext"]:
+            self.fulltext_index.save()
+        with self._index_locks["vector"]:
+            self.vector_index.save()
 
         logger.info(
             f"Rebuilt indexes: {metadata_count} metadata, "
@@ -152,20 +185,37 @@ class WikiQuery:
         return metadata_count, fulltext_count, vector_count
 
     def add_page(self, page_id: str, title: str, content: str, metadata: dict[str, Any]) -> None:
-        """Add or update a page in indexes."""
+        """Add or update a page in indexes, persisting under per-index locks."""
         domain = metadata.get("domain", "general")
         self.metadata_index.add_page(page_id, metadata)
         self.fulltext_index.add_document(page_id, title, content, domain)
         self.vector_index.add_document(page_id, title, content, domain)
 
+        with self._index_locks["metadata"]:
+            self.metadata_index.save()
+        with self._index_locks["fulltext"]:
+            self.fulltext_index.save()
+        with self._index_locks["vector"]:
+            self.vector_index.save()
+
     def remove_page(self, page_id: str) -> None:
-        """Remove a page from indexes."""
+        """Remove a page from indexes, persisting under per-index locks."""
         self.metadata_index.remove_page(page_id)
         self.fulltext_index.remove_document(page_id)
-        self.vector_index.remove_document(page_id)
+        self.vector_index.remove_document_in_memory(page_id)
+
+        with self._index_locks["metadata"]:
+            self.metadata_index.save()
+        with self._index_locks["fulltext"]:
+            self.fulltext_index.save()
+        with self._index_locks["vector"]:
+            self.vector_index.save()
 
     def save_indexes(self) -> None:
-        """Save indexes to disk."""
-        self.metadata_index.save()
-        self.fulltext_index.save()
-        self.vector_index.save()
+        """Save indexes to disk under per-index locks."""
+        with self._index_locks["metadata"]:
+            self.metadata_index.save()
+        with self._index_locks["fulltext"]:
+            self.fulltext_index.save()
+        with self._index_locks["vector"]:
+            self.vector_index.save()

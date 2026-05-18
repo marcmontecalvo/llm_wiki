@@ -14,32 +14,48 @@ logger = logging.getLogger(__name__)
 class IndexRebuildJob:
     """Daemon job for rebuilding search indexes."""
 
-    def __init__(self, wiki_base: Path | None = None):
+    def __init__(self, wiki_base: Path | None = None, wiki: WikiQuery | None = None):
         """Initialize index rebuild job.
 
         Args:
             wiki_base: Base wiki directory (defaults to wiki_system/)
+            wiki: Injected WikiQuery singleton (falls back to creating one for
+                  backward compatibility)
         """
         self.wiki_base = wiki_base or Path("wiki_system")
-        self.wiki_query = WikiQuery(wiki_base=self.wiki_base)
+        self.wiki_query = wiki if wiki is not None else WikiQuery(wiki_base=self.wiki_base)
         self.backlink_index = BacklinkIndex(index_dir=self.wiki_base / "index")
         self.graph_edge_index = GraphEdgeIndex(index_dir=self.wiki_base / "index")
 
     def execute(self) -> dict[str, Any]:
-        """Execute index rebuild.
+        """Execute index rebuild with full lock coverage.
+
+        Holds all WikiQuery locks during the rebuild to prevent incremental
+        writers from producing torn state.  Index saves are performed
+        directly on the index instances (bypassing WikiQuery methods) to
+        avoid re-acquiring the already-held locks and deadlocking.
+
+        After releasing locks, the FAISS index is reloaded into memory.
 
         Returns:
             Dictionary with rebuild statistics
         """
         logger.info("Starting index rebuild job")
 
+        self.wiki_query.acquire_all_locks()
         try:
-            metadata_count, fulltext_count, vector_count = self.wiki_query.rebuild_indexes()
-
+            # Rebuild all indexes (in-memory only -- do NOT call save() yet)
+            metadata_count = self.wiki_query.metadata_index.rebuild_from_pages(self.wiki_base)
+            fulltext_count = self.wiki_query.fulltext_index.rebuild_from_pages(self.wiki_base)
+            vector_count = self.wiki_query.vector_index.rebuild_from_pages(self.wiki_base)
             backlink_count = self.backlink_index.rebuild_from_pages(self.wiki_base)
-            self.backlink_index.save()
-
             graph_edge_count = self.graph_edge_index.rebuild_from_pages(self.wiki_base)
+
+            # Save directly -- locks are already held by acquire_all_locks()
+            self.wiki_query.metadata_index.save()
+            self.wiki_query.fulltext_index.save()
+            self.wiki_query.vector_index.save()
+            self.backlink_index.save()
             self.graph_edge_index.save()
 
             logger.info(
@@ -68,18 +84,25 @@ class IndexRebuildJob:
                 "status": "error",
                 "error": str(e),
             }
+        finally:
+            self.wiki_query.release_all_locks()
+            # After releasing locks, reload FAISS into memory
+            self.wiki_query.reload_vector_index()
 
 
-def run_index_rebuild(wiki_base: Path | None = None) -> dict[str, Any]:
+def run_index_rebuild(
+    wiki_base: Path | None = None, wiki: WikiQuery | None = None
+) -> dict[str, Any]:
     """Run index rebuild job.
 
     This function is called by the daemon scheduler.
 
     Args:
         wiki_base: Base wiki directory (defaults to wiki_system/)
+        wiki: Optional injected WikiQuery singleton
 
     Returns:
         Dictionary with rebuild statistics
     """
-    job = IndexRebuildJob(wiki_base=wiki_base)
+    job = IndexRebuildJob(wiki_base=wiki_base, wiki=wiki)
     return job.execute()

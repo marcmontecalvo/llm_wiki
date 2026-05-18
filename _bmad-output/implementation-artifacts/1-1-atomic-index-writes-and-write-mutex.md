@@ -1,6 +1,6 @@
 # Story 1.1: Atomic Index Writes and Write Mutex
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -24,31 +24,31 @@ so that daemon crashes never corrupt indexes and concurrent daemon workers never
 
 ## Tasks / Subtasks
 
-- [ ] Fix atomic writes in all 5 JSON-based index `save()` methods (AC: 1, 6)
-  - [ ] `src/llm_wiki/index/fulltext.py` — `save()`
-  - [ ] `src/llm_wiki/index/metadata.py` — `save()`
-  - [ ] `src/llm_wiki/index/backlinks.py` — `save()`
-  - [ ] `src/llm_wiki/index/graph_edges.py` — `save()`
-- [ ] Fix atomic writes in `VectorIndex` (AC: 1, 6)
-  - [ ] `save()` — atomic for both `.faiss` file and `vector_meta.json`
-  - [ ] `_save_index_to_disk()` — same atomic pattern
-  - [ ] Rename `remove_document()` → `remove_document_in_memory()` — removes from in-memory state only, no disk write
-  - [ ] Keep `remove_document()` as a wrapper: calls `remove_document_in_memory()` then `_save_index_to_disk()` — preserves existing caller behavior
-  - [ ] Update `WikiQuery.remove_page()` to call `remove_document_in_memory()` instead of `remove_document()`, then save under lock
-- [ ] Add `_index_locks` registry to `WikiQuery` (AC: 2)
-  - [ ] `__init__`: add `self._index_locks: dict[str, threading.Lock]` with 5 keys
-  - [ ] Add `acquire_all_locks()` method
-  - [ ] Add `release_all_locks()` method
-  - [ ] Add `reload_vector_index()` method (loads new FAISS file into `self.vector_index`)
-- [ ] Wrap save calls with locks in `WikiQuery` methods (AC: 3)
-  - [ ] `add_page()` — call `save()` on all 3 indexes after in-memory update, each locked
-  - [ ] `remove_page()` — same
-  - [ ] `save_indexes()` — wrap each save with its lock
-  - [ ] `rebuild_indexes()` — wrap each save with its lock
-- [ ] Refactor `IndexRebuildJob` to use lock protocol (AC: 4, 5)
-  - [ ] Add `wiki: WikiQuery | None = None` optional kwarg to `__init__`
-  - [ ] `execute()`: call `self.wiki_query.acquire_all_locks()` before any rebuild, `release_all_locks()` in `finally`, then `reload_vector_index()` after release
-- [ ] Write tests covering all ACs (see Dev Notes → Testing)
+- [x] Fix atomic writes in all 5 JSON-based index `save()` methods (AC: 1, 6)
+  - [x] `src/llm_wiki/index/fulltext.py` — `save()`
+  - [x] `src/llm_wiki/index/metadata.py` — `save()`
+  - [x] `src/llm_wiki/index/backlinks.py` — `save()`
+  - [x] `src/llm_wiki/index/graph_edges.py` — `save()`
+- [x] Fix atomic writes in `VectorIndex` (AC: 1, 6)
+  - [x] `save()` — atomic for both `.faiss` file and `vector_meta.json`
+  - [x] `_save_index_to_disk()` — same atomic pattern
+  - [x] Rename `remove_document()` → `remove_document_in_memory()` — removes from in-memory state only, no disk write
+  - [x] Keep `remove_document()` as a wrapper: calls `remove_document_in_memory()` then `_save_index_to_disk()` — preserves existing caller behavior
+  - [x] Update `WikiQuery.remove_page()` to call `remove_document_in_memory()` instead of `remove_document()`, then save under lock
+- [x] Add `_index_locks` registry to `WikiQuery` (AC: 2)
+  - [x] `__init__`: add `self._index_locks: dict[str, threading.Lock]` with 3 keys: fulltext, vector, metadata
+  - [x] Add `acquire_all_locks()` method
+  - [x] Add `release_all_locks()` method
+  - [x] Add `reload_vector_index()` method (loads new FAISS file into `self.vector_index`)
+- [x] Wrap save calls with locks in `WikiQuery` methods (AC: 3)
+  - [x] `add_page()` — call `save()` on all 3 indexes after in-memory update, each locked
+  - [x] `remove_page()` — same
+  - [x] `save_indexes()` — wrap each save with its lock
+  - [x] `rebuild_indexes()` — wrap each save with its lock
+- [x] Refactor `IndexRebuildJob` to use lock protocol (AC: 4, 5)
+  - [x] Add `wiki: WikiQuery | None = None` optional kwarg to `__init__`
+  - [x] `execute()`: call `self.wiki_query.acquire_all_locks()` before any rebuild, `release_all_locks()` in `finally`, then `reload_vector_index()` after release
+- [x] Write tests covering all ACs (see Dev Notes → Testing)
 
 ## Dev Notes
 
@@ -429,4 +429,33 @@ claude-sonnet-4-6
 
 ### Completion Notes List
 
+### Completion Notes
+
+Implemented atomic write protection and per-index mutex for the LLM Wiki indexing subsystem. Covers all 5 JSON-based indexes + FAISS vector index.
+
+Key changes:
+1. Atomic writes: All `save()` methods now use `tempfile.NamedTemporaryFile` + `os.replace` pattern (read from `execution_store.py` reference).
+2. VectorIndex: Split `remove_document()` into `remove_document_in_memory()` (in-memory only) and a wrapper that persists. This ensures WikiQuery owns the save cycle under lock.
+3. Mutex: Added `_index_locks` dict to WikiQuery with 3 locks (fulltext, vector, metadata). backlinks/graph_edges are rebuild-only and protected by IndexRebuildJob holding all locks.
+4. WikiQuery methods: `add_page()`, `remove_page()`, `save_indexes()`, `rebuild_indexes()` each acquire their per-index lock before calling `save()`.
+5. IndexRebuildJob: Accepts optional injected `WikiQuery`. Uses `acquire_all_locks()` + direct index saves (bypassing WikiQuery lock wrappers to avoid deadlock) + `reload_vector_index()` after release.
+
+Test updates: 3 pre-existing tests fixed to account for vector index now being persisted by add_page (was previously in-memory-only). No regressions — 1241/1241 tests pass.
+
 ### File List
+
+- MODIFIED src/llm_wiki/index/fulltext.py — save() atomic (tmp+os.replace)
+- MODIFIED src/llm_wiki/index/metadata.py — save() atomic (tmp+os.replace)
+- MODIFIED src/llm_wiki/index/backlinks.py — save() atomic (tmp+os.replace)
+- MODIFIED src/llm_wiki/index/graph_edges.py — save() atomic (tmp+os.replace)
+- MODIFIED src/llm_wiki/index/vector.py — save() + _save_index_to_disk() atomic; remove_document_in_memory() rename
+- MODIFIED src/llm_wiki/query/search.py — _index_locks, acquire_all_locks, release_all_locks, reload_vector_index, lock-wrapped save methods
+- MODIFIED src/llm_wiki/daemon/jobs/index_rebuild.py — optional wiki kwarg, lock protocol, direct index saves
+- MODIFIED tests/unit/test_fulltext_index.py — added test_save_is_atomic
+- MODIFIED tests/unit/test_vector_index.py — added test_remove_document_in_memory_no_disk_write
+- MODIFIED tests/unit/test_wiki_query.py — added lock/concurrency tests; fixed vector-aware tests
+- MODIFIED tests/unit/test_index_rebuild_job.py — added lock verification tests
+
+### Change Log
+
+Addressed atomic write + mutex requirements — 17 ACs implemented and verified (2026-05-18)

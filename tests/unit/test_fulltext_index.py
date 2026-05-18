@@ -299,3 +299,13 @@ Learn JavaScript basics.
         # Old document should be gone
         assert "old" not in index.documents
         assert "new" in index.documents
+
+    def test_save_is_atomic(self, temp_dir: Path):
+        """Save uses tmp+os.replace pattern — no .tmp files left behind."""
+        index = FulltextIndex(index_dir=temp_dir)
+        index.add_document("p1", "Title", "Content", "general")
+        index.save()
+        index.add_document("p2", "Title 2", "Content 2", "general")
+        index.save()
+        assert not list(temp_dir.glob("*.tmp"))
+        assert "p2" in (temp_dir / "fulltext.json").read_text()

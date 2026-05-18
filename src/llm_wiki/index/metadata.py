@@ -2,6 +2,8 @@
 
 import json
 import logging
+import os
+import tempfile
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -206,7 +208,7 @@ class MetadataIndex:
         return [c for c in self.claims if c.get("page_id") == page_id]
 
     def save(self) -> None:
-        """Save index to disk."""
+        """Save index to disk atomically (tmp + os.replace)."""
         index_file = self.index_dir / "metadata.json"
 
         # Convert sets to lists for JSON serialization
@@ -218,8 +220,17 @@ class MetadataIndex:
             "claims": self.claims,
         }
 
-        with index_file.open("w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, cls=_DateTimeEncoder)
+        fd = tempfile.NamedTemporaryFile(
+            "w", dir=self.index_dir, delete=False, suffix=".tmp", encoding="utf-8"
+        )
+        try:
+            json.dump(data, fd, indent=2, cls=_DateTimeEncoder)
+            fd.close()
+            os.replace(fd.name, index_file)
+        except BaseException:
+            fd.close()
+            os.unlink(fd.name)
+            raise
 
         logger.info(f"Saved metadata index ({len(self.pages)} pages)")
 

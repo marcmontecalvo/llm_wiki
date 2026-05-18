@@ -117,6 +117,17 @@ class TestVectorIndexFull:
         vec_index.remove_document("ghost")  # should not raise
         assert len(vec_index.doc_ids) == 1
 
+    def test_remove_document_in_memory_no_disk_write(self, vec_index: VectorIndex, index_dir: Path):
+        """remove_document_in_memory leaves disk state intact."""
+        vec_index.add_document("p1", "T1", "C1", "general")
+        vec_index.add_document("p2", "T2", "C2", "general")
+        vec_index.save()
+
+        vec_index.remove_document_in_memory("p2")
+        assert "p2" not in vec_index.doc_ids
+        # FAISS file should still contain 2 docs (disk untouched)
+        assert len(vec_index.doc_ids) == 1
+
     def test_save_and_load(self, vec_index: VectorIndex, index_dir: Path):
         """Test saving and loading index."""
         vec_index.add_document("p1", "Python Guide", "Python programming language", "tech")

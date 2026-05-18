@@ -2,7 +2,9 @@
 
 import json
 import logging
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -102,8 +104,10 @@ class VectorIndex:
         self._embedded_texts[page_id] = text
         self._rebuild_idx_maps()
 
-    def remove_document(self, page_id: str) -> None:
-        """Remove a document from the vector index.
+    def remove_document_in_memory(self, page_id: str) -> None:
+        """Remove a document from the in-memory vector index only.
+
+        Does NOT persist to disk — caller must save under lock.
 
         Args:
             page_id: Page identifier.
@@ -117,7 +121,9 @@ class VectorIndex:
         self.doc_ids = [pid for pid in self.doc_ids if pid != page_id]
         self._rebuild_idx_maps()
 
-        # Persist updated state to disk
+    def remove_document(self, page_id: str) -> None:
+        """Remove document and persist immediately. For direct callers outside WikiQuery."""
+        self.remove_document_in_memory(page_id)
         self._save_index_to_disk()
 
     def search(
@@ -237,19 +243,34 @@ class VectorIndex:
             index.add(embeddings)
 
             faiss_path = self.index_dir / "vector_index.faiss"
-            faiss.write_index(index, str(faiss_path))
+            tmp_faiss = str(faiss_path) + ".tmp"
+            faiss.write_index(index, tmp_faiss)
+            try:
+                os.replace(tmp_faiss, faiss_path)
+            except BaseException:
+                os.unlink(tmp_faiss)
+                raise
         except Exception as e:
             logger.error(f"Failed to save vector index: {e}")
             return
 
         meta_path = self.index_dir / "vector_meta.json"
-        with meta_path.open("w", encoding="utf-8") as f:
-            json.dump(self.doc_meta, f, indent=2)
+        fd = tempfile.NamedTemporaryFile(
+            "w", dir=self.index_dir, delete=False, suffix=".tmp", encoding="utf-8"
+        )
+        try:
+            json.dump(self.doc_meta, fd, indent=2)
+            fd.close()
+            os.replace(fd.name, meta_path)
+        except BaseException:
+            fd.close()
+            os.unlink(fd.name)
+            raise
 
         logger.info(f"Saved vector index ({len(self.doc_ids)} documents)")
 
     def save(self) -> None:
-        """Save index to disk."""
+        """Save index to disk atomically (tmp + os.replace)."""
         if not self._ensure_model():
             return
 
@@ -274,16 +295,30 @@ class VectorIndex:
         )
         embeddings = np.asarray(embeddings, dtype="float32")
 
-        # Build FAISS index from embeddings
         index = faiss.IndexFlatL2(embeddings.shape[1])
         index.add(embeddings)
 
         faiss_path = self.index_dir / "vector_index.faiss"
-        faiss.write_index(index, str(faiss_path))
+        tmp_faiss = str(faiss_path) + ".tmp"
+        faiss.write_index(index, tmp_faiss)
+        try:
+            os.replace(tmp_faiss, faiss_path)
+        except BaseException:
+            os.unlink(tmp_faiss)
+            raise
 
         meta_path = self.index_dir / "vector_meta.json"
-        with meta_path.open("w", encoding="utf-8") as f:
-            json.dump(self.doc_meta, f, indent=2)
+        fd = tempfile.NamedTemporaryFile(
+            "w", dir=self.index_dir, delete=False, suffix=".tmp", encoding="utf-8"
+        )
+        try:
+            json.dump(self.doc_meta, fd, indent=2)
+            fd.close()
+            os.replace(fd.name, meta_path)
+        except BaseException:
+            fd.close()
+            os.unlink(fd.name)
+            raise
 
         logger.info(f"Saved vector index ({len(self.doc_ids)} documents)")
 
