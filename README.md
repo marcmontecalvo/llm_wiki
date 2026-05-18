@@ -14,10 +14,14 @@ Honcho answers "what were we just talking about?" — LLM Wiki answers "what do 
 
 ## Quick start
 
+### Docker (recommended)
+
 ```bash
-# Clone and build
-git clone <repo>
-docker-compose up --build
+# Build and start the full stack
+docker-compose up --build -d
+
+# Wait for both services to become healthy
+until curl -sf http://localhost:3050/v1/health; do sleep 2; done
 
 # Point your MCP client at:
 # http://localhost:3050/mcp  (Streamable HTTP)
@@ -28,6 +32,20 @@ uv run llm-wiki query "homelab network topology"
 ```
 
 First-run auto-initializes the wiki directory structure. No manual `init` required.
+
+Before first use, ensure `wiki_data` is owned by uid 1000:
+
+```bash
+mkdir -p wiki_data && sudo chown -R 1000:1000 wiki_data
+```
+
+### Local development
+
+```bash
+uv sync --extra vector       # include FAISS + sentence-transformers
+uv run llm-wiki health       # CLI health check
+uv run pytest                # run test suite
+```
 
 ## Deployment
 
@@ -142,7 +160,6 @@ uv sync --extra vector    # include FAISS + sentence-transformers
 uv run pytest             # run test suite
 uv run ruff check .       # lint
 uv run mypy src/          # type check
-docker-compose up --build # full stack
 ```
 
 ## Documentation

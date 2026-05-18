@@ -1,6 +1,7 @@
 """Daemon main loop and lifecycle management."""
 
 import logging
+import os
 import signal
 import sys
 import threading
@@ -322,17 +323,21 @@ class WikiDaemon:
         return parts
 
 
-def run_daemon(config_dir: Path | str = "config") -> NoReturn:
+def run_daemon(config_dir: Path | str | None = None) -> NoReturn:
     """Run the wiki daemon.
 
     This is the main entry point for the daemon.
 
     Args:
-        config_dir: Path to configuration directory
+        config_dir: Path to configuration directory.
+            Defaults to ``WIKI_CONFIG_DIR`` environment variable,
+            falling back to ``"config"``.
 
     Raises:
         SystemExit: On shutdown
     """
+    if config_dir is None:
+        config_dir = os.environ.get("WIKI_CONFIG_DIR", "config")
     logger.info("Initializing wiki daemon...")
 
     try:

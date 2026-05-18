@@ -1,0 +1,14 @@
+services:
+  llm-wiki:
+    build: .
+    ports:
+      - "3050:${WIKI_PORT:-3050}"
+    volumes:
+      - ./wiki_data:/wiki
+      - ./config:/config/ro:ro
+      - ./config:/app/config:ro
+    environment:
+      WIKI_ROOT: /wiki
+      WIKI_CONFIG_DIR: /wiki/config
+      WIKI_PORT: "3050"
+    restart: unless-stopped

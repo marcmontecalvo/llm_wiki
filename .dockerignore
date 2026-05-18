@@ -1,0 +1,16 @@
+.git
+__pycache__
+.mypy_cache
+*.pyc
+tests/
+wiki_data/
+.venv/
+*.egg-info/
+dist/
+build/
+.claude/
+_bmad-output/
+config/daemon.yaml
+config/domains.yaml
+config/models.yaml
+config/routing.yaml
