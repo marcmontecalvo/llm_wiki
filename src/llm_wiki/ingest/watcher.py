@@ -61,6 +61,22 @@ class InboxWatcher:
         registry.register(TextAdapter)
         self.pipeline = NormalizationPipeline(registry, config_dir)
 
+    def recover_processing_dir(self) -> int:
+        """Move any orphaned files in processing/ back to new/ for reprocessing.
+
+        Returns the count of recovered files. Called on daemon startup.
+        """
+        recovered = 0
+        for orphan in list(self.processing_dir.glob("*")):
+            if orphan.is_file():
+                dest = self.new_dir / orphan.name
+                if dest.exists():
+                    dest = self.new_dir / f"{orphan.stem}_recovered{orphan.suffix}"
+                shutil.move(str(orphan), str(dest))
+                logger.warning("Recovered orphaned file from processing/: %s", orphan.name)
+                recovered += 1
+        return recovered
+
     def scan(self) -> dict[str, int]:
         """Scan inbox for new files and process them.
 

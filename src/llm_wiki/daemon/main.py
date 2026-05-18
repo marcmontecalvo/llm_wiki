@@ -193,6 +193,42 @@ class WikiDaemon:
             f"(every {self.config.daemon.daemon.rebuild_index_every_minutes}m)"
         )
 
+        # Startup recovery: move orphaned processing/ files back to inbox
+        from llm_wiki.ingest.watcher import InboxWatcher
+
+        watcher = InboxWatcher(inbox_dir=wiki_base / "inbox")
+        recovered = watcher.recover_processing_dir()
+        if recovered:
+            logger.warning(
+                "Startup inbox recovery: moved %d orphaned file(s) back to inbox/new/",
+                recovered,
+            )
+
+        # Index integrity check: trigger synchronous rebuild if corruption detected
+        from llm_wiki.startup import check_index_integrity
+
+        corrupt_files = check_index_integrity(wiki_base)
+        if corrupt_files:
+            logger.warning(
+                "Index integrity check failed for %d file(s): %s — triggering synchronous rebuild",
+                len(corrupt_files),
+                corrupt_files,
+            )
+            try:
+                from llm_wiki.daemon.jobs.index_rebuild import IndexRebuildJob
+
+                job = IndexRebuildJob(wiki_base=wiki_base)
+                result = job.execute()
+                logger.info("Synchronous index rebuild complete: %s", result)
+            except Exception as e:
+                logger.error(
+                    "Synchronous index rebuild failed: %s — "
+                    "starting with potentially stale indexes",
+                    e,
+                )
+        else:
+            logger.info("Index integrity check passed")
+
         # Start scheduler
         self.scheduler.start()
         logger.info("Scheduler started")

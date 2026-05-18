@@ -244,3 +244,38 @@ Content.
 
         # File should be in failed/ (moved from new after error)
         assert (watcher.failed_dir / "test.md").exists()
+
+    def test_recover_processing_dir_moves_files_to_new(
+        self, inbox_dir: Path, watcher: InboxWatcher
+    ):
+        """Test orphaned files in processing/ are moved to new/."""
+        orphan = watcher.processing_dir / "orphaned.md"
+        orphan.write_text("content", encoding="utf-8")
+        recovered = watcher.recover_processing_dir()
+        assert recovered == 1
+        assert (watcher.new_dir / "orphaned.md").exists()
+        assert not orphan.exists()
+
+    def test_recover_processing_dir_empty_returns_zero(
+        self, inbox_dir: Path, watcher: InboxWatcher
+    ):
+        """Test empty processing/ returns zero."""
+        assert watcher.recover_processing_dir() == 0
+
+    def test_recover_processing_dir_avoids_name_collision(
+        self, inbox_dir: Path, watcher: InboxWatcher
+    ):
+        """Test name collision is handled with _recovered suffix."""
+        # Pre-existing file in new/
+        existing = watcher.new_dir / "orphaned.md"
+        existing.write_text("existing content", encoding="utf-8")
+
+        # Orphaned file with same name
+        orphan = watcher.processing_dir / "orphaned.md"
+        orphan.write_text("orphaned content", encoding="utf-8")
+
+        recovered = watcher.recover_processing_dir()
+        assert recovered == 1
+        assert (watcher.new_dir / "orphaned.md").exists()
+        assert (watcher.new_dir / "orphaned_recovered.md").exists()
+        assert not orphan.exists()
