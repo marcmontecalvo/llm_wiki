@@ -831,12 +831,14 @@ source = { editable = "." }
 dependencies = [
     { name = "apscheduler" },
     { name = "click" },
+    { name = "faiss-cpu" },
     { name = "fastapi" },
     { name = "mcp" },
     { name = "openai" },
     { name = "pydantic" },
     { name = "python-frontmatter" },
     { name = "pyyaml" },
+    { name = "sentence-transformers" },
     { name = "tenacity" },
     { name = "uvicorn" },
     { name = "watchdog" },
@@ -855,10 +857,6 @@ dev = [
     { name = "ruff" },
     { name = "types-pyyaml" },
 ]
-vector = [
-    { name = "faiss-cpu" },
-    { name = "sentence-transformers" },
-]
 
 [package.dev-dependencies]
 dev = [
@@ -871,7 +869,7 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=3.10" },
     { name = "claude-agent-sdk", marker = "extra == 'claude-agent'", specifier = ">=0.1" },
     { name = "click", specifier = ">=8.1" },
-    { name = "faiss-cpu", marker = "extra == 'vector'", specifier = ">=1.8" },
+    { name = "faiss-cpu", specifier = ">=1.8" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "mcp", specifier = ">=1.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.7" },
@@ -884,13 +882,13 @@ requires-dist = [
     { name = "python-frontmatter", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1" },
-    { name = "sentence-transformers", marker = "extra == 'vector'", specifier = ">=3.0" },
+    { name = "sentence-transformers", specifier = ">=3.0" },
     { name = "tenacity", specifier = ">=8.0" },
     { name = "types-pyyaml", marker = "extra == 'dev'" },
     { name = "uvicorn", specifier = ">=0.27.0" },
     { name = "watchdog", specifier = ">=3.0" },
 ]
-provides-extras = ["dev", "claude-agent", "vector"]
+provides-extras = ["dev", "claude-agent"]
 
 [package.metadata.requires-dev]
 dev = [

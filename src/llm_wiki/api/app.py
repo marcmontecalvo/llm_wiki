@@ -58,18 +58,17 @@ async def lifespan(app: FastAPI):
 
     # Load config from WIKI_CONFIG_DIR env var (default /config or config/).
     # The config will be used by routes in Story 1.6.
+    _wiki_config = None
     try:
         from llm_wiki.config.loader import load_config
 
-        load_config(config_dir)
+        _wiki_config = load_config(config_dir)
     except Exception as e:
         logger.warning("Config load failed (non-fatal for startup): %s", e)
 
-    # Instantiate WikiQuery exactly once
-    app.state.wiki = WikiQuery(
-        wiki_base=wiki_root,
-        index_dir=wiki_root / "index",
-    )
+    app.state.wiki = WikiQuery(wiki_base=wiki_root, index_dir=wiki_root / "index")
+    if _wiki_config is not None:
+        app.state.wiki_config = _wiki_config  # Make config available to routes
 
     # Initialize deep query job tracking
     app.state.deep_jobs = {}  # type: ignore[assignment]
@@ -134,9 +133,13 @@ def create_app() -> FastAPI:
                 daemon_running = True
             except (ValueError, ProcessLookupError, PermissionError, OSError):
                 daemon_running = False
+        llm_enabled = False
+        if hasattr(app.state, "wiki_config") and app.state.wiki_config is not None:
+            llm_enabled = app.state.wiki_config.daemon.daemon.features.llm_extraction
         return {
             "running": True,
             "daemon_running": daemon_running,
+            "llm_extraction_enabled": llm_enabled,
         }
 
     return app

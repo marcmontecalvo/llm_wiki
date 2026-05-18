@@ -4,7 +4,7 @@ RUN pip install uv
 WORKDIR /app
 COPY pyproject.toml uv.lock LICENSE README.md ./
 COPY src/ ./src/
-RUN uv sync --frozen --extra vector
+RUN uv sync --frozen
 
 # Stage 2: runtime
 FROM python:3.11-slim AS runtime

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class DomainConfig(BaseModel):
@@ -96,6 +96,17 @@ class DuplicatesConfig(BaseModel):
     )
 
 
+class FeaturesConfig(BaseModel):
+    """Feature flags for optional wiki capabilities."""
+
+    model_config = ConfigDict(extra="forbid")  # reject unknown flags at startup
+
+    llm_extraction: bool = False
+    synthesis_cache: bool = False
+    cross_domain_promotion: bool = False
+    # vector_search is NOT a flag — FAISS is a required dependency, always enabled
+
+
 class DaemonConfig(BaseModel):
     """Configuration for the wiki daemon."""
 
@@ -148,6 +159,7 @@ class DaemonConfig(BaseModel):
     duplicates: DuplicatesConfig = Field(
         default_factory=DuplicatesConfig, description="Duplicate detection configuration"
     )
+    features: FeaturesConfig = Field(default_factory=FeaturesConfig, description="Feature flags")
 
 
 class DaemonYAML(BaseModel):
@@ -240,7 +252,7 @@ class WikiConfig(BaseModel):
     domains: DomainsYAML
     daemon: DaemonYAML
     routing: RoutingYAML
-    models: ModelsYAML
+    models: ModelsYAML | None = None
 
 
 def load_models_config(filepath: Path) -> ModelsYAML:

@@ -160,7 +160,6 @@ Controlled via `daemon.yaml` `features:` block:
 | `vector_search` | `true` | sentence-transformers semantic search |
 | `synthesis_cache` | `false` | Cache repeated query answers as wiki pages (Sprint 3) |
 | `cross_domain_promotion` | `false` | Auto-promote shared entities across domains (Sprint 3) |
-| `lazy_vector_load` | `false` | Defer FAISS load to first search call; use if cold start approaches 30s budget |
 
 FR42–44 (claim trust tagging, citation enforcement, confidence gating) require `llm_extraction: true`. The heuristic path provides citation-presence-based confidence scoring without an LLM.
 

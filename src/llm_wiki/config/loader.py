@@ -1,5 +1,6 @@
 """Configuration loader for wiki system."""
 
+import logging
 from pathlib import Path
 from typing import Any, cast
 
@@ -7,6 +8,8 @@ import yaml
 from pydantic import ValidationError
 
 from llm_wiki.models.config import DaemonYAML, DomainsYAML, ModelsYAML, RoutingYAML, WikiConfig
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigLoadError(Exception):
@@ -118,6 +121,41 @@ class ConfigLoader:
         except ValidationError as e:
             raise ConfigLoadError(f"Invalid models.yaml: {e}") from e
 
+    def _load_models_conditional(
+        self, daemon_yaml: DaemonYAML, config_dir: Path
+    ) -> ModelsYAML | None:
+        """Load models.yaml conditionally based on feature flags.
+
+        models.yaml is only required when features.llm_extraction is true.
+        If the flag is false but models.yaml exists, it is loaded but optional.
+
+        Args:
+            daemon_yaml: Parsed daemon configuration
+            config_dir: Path to config directory
+
+        Returns:
+            ModelsYAML if valid config exists and is needed, None otherwise
+        """
+        if daemon_yaml.daemon.features.llm_extraction:
+            models_path = config_dir / "models.yaml"
+            if not models_path.exists():
+                raise ConfigLoadError(
+                    "features.llm_extraction is true but models.yaml not found at "
+                    f"{models_path}. Create models.yaml with provider config."
+                )
+            return self.load_models()
+        elif (config_dir / "models.yaml").exists():
+            # Load if present but don't require it
+            try:
+                return self.load_models()
+            except ConfigLoadError as e:
+                logger.warning(
+                    "models.yaml present but invalid (LLM extraction disabled); ignoring: %s", e
+                )
+                return None
+        else:
+            return None
+
     def load_all(self) -> WikiConfig:
         """Load and validate all configuration files.
 
@@ -127,11 +165,14 @@ class ConfigLoader:
         Raises:
             ConfigLoadError: If any config file fails to load or validate
         """
+        daemon_yaml = self.load_daemon()
+        models_config = self._load_models_conditional(daemon_yaml, self.config_dir)
+
         return WikiConfig(
             domains=self.load_domains(),
-            daemon=self.load_daemon(),
+            daemon=daemon_yaml,
             routing=self.load_routing(),
-            models=self.load_models(),
+            models=models_config,
         )
 
 

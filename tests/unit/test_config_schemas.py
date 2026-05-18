@@ -7,6 +7,7 @@ from llm_wiki.models.config import (
     DaemonConfig,
     DomainConfig,
     DomainsYAML,
+    FeaturesConfig,
     ModelProviderConfig,
     ModelsYAML,
     RoutingConfig,
@@ -204,3 +205,41 @@ class TestModelsYAML:
         )
         assert config.contracts.require_schema_validation is True
         assert config.contracts.allow_freeform_page_writes is False
+
+
+class TestFeaturesConfig:
+    """Tests for FeaturesConfig schema."""
+
+    def test_features_default_flags(self):
+        """All feature flags default to False."""
+        cfg = FeaturesConfig()
+        assert cfg.llm_extraction is False
+        assert cfg.synthesis_cache is False
+        assert cfg.cross_domain_promotion is False
+
+    def test_features_rejects_unknown_fields(self):
+        """Unknown fields are rejected."""
+        with pytest.raises(ValidationError, match="extra"):
+            FeaturesConfig(some_unknown_field=True)  # noqa: FBT011
+
+    def test_features_custom_values(self):
+        """Can set custom feature flag values."""
+        cfg = FeaturesConfig(llm_extraction=True)
+        assert cfg.llm_extraction is True
+        assert cfg.synthesis_cache is False
+        assert cfg.cross_domain_promotion is False
+
+
+class TestDaemonConfigWithFeatures:
+    """Tests for DaemonConfig including the new features field."""
+
+    def test_daemon_has_features_field(self):
+        """DaemonConfig has features field with defaults."""
+        config = DaemonConfig()
+        assert config.features.llm_extraction is False
+        assert isinstance(config.features, FeaturesConfig)
+
+    def test_daemon_custom_features(self):
+        """Can set custom features in DaemonConfig."""
+        config = DaemonConfig(features={"llm_extraction": True})
+        assert config.features.llm_extraction is True

@@ -144,7 +144,7 @@ documentsInventoried:
 
 ### Additional Requirements / Constraints
 
-- **Feature flags** govern Sprint 2–3 capabilities: `llm_extraction` (default: false), `vector_search` (default: true), `synthesis_cache` (default: false), `cross_domain_promotion` (default: false), `lazy_vector_load` (default: false)
+- **Feature flags** govern Sprint 2–3 capabilities: `llm_extraction` (default: false), `vector_search` (default: true), `synthesis_cache` (default: false), `cross_domain_promotion` (default: false)
 - **No LLM dependency for core operation** — FR42–44 require `llm_extraction: true`; all other FRs are LLM-free
 - **Multi-agent session coverage** (Sprint 2) — scope not yet tracked in epics/FRs per PRD note; needs confirmation during Sprint 2 planning
 - **Docker volume mounts** — wiki data on host volume; no data inside image; config via mounted YAML

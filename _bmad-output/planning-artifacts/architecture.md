@@ -216,7 +216,6 @@ features:
   vector_search: true          # sentence-transformers — on by default
   synthesis_cache: false       # Sprint 3
   cross_domain_promotion: false # Sprint 3
-  lazy_vector_load: false      # defer FAISS load to first search call (use if cold start >30s)
 ```
 
 ```yaml
@@ -389,8 +388,7 @@ def get_profile_id(x_profile_id: str | None = Header(default=None)) -> str | Non
 - Never instantiate WikiQuery inside a route function, tool function, or dependency function — the **single allowed instantiation** is in `app.py` lifespan
 - All routes and MCP tools access WikiQuery via `Depends(get_wiki)` or `request.app.state.wiki`
 - WikiQuery singleton is shared between uvicorn thread pool and daemon's `ThreadPoolExecutor` — `threading.Lock` is process-wide; the central lock registry in WikiQuery protects both correctly. Do NOT add a second locking layer in route or tool code
-- FAISS index stays in memory for the process lifetime; daemon rebuilds update the file on disk; in-memory index is refreshed when WikiQuery reloads (on process restart or explicit hot-reload)
-- If cold start time approaches the ≤30s budget (NFR-O1), enable `lazy_vector_load: true` in `daemon.yaml` — defers FAISS load to first search call
+- FAISS index always loads at startup; daemon rebuilds update the file on disk; in-memory index is refreshed via `reload_vector_index()` after rebuild or on process restart
 
 ### Startup Init Sequence
 

@@ -433,14 +433,6 @@ So that the service works fully without any LLM dependency by default and new ca
 **When** the daemon scheduler initializes
 **Then** the corresponding jobs are not registered and cannot be triggered manually
 
-**Given** `features.lazy_vector_load: false` (default)
-**When** the service starts
-**Then** the FAISS index loads immediately in the FastAPI lifespan — vector search is available from first request
-
-**Given** `features.lazy_vector_load: true`
-**When** the service starts
-**Then** the FAISS index is not loaded during lifespan; it loads on the first search call; cold start is faster but the first search pays the load cost
-
 **Given** any health or status response
 **When** returned
 **Then** it includes `llm_extraction_enabled: bool` and `vector_search_enabled: bool` capability indicators

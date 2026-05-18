@@ -16,6 +16,11 @@ daemon:
   log_level: INFO
   review_queue_enabled: true
 
+  features:
+    llm_extraction: false
+    synthesis_cache: false
+    cross_domain_promotion: false
+
 duplicates:
   enabled: true
   detection_interval: 86400  # daily (in seconds)

@@ -108,7 +108,10 @@ class WikiDaemon:
             )
 
         # Register promotion job
-        if self.config.daemon.daemon.promotion.enabled:
+        if (
+            self.config.daemon.daemon.promotion.enabled
+            and self.config.daemon.daemon.features.cross_domain_promotion
+        ):
             from llm_wiki.daemon.jobs.promotion import run_promotion_check
 
             self.scheduler.add_job(
@@ -118,6 +121,11 @@ class WikiDaemon:
                 wiki_base=wiki_base,
                 config=self.config.daemon.daemon.promotion,
             )
+
+        # Register synthesis cache job (Sprint 3 — gated by feature flag)
+        if self.config.daemon.daemon.features.synthesis_cache:
+            # SynthesisCacheJob will be implemented in Sprint 3
+            logger.info("synthesis_cache job is enabled but not yet implemented")
 
         # Register retry failed ingests job
         from llm_wiki.daemon.jobs.retry_failed_ingests import run_retry_failed_ingests

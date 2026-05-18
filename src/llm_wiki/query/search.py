@@ -17,7 +17,11 @@ _RRF_K = 60  # standard Reciprocal Rank Fusion constant
 class WikiQuery:
     """Unified query interface for searching wiki pages."""
 
-    def __init__(self, wiki_base: Path | None = None, index_dir: Path | None = None):
+    def __init__(
+        self,
+        wiki_base: Path | None = None,
+        index_dir: Path | None = None,
+    ):
         """Initialize wiki query interface.
 
         Args:
@@ -42,7 +46,6 @@ class WikiQuery:
             "metadata": threading.Lock(),
         }
 
-        # Load indexes
         self._load_indexes()
 
     def acquire_all_locks(self) -> None:
@@ -61,7 +64,7 @@ class WikiQuery:
             self.vector_index.load()
 
     def _load_indexes(self) -> None:
-        """Load indexes from disk."""
+        """Load all indexes from disk at startup."""
         try:
             self.metadata_index.load()
             self.fulltext_index.load()

@@ -172,6 +172,8 @@ domains:
 daemon:
   inbox_poll_seconds: 15
   log_level: INFO
+  features:
+    llm_extraction: false
 """)
 
         (config_dir / "routing.yaml").write_text("""
@@ -193,26 +195,96 @@ models:
         assert len(config.domains.domains) == 1
         assert config.daemon.daemon.inbox_poll_seconds == 15
         assert config.routing.routing.fallback_domain == "general"
+        # models.yaml present but llm_extraction is False — loaded anyway
+        assert config.models is not None
+        assert "extraction" in config.models.models
+
+    def test_load_all_no_models_when_llm_disabled(self, temp_dir: Path):
+        """When llm_extraction is False and no models.yaml, models is None."""
+        config_dir = temp_dir / "config"
+        config_dir.mkdir()
+
+        (config_dir / "domains.yaml").write_text("domains: []")
+        (config_dir / "daemon.yaml").write_text("""
+daemon:
+  inbox_poll_seconds: 15
+  features:
+    llm_extraction: false
+""")
+        (config_dir / "routing.yaml").write_text("routing: {}")
+
+        loader = ConfigLoader(config_dir)
+        config = loader.load_all()
+
+        assert config.models is None
+
+    def test_load_all_requires_models_when_llm_enabled(self, temp_dir: Path):
+        """When llm_extraction is True, models.yaml is required."""
+        from llm_wiki.config.loader import ConfigLoadError
+
+        config_dir = temp_dir / "config"
+        config_dir.mkdir()
+
+        (config_dir / "domains.yaml").write_text("domains: []")
+        (config_dir / "daemon.yaml").write_text("""
+daemon:
+  inbox_poll_seconds: 15
+  features:
+    llm_extraction: true
+""")
+        (config_dir / "routing.yaml").write_text("routing: {}")
+
+        # No models.yaml provided
+
+        loader = ConfigLoader(config_dir)
+        with pytest.raises(ConfigLoadError, match="models.yaml"):
+            loader.load_all()
+
+    def test_load_all_with_models_when_llm_enabled(self, temp_dir: Path):
+        """When llm_extraction is True with models.yaml, load succeeds."""
+        config_dir = temp_dir / "config"
+        config_dir.mkdir()
+
+        (config_dir / "domains.yaml").write_text("domains: []")
+        (config_dir / "daemon.yaml").write_text("""
+daemon:
+  inbox_poll_seconds: 15
+  features:
+    llm_extraction: true
+""")
+        (config_dir / "routing.yaml").write_text("routing: {}")
+        (config_dir / "models.yaml").write_text("""
+models:
+  extraction:
+    provider: local
+    model: test
+    temperature: 0.1
+""")
+
+        loader = ConfigLoader(config_dir)
+        config = loader.load_all()
+
+        assert config.models is not None
         assert "extraction" in config.models.models
 
 
 class TestLoadConfigFunction:
     """Tests for load_config convenience function."""
 
-    def test_load_config_success(self, temp_dir: Path):
-        """Test load_config convenience function."""
+    def test_load_config_no_models_when_llm_disabled(self, temp_dir: Path):
+        """Test load_config with minimal config and no models.yaml."""
         config_dir = temp_dir / "config"
         config_dir.mkdir()
 
-        # Create minimal valid configs
+        # Create minimal valid configs (no models.yaml)
         (config_dir / "domains.yaml").write_text("domains: []")
         (config_dir / "daemon.yaml").write_text("daemon: {}")
         (config_dir / "routing.yaml").write_text("routing: {}")
-        (config_dir / "models.yaml").write_text("models: {}")
 
         config = load_config(config_dir)
         assert config.domains is not None
         assert config.daemon is not None
+        assert config.models is None
 
     def test_load_config_failure(self, temp_dir: Path):
         """Test load_config fails with missing directory."""
@@ -244,6 +316,10 @@ class TestRealConfigFiles:
         assert config.daemon.daemon.inbox_poll_seconds == 15
         assert config.daemon.daemon.max_parallel_jobs == 2
         assert config.daemon.daemon.log_level == "INFO"
+
+        # Verify feature flags
+        assert config.daemon.daemon.features.llm_extraction is False
+        assert config.daemon.daemon.features.synthesis_cache is False
 
         # Verify routing config
         assert config.routing.routing.fallback_domain == "general"

@@ -322,8 +322,15 @@ class VectorIndex:
 
         logger.info(f"Saved vector index ({len(self.doc_ids)} documents)")
 
+    def is_loaded(self) -> bool:
+        """Return True if the index has been loaded from disk or built."""
+        return bool(self.doc_ids)
+
     def load(self) -> None:
         """Load index from disk."""
+        if self.is_loaded():
+            return
+
         meta_path = self.index_dir / "vector_meta.json"
         if not meta_path.exists():
             logger.debug("No existing vector index found")

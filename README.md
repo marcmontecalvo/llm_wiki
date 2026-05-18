@@ -94,7 +94,6 @@ features:
   vector_search: true        # sentence-transformers semantic search
   synthesis_cache: false     # cache repeated query answers as wiki pages
   cross_domain_promotion: false  # auto-promote shared entities across domains
-  lazy_vector_load: false    # defer FAISS load to first search call (faster cold start)
 ```
 
 When `llm_extraction: false`, the system runs fully without any LLM — heuristic tag extraction, first-paragraph summaries, algorithmic contradiction detection. Enable it to get LLM-quality claim extraction, confidence scoring, and richer summaries.
