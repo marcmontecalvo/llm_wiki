@@ -27,12 +27,23 @@ venv/
 ENV/
 env/
 
-# Testing
+# Testing / coverage
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 .tox/
 .nox/
+
+# Type checking / linting
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+
+# uv
+.uv/
+uv.lock.tmp
 
 # IDEs
 .vscode/
@@ -45,29 +56,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Project specific - wiki system runtime data
-wiki_system/
-
-# Generated wiki data (bind-mounted volume)
-wiki_data/
-
-# Local files
-prompt.md
-llm-wiki-base-repo/
-llm-wiki-base-repo.zip
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# ruff
-.ruff_cache/
-
-# uv
-.uv/
-uv.lock.tmp
-
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb
@@ -75,12 +63,14 @@ uv.lock.tmp
 # Temporary files
 *.tmp
 *.bak
-*.swp
-*.swo
 .~*
 
-# Database files
+# Local DB files
 *.db
 *.sqlite
 *.sqlite3
-.forgeflow/run/
+
+# Project-specific runtime/generated data
+/wiki_system/
+/wiki_data/
+/.forgeflow/run/
