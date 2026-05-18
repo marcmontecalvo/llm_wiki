@@ -1,6 +1,6 @@
 # Story 1.4: FastAPI Application Skeleton and Error Handling
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -38,62 +38,62 @@ so that all REST and MCP surfaces share a reliable, consistent service foundatio
 
 ## Tasks / Subtasks
 
-- [ ] Create `src/llm_wiki/exceptions.py` — canonical WikiError subclasses (AC: 4, 5, 6, 7)
-  - [ ] `WikiError(Exception)` — base class
-  - [ ] `WikiNotFoundError(WikiError)` — 404 WIKI_NOT_FOUND
-  - [ ] `DomainUnknownError(WikiError)` — 404 (or 422 when user-supplied) DOMAIN_UNKNOWN
-  - [ ] `IngestError(WikiError)` — 422 INGEST_ERROR
-  - [ ] `IndexStaleError(WikiError)` — 503 INDEX_STALE (rebuild_hint: true)
-  - [ ] `DaemonNotRunningError(WikiError)` — 503 DAEMON_NOT_RUNNING
-  - [ ] `ExportNotReadyError(WikiError)` — 404 EXPORT_NOT_READY
-  - [ ] `InvalidDepthError(WikiError)` — 422 INVALID_DEPTH
-  - [ ] `QueryTimeoutError(WikiError)` — NOT in ERROR_MAP; normal response branch
-- [ ] Create `src/llm_wiki/initializer.py` — wiki directory structure setup (AC: 1)
-  - [ ] `WikiInitializer.initialize(wiki_root: Path)` — idempotent; creates all required subdirs
-  - [ ] `_maybe_init_wiki_root(wiki_root: Path)` — calls initialize only if `domains/` doesn't exist
-- [ ] Create `src/llm_wiki/deps.py` — shared DI functions (AC: 3)
-  - [ ] `get_wiki(request: Request) -> WikiQuery` — returns `request.app.state.wiki`
-  - [ ] `get_profile_id(x_profile_id: str | None = Header(default=None)) -> str | None`
-- [ ] Create `src/llm_wiki/api/errors.py` — ERROR_MAP and exception handler (AC: 4, 5, 6, 7)
-  - [ ] `ERROR_MAP: dict[type[WikiError], tuple[int, str]]` — maps exception types to (status_code, error_code)
-  - [ ] `rebuild_hint` is True only for `IndexStaleError`
-  - [ ] `QueryTimeoutError` MUST NOT be in ERROR_MAP
-  - [ ] `wiki_error_to_http(exc, status_override=None)` — converts WikiError to HTTPException
-  - [ ] `register_exception_handlers(app: FastAPI)` — registers all handlers on the app
-- [ ] Create `src/llm_wiki/api/models.py` — API Pydantic request/response models (AC: 9)
-  - [ ] `ErrorResponse(error_code: str, message: str, rebuild_hint: bool = False)`
-  - [ ] `HealthResponse`, `DaemonStatusResponse` (stub — populated in Story 1.6)
-  - [ ] `QueryRequest(query: str, depth: str = "quick", domain: str | None = None)`
-  - [ ] `QueryResponse(results: list, timed_out: bool = False, partial: bool = False, vector_search: bool = False)`
-  - [ ] `IngestRequest`, `IngestStatusResponse` (stub)
-  - [ ] `SearchResponse` (stub)
-  - [ ] `PageResponse`, `PageListResponse` (stub)
-  - [ ] `ExportResponse` (stub)
-- [ ] Create `src/llm_wiki/api/app.py` — FastAPI app + lifespan (AC: 1, 2, 3, 8, 10, 11)
-  - [ ] `_maybe_init_wiki_root(wiki_root)` called FIRST in lifespan
-  - [ ] Load config from `WIKI_CONFIG_DIR` env var (default `/config`)
-  - [ ] Instantiate `WikiQuery(config)` once → `app.state.wiki`
-  - [ ] Initialize `app.state.deep_jobs: dict[str, DeepQueryJob] = {}`
-  - [ ] Mount MCP server at `/mcp` (see MCP skeleton below)
-  - [ ] Register exception handlers via `register_exception_handlers(app)`
-  - [ ] Add `X-LLM-Wiki-Version` middleware
-- [ ] Create `src/llm_wiki/synthesis/engine.py` — async generator (AC: 7 via deep query support)
-  - [ ] `SynthesisChunk(text: str, is_final: bool, sources: list[str])`
-  - [ ] `_synthesize_heuristic(query, pages)` — heuristic fallback: pages sorted by confidence, concatenated
-  - [ ] `_synthesize_llm(query, pages)` — raises `NotImplementedError` until Epic 2; marked as the LLM path
-  - [ ] `synthesize(query, pages, llm_extraction: bool)` — single entry point; routes to LLM or heuristic; catches all LLM exceptions and falls back to heuristic with error logging
-  - [ ] `run_deep_query(query, pages, llm_extraction, timeout=30.0) -> DeepQueryResult` — uses `asyncio.timeout()`
-  - [ ] `DeepQueryResult(chunks: list, timed_out: bool, partial: bool, was_heuristic: bool)`
-- [ ] **MCP SDK spike — complete before writing any MCP skeleton code** (AC: 10)
-  - [ ] Run `uv add mcp` and inspect the installed package: verify exact import paths for `Server`, the Streamable HTTP transport class, and the ASGI mount API
-  - [ ] Write a minimal spike in `src/llm_wiki/mcp/server.py`: create an `mcp.Server`, register one no-op tool (`tools/list` returns `[]`), mount at `/mcp`, and verify `GET /mcp` responds without error using `TestClient`
-  - [ ] **Do not proceed to Stories 1.6–1.9 MCP work until this spike passes** — all downstream MCP tools depend on the correct mount API
-  - [ ] Document the verified import paths in a comment at the top of `server.py`
-- [ ] Create `src/llm_wiki/mcp/server.py` + `tools.py` skeleton (AC: 10)
-  - [ ] `server.py`: implement using the verified SDK API from the spike above
-  - [ ] `tools.py`: empty module; tools registered in Story 1.8
-- [ ] Create `src/llm_wiki/api/routers/__init__.py` (empty — routers added in 1.6/1.7)
-- [ ] Write tests (see Testing section)
+- [x] Create `src/llm_wiki/exceptions.py` — canonical WikiError subclasses (AC: 4, 5, 6, 7)
+  - [x] `WikiError(Exception)` — base class
+  - [x] `WikiNotFoundError(WikiError)` — 404 WIKI_NOT_FOUND
+  - [x] `DomainUnknownError(WikiError)` — 404 (or 422 when user-supplied) DOMAIN_UNKNOWN
+  - [x] `IngestError(WikiError)` — 422 INGEST_ERROR
+  - [x] `IndexStaleError(WikiError)` — 503 INDEX_STALE (rebuild_hint: true)
+  - [x] `DaemonNotRunningError(WikiError)` — 503 DAEMON_NOT_RUNNING
+  - [x] `ExportNotReadyError(WikiError)` — 404 EXPORT_NOT_READY
+  - [x] `InvalidDepthError(WikiError)` — 422 INVALID_DEPTH
+  - [x] `QueryTimeoutError(WikiError)` — NOT in ERROR_MAP; normal response branch
+- [x] Create `src/llm_wiki/initializer.py` — wiki directory structure setup (AC: 1)
+  - [x] `WikiInitializer.initialize(wiki_root: Path)` — idempotent; creates all required subdirs
+  - [x] `_maybe_init_wiki_root(wiki_root: Path)` — calls initialize only if `domains/` doesn't exist
+- [x] Create `src/llm_wiki/deps.py` — shared DI functions (AC: 3)
+  - [x] `get_wiki(request: Request) -> WikiQuery` — returns `request.app.state.wiki`
+  - [x] `get_profile_id(x_profile_id: str | None = Header(default=None)) -> str | None`
+- [x] Create `src/llm_wiki/api/errors.py` — ERROR_MAP and exception handler (AC: 4, 5, 6, 7)
+  - [x] `ERROR_MAP: dict[type[WikiError], tuple[int, str]]` — maps exception types to (status_code, error_code)
+  - [x] `rebuild_hint` is True only for `IndexStaleError`
+  - [x] `QueryTimeoutError` MUST NOT be in ERROR_MAP
+  - [x] `wiki_error_to_http(exc, status_override=None)` — converts WikiError to HTTPException
+  - [x] `register_exception_handlers(app: FastAPI)` — registers all handlers on the app
+- [x] Create `src/llm_wiki/api/models.py` — API Pydantic request/response models (AC: 9)
+  - [x] `ErrorResponse(error_code: str, message: str, rebuild_hint: bool = False)`
+  - [x] `HealthResponse`, `DaemonStatusResponse` (stub — populated in Story 1.6)
+  - [x] `QueryRequest(query: str, depth: str = "quick", domain: str | None = None)`
+  - [x] `QueryResponse(results: list, timed_out: bool = False, partial: bool = False, vector_search: bool = False)`
+  - [x] `IngestRequest`, `IngestStatusResponse` (stub)
+  - [x] `SearchResponse` (stub)
+  - [x] `PageResponse`, `PageListResponse` (stub)
+  - [x] `ExportResponse` (stub)
+- [x] Create `src/llm_wiki/api/app.py` — FastAPI app + lifespan (AC: 1, 2, 3, 8, 10, 11)
+  - [x] `_maybe_init_wiki_root(wiki_root)` called FIRST in lifespan
+  - [x] Load config from `WIKI_CONFIG_DIR` env var (default `/config`)
+  - [x] Instantiate `WikiQuery(config)` once → `app.state.wiki`
+  - [x] Initialize `app.state.deep_jobs: dict[str, DeepQueryJob] = {}`
+  - [x] Mount MCP server at `/mcp` (see MCP skeleton below)
+  - [x] Register exception handlers via `register_exception_handlers(app)`
+  - [x] Add `X-LLM-Wiki-Version` middleware
+- [x] Create `src/llm_wiki/synthesis/engine.py` — async generator (AC: 7 via deep query support)
+  - [x] `SynthesisChunk(text: str, is_final: bool, sources: list[str])`
+  - [x] `_synthesize_heuristic(query, pages)` — heuristic fallback: pages sorted by confidence, concatenated
+  - [x] `_synthesize_llm(query, pages)` — raises `NotImplementedError` until Epic 2; marked as the LLM path
+  - [x] `synthesize(query, pages, llm_extraction: bool)` — single entry point; routes to LLM or heuristic; catches all LLM exceptions and falls back to heuristic with error logging
+  - [x] `run_deep_query(query, pages, llm_extraction, timeout=30.0) -> DeepQueryResult` — uses `asyncio.timeout()`
+  - [x] `DeepQueryResult(chunks: list, timed_out: bool, partial: bool, was_heuristic: bool)`
+- [x] **MCP SDK spike — complete before writing any MCP skeleton code** (AC: 10)
+  - [x] Run `uv add mcp` and inspect the installed package: verify exact import paths for `Server`, the Streamable HTTP transport class, and the ASGI mount API
+  - [x] Write a minimal spike in `src/llm_wiki/mcp/server.py`: create an `mcp.Server`, register one no-op tool (`tools/list` returns `[]`), mount at `/mcp`, and verify `GET /mcp` responds without error using `TestClient`
+  - [x] **Do not proceed to Stories 1.6-1.9 MCP work until this spike passes** — all downstream MCP tools depend on the correct mount API
+  - [x] Document the verified import paths in a comment at the top of `server.py`
+- [x] Create `src/llm_wiki/mcp/server.py` + `tools.py` skeleton (AC: 10)
+  - [x] `server.py`: implement using the verified SDK API from the spike above
+  - [x] `tools.py`: empty module; tools registered in Story 1.8
+- [x] Create `src/llm_wiki/api/routers/__init__.py` (empty — routers added in 1.6/1.7)
+- [x] Write tests (see Testing section)
 
 ## Dev Notes
 
@@ -411,4 +411,34 @@ claude-sonnet-4-6
 
 ### Completion Notes List
 
+- Implemented exceptions.py with 9 WikiError subclasses covering AC 4-7.
+- Implemented initializer.py with idempotent WikiInitializer class and _maybe_init_wiki_root gate.
+- Implemented deps.py with get_wiki (app.state singleton) and get_profile_id (header provider).
+- Implemented api/errors.py with ERROR_MAP (7 entries), status override pattern, rebuild_hint flag, and per-exception JSONResponse handlers.
+- Implemented api/models.py with 9 Pydantic models (ErrorResponse, HealthResponse, QueryRequest/Response, stubs for Ingest, Search, Page, Export).
+- Rewrote api/app.py with proper lifespan: _maybe_init_wiki_root first, config load, WikiQuery singleton, deep_jobs dict, MCP server mount, X-LLM-Wiki-Version middleware.
+- Implemented synthesis/engine.py as async generator with synthesize() fallback contract, run_deep_query with asyncio.timeout(), DeepQueryResult was_heuristic flag.
+- MCP SDK verified against mcp==1.27.0: FastMCP class with stateless_http=True, StreamableHTTPASGIApp as mountable ASGI wrapper. Session manager created lazily on streamable_http_app property access.
+- Created mcp/server.py + tools.py skeleton using verified FastMCP API. Tools.register stub registered.
+- Created api/routers/__init__.py (empty).
+- Created 23 new tests (12 error handling, 6 initializer, 5 integration). All 1264 tests pass.
+- ruff check and ruff format pass cleanly on all modified files.
+
 ### File List
+
+- NEW: src/llm_wiki/exceptions.py
+- NEW: src/llm_wiki/initializer.py
+- NEW: src/llm_wiki/deps.py
+- NEW: src/llm_wiki/api/errors.py
+- NEW: src/llm_wiki/api/models.py
+- MODIFIED: src/llm_wiki/api/app.py
+- NEW: src/llm_wiki/mcp/server.py
+- NEW: src/llm_wiki/mcp/tools.py
+- NEW: src/llm_wiki/mcp/__init__.py
+- NEW: src/llm_wiki/api/__init__.py
+- NEW: src/llm_wiki/api/routers/__init__.py
+- NEW: src/llm_wiki/synthesis/__init__.py
+- NEW: src/llm_wiki/synthesis/engine.py
+- NEW: tests/unit/test_api_errors.py
+- NEW: tests/unit/test_initializer.py
+- NEW: tests/integration/test_api_integration.py

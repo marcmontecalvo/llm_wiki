@@ -47,7 +47,7 @@ development_status:
   1-1-atomic-index-writes-and-write-mutex: review
   1-2-inbox-recovery-and-index-integrity-on-startup: review
   1-3-docker-container-and-process-management: review
-  1-4-fastapi-application-skeleton-and-error-handling: ready-for-dev
+  1-4-fastapi-application-skeleton-and-error-handling: review
   1-5-feature-flag-system: ready-for-dev
   1-6-rest-health-daemon-and-ingest-endpoints: ready-for-dev
   1-7-rest-query-search-pages-and-export-endpoints: ready-for-dev

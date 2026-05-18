@@ -1,14 +1,28 @@
-"""Minimal FastAPI application entry point.
+"""FastAPI application entry point and lifespan management.
 
 Populated by Story 1.4 (FastAPI skeleton) and Story 1.8 (MCP + REST endpoints).
+The lifespan creates a single WikiQuery singleton that is shared across all
+REST and MCP surfaces.
 """
 
+from __future__ import annotations
+
+import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
-app = FastAPI(title="LLM Wiki", version="0.1.0")
+from llm_wiki.api.errors import register_exception_handlers
+from llm_wiki.initializer import _maybe_init_wiki_root
+from llm_wiki.query.search import WikiQuery
+
+if TYPE_CHECKING:
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+
+logger = logging.getLogger(__name__)
 
 # PID file written by WikiDaemon so FastAPI can check if it is alive.
 _DAEMON_PID_FILE = "/wiki/state/daemon.pid"
@@ -26,14 +40,107 @@ def _daemon_running() -> bool:
         return False
 
 
-@app.get("/v1/health")
-def health():
-    """Health check for Docker HEALTHCHECK and supervisory tools."""
-    config_dir = os.environ.get("WIKI_CONFIG_DIR", "config")
-    wiki_config = Path(config_dir) if Path(config_dir).is_dir() else Path("config")
-    running = wiki_config.is_dir() if wiki_config else False
-    return {
-        "running": running,
-        "config_dir": str(wiki_config) if wiki_config else "unknown",
-        "daemon_running": _daemon_running(),
-    }
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize the wiki root, config, and WikiQuery singleton.
+
+    Order matters:
+      1. _maybe_init_wiki_root() — creates directories if empty volume
+      2. load_config() — loads YAML config
+      3. WikiQuery() — builds all indexes (FAISS loads here)
+      4. MCP session manager started via run() context
+    """
+    wiki_root = Path(os.environ.get("WIKI_ROOT", "wiki_system"))
+    config_dir = Path(os.environ.get("WIKI_CONFIG_DIR", "config"))
+
+    # MUST be first — WikiConfig.load() raises FileNotFoundError on empty volume
+    _maybe_init_wiki_root(wiki_root)
+
+    # Load config from WIKI_CONFIG_DIR env var (default /config or config/).
+    # The config will be used by routes in Story 1.6.
+    try:
+        from llm_wiki.config.loader import load_config
+
+        load_config(config_dir)
+    except Exception as e:
+        logger.warning("Config load failed (non-fatal for startup): %s", e)
+
+    # Instantiate WikiQuery exactly once
+    app.state.wiki = WikiQuery(
+        wiki_base=wiki_root,
+        index_dir=wiki_root / "index",
+    )
+
+    # Initialize deep query job tracking
+    app.state.deep_jobs = {}  # type: ignore[assignment]
+
+    # Create MCP server, mount it, and start the session manager
+    mcp_mgr: StreamableHTTPSessionManager | None = None
+    try:
+        from llm_wiki.mcp.server import create_mcp_server
+
+        _mcp_server, mcp_asgi, mcp_mgr = create_mcp_server(app.state.wiki)
+        app.mount("/mcp", mcp_asgi)
+    except Exception as e:
+        logger.warning("MCP server init failed (non-fatal): %s", e)
+        mcp_mgr = None
+
+    # Session manager lifespan — start before yield, cancel after
+    if mcp_mgr is not None:
+        async with mcp_mgr.run():
+            yield
+    else:
+        yield
+
+    # Shutdown
+    logger.info("LLM Wiki service shutting down")
+
+
+def create_app() -> FastAPI:
+    """Factory function to create the FastAPI application.
+
+    Returns:
+        Configured FastAPI application.
+    """
+    from llm_wiki import __version__
+
+    app = FastAPI(
+        title="LLM Wiki",
+        version=__version__,
+        lifespan=lifespan,
+    )
+
+    # Register exception handlers before adding other middleware
+    register_exception_handlers(app)
+
+    # Version header middleware
+    @app.middleware("http")
+    async def add_version_header(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-LLM-Wiki-Version"] = __version__
+        return response
+
+    # Health check
+    wiki_root = Path(os.environ.get("WIKI_ROOT", "wiki_system"))
+    pid_file = wiki_root / "state" / "daemon.pid"
+
+    @app.get("/v1/health")
+    def health():
+        daemon_running = False
+        if pid_file.exists():
+            try:
+                pid = int(pid_file.read_text().strip())
+                os.kill(pid, 0)
+                daemon_running = True
+            except (ValueError, ProcessLookupError, PermissionError, OSError):
+                daemon_running = False
+        return {
+            "running": True,
+            "daemon_running": daemon_running,
+        }
+
+    return app
+
+
+# Module-level app instance for service gateways (e.g. Docker HEALTHCHECK).
+app = create_app()

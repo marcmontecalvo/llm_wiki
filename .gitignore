@@ -57,6 +57,9 @@ wiki_system/state/
 wiki_system/domains/*/queue/
 *.log
 
+# Generated wiki data (bind-mounted volume)
+wiki_data/
+
 # Local files
 prompt.md
 llm-wiki-base-repo/
