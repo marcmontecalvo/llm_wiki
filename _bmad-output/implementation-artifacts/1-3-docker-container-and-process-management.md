@@ -255,11 +255,12 @@ claude-sonnet-4-6
 - Added fastapi, uvicorn, mcp dependencies to pyproject.toml
 - Created src/llm_wiki/daemon/__main__.py entry point for `python -m llm_wiki.daemon`
 - Updated run_daemon() in daemon/main.py to read WIKI_CONFIG_DIR env var with "config" fallback
-- Created entrypoint.sh that initializes wiki dirs (inbox, shared/*), copies default config, symlinks /app/config → /wiki/config
-- Created minimal FastAPI app with /v1/health endpoint for Docker HEALTHCHECK
+- Created entrypoint.sh that initializes wiki dirs (inbox, shared/*, state/), copies default config
+- Created minimal FastAPI app with /v1/health endpoint for Docker HEALTHCHECK — checks daemon liveness via PID file at /wiki/state/daemon.pid
+- WikiDaemon writes PID file at startup, removes it on shutdown — enables Docker HEALTHCHECK to detect daemon crashes (AC 10)
+- Fixed config_dir threading: WikiDaemon.start() now passes config_dir to InboxWatcher (was previously hardcoded to "config", causing startup crash in Docker)
 - Updated README.md with Docker quick-start section
-- Existing config/ files at repo root serve as example configs
-- All 1241 tests pass, lint clean
+- All tests pass, lint clean, container reports healthy
 
 ### File List
 - `Dockerfile` (NEW)
@@ -269,6 +270,6 @@ claude-sonnet-4-6
 - `entrypoint.sh` (NEW) — container entrypoint that initializes wiki dirs and copies default config
 - `src/llm_wiki/daemon/__main__.py` (NEW) — `python -m llm_wiki.daemon` entry point
 - `src/llm_wiki/api/app.py` (NEW) — minimal FastAPI app with /v1/health endpoint
-- `src/llm_wiki/daemon/main.py` (MODIFIED — added `import os`, updated `run_daemon` default to `WIKI_CONFIG_DIR`)
+- `src/llm_wiki/daemon/main.py` (MODIFIED — added `import os`, updated `run_daemon` default to `WIKI_CONFIG_DIR`, added PID file write on start/cleanup on shutdown, fixed config_dir passed to InboxWatcher)
 - `pyproject.toml` (MODIFIED — added fastapi, uvicorn, mcp dependencies)
 - `README.md` (MODIFIED — added Docker quick-start section and local dev note)

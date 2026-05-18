@@ -197,7 +197,7 @@ class WikiDaemon:
         # Startup recovery: move orphaned processing/ files back to inbox
         from llm_wiki.ingest.watcher import InboxWatcher
 
-        watcher = InboxWatcher(inbox_dir=wiki_base / "inbox")
+        watcher = InboxWatcher(inbox_dir=wiki_base / "inbox", config_dir=self.config_dir)
         recovered = watcher.recover_processing_dir()
         if recovered:
             logger.warning(
@@ -236,6 +236,14 @@ class WikiDaemon:
 
         self._running = True
         logger.info("Wiki daemon started successfully")
+
+        # Write PID file so /v1/health can track daemon liveness (best-effort)
+        pid_path = Path(os.environ.get("WIKI_ROOT", "/wiki")) / "state" / "daemon.pid"
+        try:
+            pid_path.parent.mkdir(parents=True, exist_ok=True)
+            pid_path.write_text(str(os.getpid()))
+        except OSError:
+            logger.warning("Could not write daemon PID file at %s", pid_path)
 
     def run(self) -> NoReturn:
         """Run the daemon main loop.
@@ -294,6 +302,13 @@ class WikiDaemon:
             logger.info("Worker pool stopped")
 
         self._running = False
+
+        # Remove PID file
+        pid_path = Path(os.environ.get("WIKI_ROOT", "/wiki")) / "state" / "daemon.pid"
+        try:
+            pid_path.unlink(missing_ok=True)
+        except OSError:
+            pass
         logger.info("Daemon shutdown complete")
 
     def is_running(self) -> bool:

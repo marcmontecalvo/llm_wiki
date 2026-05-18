@@ -6,7 +6,6 @@ services:
     volumes:
       - ./wiki_data:/wiki
       - ./config:/config/ro:ro
-      - ./config:/app/config:ro
     environment:
       WIKI_ROOT: /wiki
       WIKI_CONFIG_DIR: /wiki/config
