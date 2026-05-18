@@ -1,42 +1,72 @@
+# Git/repo metadata
 .git/
 .github/
+
+# Python bytecode/cache
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Test/cache/coverage artifacts
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 .tox/
 .nox/
-*.egg-info/
-dist/
+
+# Type/lint/tool caches
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.uv/
+
+# Python build/package artifacts
 build/
-htmlcov/
-.coverage
+dist/
+*.egg-info/
+.eggs/
+wheels/
+
+# Virtual environments
 .venv/
 venv/
 ENV/
 env/
+
+# Runtime/generated state
 wiki_data/
 wiki_system/
 .forgeflow/run/
+
+# BMAD/dev-only agent artifacts
 _bmad-output/
 _bmad/
-.claude/
-.codegraph/
+
+# Dev-only docs/examples/tests
+tests/
+docs/
+examples/
+
+# IDE/editor/OS
 .vscode/
 .idea/
-prompt.md
-llm-wiki-base-repo/
-llm-wiki-base-repo.zip
 .DS_Store
 Thumbs.db
 *.swp
 *.swo
 *~
-*.tmp
-*.bak
-.~*
+
+# Local-only files
+prompt.md
+llm-wiki-base-repo/
+llm-wiki-base-repo.zip
+
+# Local DB/temp files
 *.db
 *.sqlite
 *.sqlite3
+*.tmp
+*.bak
+.~*

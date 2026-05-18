@@ -1,8 +1,10 @@
-# Python
+# Python bytecode/cache
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+
+# Python build/package artifacts
 .Python
 build/
 develop-eggs/
@@ -10,8 +12,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
@@ -27,7 +27,7 @@ venv/
 ENV/
 env/
 
-# Testing / coverage
+# Test/cache/coverage artifacts
 .pytest_cache/
 .coverage
 .coverage.*
@@ -35,17 +35,17 @@ htmlcov/
 .tox/
 .nox/
 
-# Type checking / linting
+# Type/lint/tool caches
 .mypy_cache/
 .dmypy.json
 dmypy.json
 .ruff_cache/
-
-# uv
 .uv/
+
+# uv temp files
 uv.lock.tmp
 
-# IDEs
+# IDE/editor
 .vscode/
 .idea/
 *.swp
@@ -60,7 +60,7 @@ Thumbs.db
 .ipynb_checkpoints/
 *.ipynb
 
-# Temporary files
+# Temporary/local files
 *.tmp
 *.bak
 .~*
@@ -70,7 +70,12 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
-# Project-specific runtime/generated data
-/wiki_system/
+# Project runtime/generated state
 /wiki_data/
+/wiki_system/
 /.forgeflow/run/
+
+# Local-only files
+/prompt.md
+/llm-wiki-base-repo/
+/llm-wiki-base-repo.zip
