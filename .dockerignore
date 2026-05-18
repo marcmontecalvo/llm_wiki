@@ -10,7 +10,3 @@ dist/
 build/
 .claude/
 _bmad-output/
-config/daemon.yaml
-config/domains.yaml
-config/models.yaml
-config/routing.yaml
