@@ -1,246 +1,165 @@
-# Federated LLM Wiki Base Repo
+# LLM Wiki
 
-This repo is the starting point for a **daemon-governed, multi-domain LLM wiki system**.
+A daemon-governed knowledge service for AI agent harnesses. Runs as a Docker container and exposes MCP (Streamable HTTP), REST, and CLI interfaces. Knowledge is authored, maintained, and governed automatically by a background daemon — not by humans.
 
-Core decision:
-- **Labhund/llm-wiki** is the model for the daemon, maintenance loop, and wiki governance.
-- **nvk/llm-wiki** is the model for domain/project scoping, portable agent behavior, and wiki workflow conventions.
-- **Pratiyush/llm-wiki** is the model for transcript/session ingest and machine-readable exports.
-- **Ar9av/obsidian-wiki** is the model for cross-agent compatibility and skill/bootstrap wiring.
-
-### Agent Integrations
-
-This wiki supports multiple AI agents:
-- **Claude Code**: `.claude/skills/` and `.claude/bootstrap.md`
-- **GitHub Copilot**: `.github/copilot-instructions.md` and `.github/copilot-snippets.json`
-
-See [docs/AGENT_SUPPORT_MATRIX.md](docs/AGENT_SUPPORT_MATRIX.md) for full list.
-
-## How LLM Wiki fits in your stack
-
-LLM Wiki is a **structured knowledge store**, not a memory system. These are complementary, not competing roles:
+## How it fits in the stack
 
 | Layer | Tool | Purpose |
 |-------|------|---------|
-| Agent harness | OpenClaw, Hermes-agent, Agent Zero, Homefront | Orchestrates agent behavior and tool use |
-| Session memory | Honcho (or similar) | Manages conversational context and continuity |
+| Agent harness | Homefront (and others) | Orchestrates agent behavior and tool use |
+| Session memory | Honcho | Conversational context and continuity |
 | Knowledge store | **LLM Wiki** | Compiled, governed domain knowledge that compounds over time |
 
-An agent harness uses Honcho and LLM Wiki simultaneously for different purposes. Honcho answers "what were we just talking about?"; LLM Wiki answers "what do we know about X?" — pre-synthesized, with provenance and contradiction awareness, not re-derived from scratch on every query.
+Honcho answers "what were we just talking about?" — LLM Wiki answers "what do we know about X?" Pre-synthesized, with provenance and contradiction awareness, not re-derived from scratch on every query.
 
-## Why this design
-
-A pure skill-only wiki is too fragile. Behavior drifts by model, prompt, and tool discipline.
-A daemon-only single-domain wiki is more stable, but it needs clean domain partitioning to avoid turning into one giant pile.
-
-So the design here is:
-
-- **one wiki system**
-- **one shared daemon + index + governance loop**
-- **many bounded domains**
-- **one shared cross-domain graph**
-- **one inbox + export pipeline**
-
-That gives you consistency without forcing everything into one flat vault.
-
-## Repos to borrow from
-
-Primary:
-- Labhund/llm-wiki: https://github.com/Labhund/llm-wiki
-- nvk/llm-wiki: https://github.com/nvk/llm-wiki
-
-Secondary:
-- Pratiyush/llm-wiki: https://github.com/Pratiyush/llm-wiki
-- Ar9av/obsidian-wiki: https://github.com/Ar9av/obsidian-wiki
-
-Later-stage references:
-- nashsu/llm_wiki: https://github.com/nashsu/llm_wiki
-- lucasastorian/llmwiki: https://github.com/lucasastorian/llmwiki
-- kenhuangus/llm-wiki: https://github.com/kenhuangus/llm-wiki
-
-## Current repo signals checked on April 13, 2026
-
-- **Labhund/llm-wiki**: active-development warning in README; agent-first daemon + MCP design.
-- **nvk/llm-wiki**: active repo with releases and an open issue discussing automatic routing across topic wikis.
-- **Pratiyush/llm-wiki**: ~76 stars, ~25 open issues; strong session adapter + export focus.
-- **Ar9av/obsidian-wiki**: ~340 stars, 0 open issues; best cross-agent skill/bootstrap layer.
-- **nashsu/llm_wiki**: ~1.1k stars, ~7 open issues; best later UI/product inspiration.
-- **lucasastorian/llmwiki**: ~350+ stars, ~1 open issue; useful later if you want a heavier web app shell.
-- **kenhuangus/llm-wiki**: ~15 stars, 0 open issues; too niche for core use.
-
-## Repo shape
-
-```text
-src/
-  daemon/         # background workers, scheduler, orchestration
-  ingest/         # inbox routing, adapters, normalization
-  index/          # fulltext index, graph index, metadata index
-  query/          # retrieval, traversal, ranking
-  governance/     # lint, review, contradiction checks, stale checks
-  adapters/       # codex, claude, cursor, obsidian, manual docs
-  models/         # prompts, schemas, extraction contracts
-wiki_system/
-  inbox/          # raw unclassified inputs
-  domains/        # per-domain wiki spaces
-  index/          # search indexes (metadata, fulltext)
-  exports/        # llms.txt, json, graph, sitemap
-  reports/        # governance reports
-  logs/           # daemon logs, ingest logs, decisions
-  state/          # queue state, checkpoints, worker state
-config/
-  domains.yaml
-  daemon.yaml
-  routing.yaml
-  models.yaml
-templates/
-  page.md
-  entity.md
-  concept.md
-  source.md
-```
-
-## First implementation target
-
-Build **one local-first daemon** that can:
-1. accept inputs into `wiki_system/inbox/`
-2. route them to the right domain
-3. normalize them into markdown
-4. extract entities/claims/links
-5. integrate them into domain wiki pages
-6. update shared graph/index
-7. emit machine-readable exports
-8. run maintenance jobs on a schedule
-
-## Domain model
-
-Recommended initial domains:
-- `vulpine-solutions`
-- `home-assistant`
-- `homelab`
-- `personal`
-- `general`
-
-Do **not** start with 20 domains. Start with 4-6.
-
-## Current Status
-
-**✅ v0.1.0 - Core system complete!**
-
-- 500+ tests (93% coverage)
-- Full CLI interface (`llm-wiki --help`) — 24 commands across 14 subcommands
-- Complete ingestion, search, governance, export, claims, contradiction detection, promotion, review queue, deterministic integration, change log, graph queries, Obsidian import, and daemon job management pipeline
-- CI/CD with GitHub Actions
-- Ruff linting + formatting (pyproject.toml + .pre-commit-config.yaml)
-
-## Getting Started
+## Quick start
 
 ```bash
-# Install dependencies
-uv sync
+# Clone and build
+git clone <repo>
+docker-compose up --build
 
-# Initialize wiki
-uv run llm-wiki init
+# Point your MCP client at:
+# http://localhost:3050/mcp  (Streamable HTTP)
 
-# Run tests
-uv run pytest
-
-# Start daemon
-uv run llm-wiki daemon
+# Or use the CLI directly
+uv run llm-wiki health
+uv run llm-wiki query "homelab network topology"
 ```
 
-See `docs/SETUP.md` for detailed setup instructions.
+First-run auto-initializes the wiki directory structure. No manual `init` required.
 
-## Claude Code Integration
+## Deployment
 
-Capture knowledge from Claude Code sessions automatically and (optionally) run
-extraction under your existing Claude subscription rather than separate API
-credits.
+Each household runs its own isolated instance on a dedicated VM alongside Homefront and Honcho. The docker-compose file controls port exposure — the service binds to `0.0.0.0` inside the container; network isolation is at the VM and compose level.
 
-### Automatic session capture (hooks)
-
-```bash
-uv run llm-wiki hooks install --scope project     # or --scope user
-uv run llm-wiki hooks install --dry-run           # preview merged settings
-uv run llm-wiki hooks uninstall                   # remove cleanly
+```yaml
+# docker-compose.yml (example)
+services:
+  llm-wiki:
+    build: .
+    ports:
+      - "127.0.0.1:3050:3050"   # expose to host only
+    volumes:
+      - ./wiki_data:/wiki
+      - ./config:/config:ro
 ```
 
-Installs `SessionEnd` and `PreCompact` hooks into
-`.claude/settings.json` (or `~/.claude/settings.json`). Every session
-transcript lands in `wiki_system/inbox/new/session-*.jsonl`, where the
-daemon/watcher picks it up and routes it into the `general` domain by
-default. The `ClaudeSessionAdapter` normalizes transcripts to markdown
-with `kind: source`.
+## Interfaces
 
-### Claude Agent SDK as model provider
+| Interface | Endpoint | Use |
+|-----------|----------|-----|
+| MCP (Streamable HTTP) | `http://host:3050/mcp` | Agent harnesses |
+| MCP (stdio) | process spawn | Local harness integration |
+| REST | `http://host:3050/v1/` | Programmatic / scripts |
+| CLI | `uv run llm-wiki` | Operator control |
 
-Users on Claude Max/Team/Enterprise can route extraction through the
-subscription:
+## MCP tools
 
-```bash
-uv sync --extra claude-agent
+| Tool | Description |
+|------|-------------|
+| `query` | Retrieve knowledge at three depths: quick / standard / deep |
+| `ingest` | Submit a source; returns `job_id` |
+| `ingest_status` | Poll ingest job by `job_id` |
+| `search` | Full-text + vector search |
+| `read_page` | Fetch a single page by ID or slug |
+| `list_pages` | List pages by domain, kind, or tag |
+| `export` | Trigger or retrieve exports |
+
+## Feature flags
+
+Controlled via `config/daemon.yaml`:
+
+```yaml
+features:
+  llm_extraction: false      # LLM-assisted tag/summary/claim extraction (off by default)
+  vector_search: true        # sentence-transformers semantic search
+  synthesis_cache: false     # cache repeated query answers as wiki pages
+  cross_domain_promotion: false  # auto-promote shared entities across domains
+  lazy_vector_load: false    # defer FAISS load to first search call (faster cold start)
 ```
 
-Then in `config/models.yaml`:
+When `llm_extraction: false`, the system runs fully without any LLM — heuristic tag extraction, first-paragraph summaries, algorithmic contradiction detection. Enable it to get LLM-quality claim extraction, confidence scoring, and richer summaries.
+
+LLM provider configured in `config/models.yaml`:
 
 ```yaml
 extraction:
-  provider: claude_agent_sdk
-  model: claude-sonnet-4-5
+  provider: anthropic        # anthropic | openai | openrouter | local
+  model: claude-haiku-4-5-20251001
+  api_key_env: ANTHROPIC_API_KEY
+  base_url: null             # null = provider default; set for openrouter or local vLLM
 ```
 
-No API key required — auth flows through the Claude Code CLI session.
+## Multi-user households
 
-### `qa` page kind
+Domains carry a `scope` field:
 
-Sessions often contain "how do I X?" → "do Y" pairs. These are
-extracted as first-class `kind: qa` wiki pages with `question`,
-`answer`, and `related_pages` linking back to the source. Search
-them with the normal query surface.
+```yaml
+# config/domains.yaml
+domains:
+  - name: household
+    scope: shared          # visible to all members
+  - name: user-marc
+    scope: personal
+    owner: marc
+```
 
-## Agent Integrations
+Queries default to household + the requesting user's personal domain merged. Pass `domain: household` to restrict to shared knowledge, or `domain: user-{id}` for personal only.
 
-The wiki supports multiple AI agents and IDEs:
+## Daemon jobs
 
-### Claude Code
-- Skills in `.claude/skills/`
-- Bootstrap in `.claude/bootstrap.md`
-- Use `/wiki`, `/ingest`, `/export`, `/govern` slash commands
+| Job | Interval | Purpose |
+|-----|----------|---------|
+| Inbox scan | 15s | Pick up new files |
+| Queue to pages | 15min | Promote queued content |
+| Retry failed | 30min | Retry previously failed ingest jobs |
+| Index rebuild | 30min | Rebuild all search indexes + reload FAISS |
+| Governance | 60min | Lint, contradiction detection, staleness, routing |
+| Export | 60min | Regenerate llms.txt, JSON-LD, graph |
+| Review queue | 60min | Surface review candidates |
+| Staleness | 24h | Flag outdated pages |
+| Duplicates | 24h | Near-duplicate detection |
+| Promotion | 24h | Score pages for cross-domain promotion |
 
-### Cursor IDE
-- Rules in `.cursor/rules/` (`.mdc` files)
-- Workspace settings in `.vscode/settings.json`
-- Example prompts in `.cursor/prompts/`
-- Use `@wiki`, `@ingest`, `@export`, `@govern` commands in AI chat
+## Configuration files
 
-See `docs/CURSOR_SETUP.md` for detailed Cursor IDE setup.
+All mounted read-only at `/config` in the container:
+
+| File | Purpose |
+|------|---------|
+| `daemon.yaml` | Job schedules, feature flags, daemon config |
+| `domains.yaml` | Domain definitions, scope, routing thresholds |
+| `models.yaml` | LLM provider config for optional extraction |
+| `routing.yaml` | Source path → domain routing rules |
+
+Config changes take effect on container restart — no rebuild required.
+
+## Development
+
+```bash
+uv sync --extra vector    # include FAISS + sentence-transformers
+uv run pytest             # run test suite
+uv run ruff check .       # lint
+uv run mypy src/          # type check
+docker-compose up --build # full stack
+```
 
 ## Documentation
 
-- `docs/ARCHITECTURE.md` — system design and component overview
-- `docs/SETUP.md` — installation and configuration
+- `_bmad-output/planning-artifacts/architecture.md` — authoritative architecture document
+- `_bmad-output/planning-artifacts/prd.md` — product requirements
+- `_bmad-output/planning-artifacts/epics.md` — epic and story breakdown
 - `docs/CLI.md` — full CLI reference
 - `docs/CONFIG.md` — config file reference
 - `docs/GOVERNANCE.md` — governance and maintenance
 - `docs/EXPORTS.md` — export formats
-- `docs/PROMOTION.md` — page promotion system
-- `docs/CONTRADICTION_DETECTION.md` — contradiction detection
-- `docs/AGENT_CONVENTIONS.md` — agent integration conventions
-- `docs/AGENT_SUPPORT_MATRIX.md` — supported agents and IDEs
-- `docs/decisions/` — architecture decision records
+- `docs/SETUP.md` — detailed setup guide
 
-## Non-goals for v1
+## Current status
 
-- polished UI
-- cloud multi-tenant auth
-- perfect semantic search
-- autonomous internet crawling at scale
-- fully automatic cross-domain synthesis without review
+**v0.1.0 — V1 library complete, service pivot in progress**
 
-## What success looks like
+V1 core library is functionally complete (1106 tests, 93% coverage). Current work is the service pivot: Docker container, MCP server (Streamable HTTP), REST API, and daemon wiring into the container stack.
 
-By the end of v1, this system should reliably:
-- keep separate domains clean
-- allow cross-domain search
-- ingest agent transcripts and markdown notes
-- survive model swaps without losing structure
-- produce deterministic enough outputs to trust as a real substrate
+See `_bmad-output/planning-artifacts/epics.md` for the full sprint breakdown.
