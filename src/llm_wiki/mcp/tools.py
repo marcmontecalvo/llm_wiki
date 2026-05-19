@@ -28,6 +28,7 @@ from llm_wiki.exceptions import (
     WikiError,
     WikiNotFoundError,
 )
+from llm_wiki.query.log import QueryLogEntry  # noqa: PLC0414
 
 logger = logging.getLogger(__name__)
 
@@ -145,16 +146,59 @@ def _create_deep_query_runner(
     return run_deep_query_fn
 
 
-def register_tools(server, wiki) -> None:
+def _create_deep_query_runner_with_config(
+    wiki,
+    wiki_config=None,
+    query_log=None,  # type: ignore[default-value]
+) -> Callable:  # type: ignore[return-value]
+    """Factory that creates a deep-query runner with wiki/wiki_config/query_log in closure."""
+
+    async def run_deep_query_with_config_fn(query_text: str, pages: list[dict]) -> dict:
+        """Run a deep query that blocks up to 30s for LLM synthesis."""
+        page_ids = [p["page_id"] for p in pages]
+        pages_with_content = await asyncio.to_thread(wiki.get_pages_with_content, page_ids)
+
+        # Pull llm_extraction from feature flags if available
+        llm_extraction = False
+        if wiki_config and hasattr(wiki_config, "daemon"):
+            llm_extraction = wiki_config.daemon.features.llm_extraction
+
+        from llm_wiki.synthesis.engine import run_deep_query  # noqa: PLC0414
+
+        result = await run_deep_query(
+            query_text, pages_with_content, llm_extraction=llm_extraction, timeout=30.0
+        )
+
+        if result.timed_out:
+            return {
+                "results": [_page_to_result(p) for p in pages_with_content],
+                "timed_out": True,
+                "partial": True,
+            }
+
+        return {
+            "results": [_page_to_result(p) for p in pages_with_content],
+            "timed_out": False,
+            "partial": False,
+        }
+
+    return run_deep_query_with_config_fn
+
+
+def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # type: ignore[default-value]
     """Register MCP tools with the given server instance.
 
     Args:
         server: The MCP server (FastMCP) instance.
         wiki: WikiQuery singleton.
+        wiki_config: Optional wiki configuration.
+        query_log: Optional QueryLogStore singleton for logging queries.
     """
     state_dir = wiki.wiki_base / "state"
     store = UserJobStore(state_dir=state_dir)
-    run_deep_query_fn = _create_deep_query_runner(wiki)
+    run_deep_query_with_config_fn = _create_deep_query_runner_with_config(
+        wiki, wiki_config=wiki_config, query_log=query_log
+    )
 
     @server.tool()
     async def query(
@@ -180,10 +224,28 @@ def register_tools(server, wiki) -> None:
             raise _handle_wiki_error(e) from e
 
         if depth == "deep":
-            return await run_deep_query_fn(query_text, pages)  # type: ignore[no-any-return]
+            return await run_deep_query_with_config_fn(query_text, pages)  # type: ignore[no-any-return]
 
         limit = 10 if depth == "quick" else 50
         results = [_page_to_result(p) for p in pages[:limit]]
+
+        # Log query to query log (non-blocking, fire-and-forget)
+        if query_log is not None:
+            try:
+                confidence_avg = (
+                    sum(r["confidence"] for r in results) / len(results) if results else None
+                )
+                entry = QueryLogEntry(
+                    query_text=query_text,
+                    depth=depth,
+                    domains=[domain] if domain else [],
+                    result_count=len(results),
+                    confidence_avg=confidence_avg,
+                )
+                asyncio.create_task(asyncio.to_thread(query_log.log, entry))
+            except Exception:
+                pass
+
         return {"results": results, "timed_out": False, "partial": False}
 
     @server.tool()

@@ -412,6 +412,29 @@ extracted_relationships:
     object: "Python type checking"
 ```
 
+## Query Log Model
+
+After Story 1.12, every query executed via REST, MCP, or CLI is logged to `wiki_system/state/query_log.db`.
+
+**Table: `queries`**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PRIMARY KEY AUTOINCREMENT | Serial ID |
+| `query_hash` | TEXT NOT NULL | SHA256 hash (first 16 hex chars) of normalized query text |
+| `query_text` | TEXT NOT NULL | The raw query text |
+| `depth` | TEXT NOT NULL | `quick`, `standard`, or `deep` |
+| `domains` | TEXT NOT NULL | JSON array of domain names (e.g., `["python"]`) |
+| `result_count` | INTEGER NOT NULL | Number of results returned |
+| `confidence_avg` | REAL | Average confidence of results (null if no results) |
+| `timestamp` | TEXT NOT NULL | ISO 8601 timestamp |
+
+**Index:** `idx_query_hash_timestamp` on `(query_hash, timestamp)` for efficient repeated-query analysis.
+
+**Retention:** Rows older than 90 days (default) are pruned during each governance sweep. Configurable via `synthesis_cache_log_retention_days` in `daemon.yaml`.
+
+---
+
 ## File Naming Conventions
 
 | Path pattern | Meaning |
@@ -425,5 +448,6 @@ extracted_relationships:
 | `wiki_system/exports/llms.txt` | Latest LLM-format export |
 | `wiki_system/reports/governance_{ts}.md` | Governance run report |
 | `wiki_system/state/jobs.json` | Job execution history |
+| `wiki_system/state/query_log.db` | Query log (SQLite) |
 | `wiki_system/review_queue/{status}/{id}.json` | Review item |
 | `wiki_system/logs/changelog.jsonl` | Operation changelog |

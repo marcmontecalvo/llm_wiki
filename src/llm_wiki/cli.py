@@ -1177,6 +1177,33 @@ def govern_update_backlinks(wiki_base: Path, page_id: str | None, update_all: bo
     click.echo(f"  Links removed: {total_removed}")
 
 
+@govern.command("query-log")
+@click.option("--json", "output_json", is_flag=True, help="Emit machine-parseable JSON")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def govern_query_log(output_json: bool, wiki_base: Path):
+    """Show query log statistics."""
+    from llm_wiki.query.log import QueryLogStore
+
+    store = QueryLogStore(wiki_base / "state" / "query_log.db")
+    stats = store.stats()
+    if output_json:
+        import json as _json
+
+        click.echo(_json.dumps(stats, indent=2))
+    else:
+        click.echo(f"Total queries: {stats.get('total_rows', 0)}")
+        click.echo(f"Oldest entry:  {stats.get('oldest_entry', 'N/A')}")
+        click.echo()
+        click.echo("Top repeated queries:")
+        for item in stats.get("top_queries", []):
+            click.echo(f"  {item['hits']:4}x  {item['query'][:80]}")
+
+
 @govern.command("routing-mistakes")
 @click.option(
     "--wiki-base",

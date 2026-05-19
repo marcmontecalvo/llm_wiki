@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-05-17"
-last_updated: "2026-05-18T23:15:00"
+last_updated: "2026-05-19T00:00:00"
 project: llm_wiki
 project_key: NOKEY
 tracking_system: file-system
@@ -55,7 +55,8 @@ development_status:
   1-9-multi-user-domain-scoping: ready-for-dev
   1-10-auto-init-wiki-on-first-start: ready-for-dev
   1-11-openapi-spec-and-ci-contract-gate: ready-for-dev
-  1-12-sqlite-query-log: ready-for-dev
+  1-12-sqlite-query-log: review
+  1-12.5-observability-pipeline: backlog
   1-13-claude-code-hooks: ready-for-dev  # capture_session.py + hooks install/uninstall in cli.py exist; verification tasks + integration tests remain
   1-14-list-pages-time-filter: ready-for-dev
   1-15-governance-cli-commands: ready-for-dev

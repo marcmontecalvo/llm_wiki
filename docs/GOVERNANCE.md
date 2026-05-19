@@ -191,6 +191,32 @@ Recommendation: Review for relevance, add links, or archive
 
 ---
 
+### 9. Query Log Pruning
+
+Automatically prunes old query log entries from `state/query_log.db`.
+
+The governance sweep calls `QueryLogStore.prune()` to delete rows older than `synthesis_cache_log_retention_days` (default: 90).
+
+The query log stores every query executed via REST, MCP, or CLI with its result metadata (depth, domains, result count, average confidence). Pruning prevents unbounded database growth while retaining enough history for the synthesis cache analysis (FR48's 30-day rolling window).
+
+**Configuration:** Set in `daemon.yaml`:
+
+```yaml
+daemon:
+  synthesis_cache_log_retention_days: 90  # Default
+```
+
+**Statistics:** View query log stats at any time:
+
+```bash
+uv run llm-wiki govern query-log
+uv run llm-wiki govern query-log --json
+```
+
+**Implementation:** `src/llm_wiki/daemon/jobs/governance.py` (in `execute()` method) and `src/llm_wiki/query/log.py`.
+
+---
+
 ## Governance Reports
 
 ### Report Location

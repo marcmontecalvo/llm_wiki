@@ -356,6 +356,51 @@ llm-wiki govern update-backlinks [OPTIONS]
 
 ---
 
+### `llm-wiki govern query-log`
+
+Show query log statistics (repeated queries, top searches, oldest entries).
+
+```bash
+llm-wiki govern query-log [OPTIONS]
+```
+
+**Options:**
+- `--json`: Emit machine-parseable JSON output instead of human-readable text
+- `--wiki-base`: Path to wiki base directory (default: `wiki_system`)
+
+**Example:**
+```bash
+# Human-readable output
+uv run llm-wiki govern query-log
+```
+
+**Output (human-readable):**
+```
+Total queries: 142
+Oldest entry:  2026-01-15T08:30:00
+
+Top repeated queries:
+    5x  how to configure nginx reverse proxy
+    3x  setting up ollama with llama3.2
+    2x  what is a knowledge graph
+```
+
+**Output (--json):**
+```json
+{
+  "total_rows": 142,
+  "oldest_entry": "2026-01-15T08:30:00",
+  "top_queries": [
+    {"query": "how to configure nginx reverse proxy", "hits": 5},
+    {"query": "setting up ollama with llama3.2", "hits": 3}
+  ]
+}
+```
+
+The query log (`wiki_system/state/query_log.db`) is automatically pruned during each governance sweep, removing entries older than 90 days (configurable via `synthesis_cache_log_retention_days` in `daemon.yaml`).
+
+---
+
 ### `llm-wiki govern clean-broken-links`
 
 Remove stale broken links from the backlink index.

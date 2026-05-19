@@ -17,7 +17,6 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request
@@ -61,27 +60,32 @@ def _page_to_result(page: dict[str, Any]) -> QueryResultItem:
     )
 
 
-async def _log_query(wiki_base: Path, query_text: str, depth: str, profile_id: str | None) -> None:
+async def _log_query(
+    request: Request,
+    query_text: str,
+    depth: str,
+    result_count: int,
+    confidence_avg: float | None,
+    domain: str | None = None,
+) -> None:
     """Log a query to the query log (Story 1.12).
 
-    If the query log module doesn't exist yet, silently pass — query
-    logging must never block the query endpoint.
+    Uses the singleton from request.app.state.query_log — never instantiates
+    a new store per request.
     """
-    try:
-        from llm_wiki.query.log import (
-            QueryLogStore,  # type: ignore[import-untyped]  # noqa: PLC0414
-        )
+    store = getattr(request.app.state, "query_log", None)
+    if store is None:
+        return
+    from llm_wiki.query.log import QueryLogEntry  # noqa: PLC0414
 
-        store = QueryLogStore(db_path=wiki_base / "state" / "query_log.db")
-        store.log(
-            query=query_text,
-            depth=depth,
-            profile_id=profile_id,
-        )
-    except ImportError:
-        pass
-    except Exception:
-        logger.warning("Failed to log query (non-fatal)", exc_info=True)
+    entry = QueryLogEntry(
+        query_text=query_text,
+        depth=depth,
+        domains=[domain] if domain else [],
+        result_count=result_count,
+        confidence_avg=confidence_avg,
+    )
+    await asyncio.to_thread(store.log, entry)
 
 
 @router.post("/v1/query", response_model=None)
@@ -92,21 +96,35 @@ async def query(
     profile_id: str | None = Depends(get_profile_id),
 ) -> QueryResponse | JSONResponse:
     """Dispatch a query — sync (quick/standard) or async (deep)."""
-    # Log query to query log (non-blocking, fire-and-forget)
-    try:
-        asyncio.create_task(_log_query(wiki.wiki_base, req.query, req.depth, profile_id))
-    except Exception:
-        pass
-
+    # quick / standard — synchronous (log only for these, not deep-background)
     if req.depth == "deep":
         return await _handle_deep_query(req, wiki, request, profile_id)
 
-    # quick / standard — synchronous
     pages = await asyncio.to_thread(
         wiki.search, req.query, domain=req.domain, scope_to_profile=profile_id
     )
     limit = 10 if req.depth == "quick" else 50
     results = [_page_to_result(p) for p in pages[:limit]]
+
+    # Log query to query log (non-blocking, fire-and-forget)
+    if results:
+        confidence_avg = sum(r.confidence for r in results) / len(results)
+    else:
+        confidence_avg = None
+    try:
+        asyncio.create_task(
+            _log_query(
+                request,
+                req.query,
+                req.depth,
+                len(results),
+                confidence_avg,
+                req.domain,  # type: ignore[arg-type]
+            )
+        )
+    except Exception:
+        pass
+
     return QueryResponse(results=results, timed_out=False, partial=False)
 
 

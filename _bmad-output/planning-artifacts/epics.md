@@ -717,6 +717,21 @@ So that repeated high-value queries can be identified and cached as wiki pages, 
 **When** run
 **Then** it prints row count, oldest entry date, and top 10 most-repeated queries with hit counts
 
+### Story 1.12.5: External Observability Pipeline
+
+As a wiki operator,
+I want structured logging, a Prometheus metrics endpoint, and health signal integration,
+So that the service can be monitored by external systems (Prometheus, Loki, Datadog) without requiring SSH.
+
+**Acceptance Criteria:**
+
+1. **Given** the service is running **When** `GET /metrics` is called **Then** it returns text/plain with Prometheus-format metrics: `wiki_http_requests_total`, `wiki_http_request_duration_seconds`, `wiki_query_log_init_failed`, `wiki_query_log_write_failures_total`, `wiki_index_pages_total`.
+2. **Given** `GET /v1/health` is called **When** queried **Then** the response includes `query_log_ok: bool` — `true` when `QueryLogStore` initialized successfully.
+3. **Given** `QueryLogStore` fails at startup **When** the service starts **Then** a one-shot `ERROR` warning is logged, `app.state.query_log_error = True` is set, and the metric `wiki_query_log_init_failed` is set to 1.
+4. **Given** a write failure occurs in `QueryLogStore.log()` **When** caught **Then** the failure is logged at `ERROR` and a counter is incremented for external trend/alerting.
+5. **Given** requests are made **When** each completes **Then** a structured JSON log entry is emitted containing `method`, `path`, `status`, and `duration_ms` fields.
+6. **Given** `GET /metrics` is called **When** index stats are unavailable **Then** all metrics return 0 — the endpoint must never raise HTTP 500.
+
 ### Story 1.13: Claude Code Hooks
 
 As a Claude Code user,

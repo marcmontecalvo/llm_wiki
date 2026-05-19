@@ -241,6 +241,7 @@ daemon:
   review_queue_min_claim_confidence: 0.5
   review_queue_max_pending: 1000
   review_queue_retention_days: 30
+  synthesis_cache_log_retention_days: 90  # Days to retain query log entries
   max_parallel_jobs: 2           # Run up to 2 jobs in parallel
   log_level: INFO                # Log verbosity
   review_queue_enabled: true
@@ -262,6 +263,7 @@ duplicates:
 | `check_interval` | integer | No | 60 | Seconds between daemon loop iterations |
 | `max_concurrent_jobs` | integer | No | 3 | Maximum parallel jobs |
 | `log_level` | string | No | INFO | Log verbosity (DEBUG, INFO, WARNING, ERROR) |
+| `synthesis_cache_log_retention_days` | integer | No | 90 | Days to retain query log entries; automatic pruning during governance sweeps |
 
 ### Job Settings
 

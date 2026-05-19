@@ -159,6 +159,9 @@ class DaemonConfig(BaseModel):
     duplicates: DuplicatesConfig = Field(
         default_factory=DuplicatesConfig, description="Duplicate detection configuration"
     )
+    synthesis_cache_log_retention_days: int = Field(
+        default=90, ge=1, description="Days to retain query log entries"
+    )
     features: FeaturesConfig = Field(default_factory=FeaturesConfig, description="Feature flags")
 
 

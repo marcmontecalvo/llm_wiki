@@ -51,18 +51,22 @@ class MCPAsgiApp:
 
 def create_mcp_server(
     wiki,
+    wiki_config=None,
+    query_log=None,  # type: ignore[default-value]  # noqa: B006
 ) -> tuple[FastMCP, MCPAsgiApp, StreamableHTTPSessionManager]:
     """Create an MCP server and its ASGI mountable app.
 
     Args:
         wiki: WikiQuery singleton to share with MCP tools.
+        wiki_config: Optional wiki configuration.
+        query_log: Optional QueryLogStore singleton for logging queries.
 
     Returns:
         Tuple of (FastMCP instance, MCPAsgiApp mountable ASGI wrapper,
         StreamableHTTPSessionManager for lifespan management).
     """
     server = FastMCP("llm-wiki", stateless_http=True)
-    register_tools(server, wiki)
+    register_tools(server, wiki, wiki_config=wiki_config, query_log=query_log)  # type: ignore[arg-type]
 
     # Access streamable_http_app to trigger internal session manager creation
     _ = server.streamable_http_app
@@ -76,7 +80,7 @@ def create_mcp_server(
     return server, asgi, mgr
 
 
-async def run_stdio_server(wiki) -> None:  # type: ignore[no-untyped-def]
+async def run_stdio_server(wiki, query_log=None) -> None:  # type: ignore[no-untyped-def]
     """Run the MCP server over stdio transport.
 
     Used when a harness spawns the service as a subprocess:
@@ -84,7 +88,8 @@ async def run_stdio_server(wiki) -> None:  # type: ignore[no-untyped-def]
 
     Args:
         wiki: WikiQuery singleton to share with MCP tools.
+        query_log: Optional QueryLogStore singleton for logging queries.
     """
     server = FastMCP("llm-wiki", stateless_http=True)
-    register_tools(server, wiki)
+    register_tools(server, wiki)  # stdio path has no config/query_log
     await server.run_stdio_async()
