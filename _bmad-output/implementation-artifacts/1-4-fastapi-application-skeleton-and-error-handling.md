@@ -167,13 +167,13 @@ def wiki_error_to_http(exc: WikiError, status_override: int | None = None) -> HT
 from mcp.server import Server
 from mcp.server.streamable_http import StreamableHTTPTransport  # verify this path
 
-def create_mcp_server(wiki) -> tuple[Server, StreamableHTTPTransport]:
+def create_mcp_server(wiki, wiki_config=None) -> tuple[FastMCP, MCPAsgiApp, StreamableHTTPSessionManager]:
     """Create MCP server and transport. Tools registered in tools.py."""
-    server = Server("llm-wiki")
+    server = FastMCP("llm-wiki", stateless_http=True)
     from llm_wiki.mcp.tools import register_tools
-    register_tools(server, wiki)
-    transport = StreamableHTTPTransport(server)  # verify constructor signature
-    return server, transport
+    register_tools(server, wiki, wiki_config=wiki_config)
+    # ... session manager via streamable_http_app
+    return server, asgi_app, session_manager
 ```
 
 ```python

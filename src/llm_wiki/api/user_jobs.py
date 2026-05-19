@@ -1,7 +1,7 @@
 """Persistent in-memory store for user-driven ingest job state.
 
 Jobs are persisted to ``state/user_jobs.json`` using an atomic write pattern
-so that uvicorn restarts do not lose pending/running ingest jobs.
+so that restarts do not lose pending/running ingest jobs.
 """
 
 from __future__ import annotations
@@ -14,6 +14,38 @@ from pathlib import Path
 from typing import Any
 
 from llm_wiki.api.models import IngestStatusResponse
+
+
+class _UserJobStoreGate:
+    """Module-level singleton gate for :class:`UserJobStore` instances.
+
+    Ensures that repeated calls with the same ``wiki_base`` path return
+    the *same* ``UserJobStore`` instance within the process, so that
+    multiple callers share a single ``threading.Lock``.
+    """
+
+    def __init__(self) -> None:
+        self._stores: dict[str, UserJobStore] = {}
+
+    def __call__(self, wiki_base: Path) -> UserJobStore:
+        key = str(wiki_base.resolve())
+        if key not in self._stores:
+            state_dir = wiki_base / "state"
+            self._stores[key] = UserJobStore(state_dir=state_dir)
+        return self._stores[key]
+
+
+_gate = _UserJobStoreGate()
+
+
+def get_user_job_store(wiki_base: Path) -> UserJobStore:
+    """Return the shared :class:`UserJobStore` for the given wiki root.
+
+    Returns the same instance (singleton within this process) for a
+    given ``wiki_base``, so that multiple callers share a single
+    ``threading.Lock`` around ``user_jobs.json`` reads/writes.
+    """
+    return _gate(wiki_base)
 
 
 class UserJobStore:

@@ -11,6 +11,10 @@ For ``UserProfile`` scoped access, use ``Depends(get_profile_id)`` to read the
 ``X-Profile-ID`` header.
 """
 
+from __future__ import annotations
+
+from pathlib import Path
+
 from fastapi import Header, Request
 
 from llm_wiki.api.user_jobs import UserJobStore
@@ -37,8 +41,15 @@ async def get_wiki_config(request: Request) -> WikiConfig | None:
 
 
 async def get_user_job_store(request: Request) -> UserJobStore:
-    """Return the :class:`UserJobStore` singleton stored on ``app.state``."""
+    """Return the :class:`UserJobStore` singleton from app state."""
     return request.app.state.user_job_store  # type: ignore[no-any-return]
+
+
+def get_user_job_store_sync(wiki_base: Path) -> UserJobStore:
+    """Return the shared :class:`UserJobStore` for the given wiki base."""
+    from llm_wiki.api import user_jobs  # noqa: PLC0414
+
+    return user_jobs.get_user_job_store(wiki_base)
 
 
 async def get_profile_id(x_profile_id: str | None = Header(default=None)) -> str | None:

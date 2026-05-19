@@ -1,10 +1,18 @@
-"""Wiki directory structure initializer.
+"""Wiki directory structure initializer and shared bootstrap.
 
 Provides idempotent setup of the wiki directory structure so that the
 service can start on a fresh (empty) volume without FileNotFoundError.
 """
 
+from __future__ import annotations
+
+import logging
+import os
 from pathlib import Path
+
+from llm_wiki.api.user_jobs import UserJobStore
+from llm_wiki.config.loader import WikiConfig
+from llm_wiki.query.search import WikiQuery
 
 _DOMAIN_SUBDIRS = ("pages", "queue", "concepts", "entities", "synthesis")
 _COMMON_SUBDIRS = (
@@ -19,6 +27,8 @@ _COMMON_SUBDIRS = (
     "logs",
     "state",
 )
+
+logger = logging.getLogger(__name__)
 
 
 class WikiInitializer:
@@ -84,3 +94,62 @@ def _maybe_init_wiki_root(wiki_root: Path | str) -> None:
     if (root / "domains").exists():
         return
     WikiInitializer.initialize(root)
+
+
+def boot_wiki(
+    wiki_root: Path | None = None,
+    config_dir: Path | None = None,
+) -> tuple[WikiQuery, WikiConfig | None, UserJobStore, dict]:
+    """Bootstrap wiki, config, and related app state.
+
+    This is the shared bootstrap path used by both FastAPI lifespan and
+    stdio transport (``python -m llm_wiki.mcp.server``).  It honours
+    ``WIKI_ROOT`` and ``WIKI_CONFIG_DIR`` environment variables.
+
+    Ideal producer — same order as :func:`llm_wiki.app.lifespan`.
+
+    Args:
+        wiki_root: Explicit wiki root path (defaults to ``WIKI_ROOT`` env
+            var, then ``"wiki_system"``).
+        config_dir: Explicit config directory path (defaults to
+            ``WIKI_CONFIG_DIR`` env var, then ``"config"``).
+
+    Returns:
+        Tuple of ``(wiki, wiki_config, user_job_store, deep_jobs)``.
+    """
+    from llm_wiki.api.user_jobs import get_user_job_store
+    from llm_wiki.config.loader import load_config
+    from llm_wiki.query.search import WikiQuery
+
+    # Resolve wiki root
+    _wiki_root = (
+        wiki_root if wiki_root is not None else Path(os.environ.get("WIKI_ROOT", "wiki_system"))
+    )
+    wiki_root = Path(_wiki_root)
+
+    # Resolve config dir
+    _config_dir = (
+        config_dir if config_dir is not None else Path(os.environ.get("WIKI_CONFIG_DIR", "config"))
+    )
+    config_dir = Path(_config_dir)
+
+    # Initialize directories first
+    _maybe_init_wiki_root(wiki_root)
+
+    # Load config (non-fatal — MCP may have no config dir)
+    wiki_config = None
+    try:
+        wiki_config = load_config(config_dir)
+    except Exception:
+        logger.warning("Config load failed (non-fatal for MCP bootstrap)")
+
+    # Build indexes
+    wiki = WikiQuery(wiki_base=wiki_root, index_dir=wiki_root / "index")
+
+    # UserJobStore — shared factory
+    user_job_store = get_user_job_store(wiki_root)
+
+    # Deep query tracking
+    deep_jobs: dict = {}
+
+    return wiki, wiki_config, user_job_store, deep_jobs
