@@ -51,7 +51,7 @@ development_status:
   1-5-feature-flag-system: done
   1-6-rest-health-daemon-and-ingest-endpoints: done
   1-7-rest-query-search-pages-and-export-endpoints: done
-  1-8-mcp-server-and-all-tools: ready-for-dev
+  1-8-mcp-server-and-all-tools: review
   1-9-multi-user-domain-scoping: ready-for-dev
   1-10-auto-init-wiki-on-first-start: ready-for-dev
   1-11-openapi-spec-and-ci-contract-gate: ready-for-dev

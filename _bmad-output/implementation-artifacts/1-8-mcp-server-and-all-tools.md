@@ -1,6 +1,6 @@
 # Story 1.8: MCP Server and All Tools
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -32,23 +32,23 @@ so that I can query, ingest, search, and manage wiki pages from any MCP-compatib
 
 ## Tasks / Subtasks
 
-- [ ] Implement all 7 tools in `src/llm_wiki/mcp/tools.py` (AC: 1, 3, 4, 5, 6, 8, 9)
-  - [ ] `query(query, depth, domain, profile_id)` — same logic as `POST /v1/query`; MCP deep queries block up to 30s (not async polling)
-  - [ ] `ingest(source_path, content, domain)` — same logic as `POST /v1/ingest`
-  - [ ] `ingest_status(job_id)` — same logic as `GET /v1/ingest/{job_id}`
-  - [ ] `search(q, domain)` — same logic as `GET /v1/search`
-  - [ ] `read_page(page_id)` — same logic as `GET /v1/pages/{page_id}`
-  - [ ] `list_pages(domain, kind, updated_since, cursor, limit)` — same logic as `GET /v1/pages`
-  - [ ] `export(format)` — same logic as `GET /v1/export/{format}`
-- [ ] Update `src/llm_wiki/mcp/server.py` to register all tools via `tools.py` (AC: 1, 2)
-  - [ ] Streamable HTTP transport already mounted at `/mcp` (from Story 1.4)
-  - [ ] stdio transport: verify `mcp` SDK supports spawning server with stdio transport
-- [ ] Implement MCP error handling — WikiError → MCP error (AC: 7)
-  - [ ] **During the Story 1.4 spike**: verify the MCP SDK's own error mechanism — look for named error constants, an `McpError` class, or a `raise_tool_error()` helper in the installed package
-  - [ ] Use the SDK's native error type/constants if available — let the SDK own the wire format
-  - [ ] If the SDK provides no named error constants, use **positive integer** application error codes (`1001`–`1007`) — never use the JSON-RPC 2.0 reserved range (`-32768` to `-32000`) for custom errors
-  - [ ] Map `WikiNotFoundError` → `1001`, `DomainUnknownError` → `1002`, `IngestError` → `1003`, `IndexStaleError` → `1004`, `DaemonNotRunningError` → `1005`, `ExportNotReadyError` → `1006`, `InvalidDepthError` → `1007` (fallback if SDK has no named constants)
-- [ ] Write tests for MCP tools using mock `WikiQuery`
+- [x] Implement all 7 tools in `src/llm_wiki/mcp/tools.py` (AC: 1, 3, 4, 5, 6, 8, 9)
+  - [x] `query(query, depth, domain, profile_id)` — same logic as `POST /v1/query`; MCP deep queries block up to 30s (not async polling)
+  - [x] `ingest(source_path, content, domain)` — same logic as `POST /v1/ingest`
+  - [x] `ingest_status(job_id)` — same logic as `GET /v1/ingest/{job_id}`
+  - [x] `search(q, domain)` — same logic as `GET /v1/search`
+  - [x] `read_page(page_id)` — same logic as `GET /v1/pages/{page_id}`
+  - [x] `list_pages(domain, kind, updated_since, cursor, limit)` — same logic as `GET /v1/pages`
+  - [x] `export(format)` — same logic as `GET /v1/export/{format}`
+- [x] Update `src/llm_wiki/mcp/server.py` to register all tools via `tools.py` (AC: 1, 2)
+  - [x] Streamable HTTP transport already mounted at `/mcp` (from Story 1.4)
+  - [x] stdio transport: verify `mcp` SDK supports spawning server with stdio transport
+- [x] Implement MCP error handling — WikiError → MCP error (AC: 7)
+  - [x] **Spike result**: SDK provides `ToolError` from `mcp.server.fastmcp.exceptions` (SDK-native mechanism). No `McpError` class or `ErrorCode` constants found.
+  - [x] Use SDK's native error type (`ToolError`) — let the SDK own the wire format
+  - [x] Positive integer application error codes (`1001`–`1007`) included in error message alongside HTTP error-code string
+  - [x] Map `WikiNotFoundError` → `1001`, `DomainUnknownError` → `1002`, `IngestError` → `1003`, `IndexStaleError` → `1004`, `DaemonNotRunningError` → `1005`, `ExportNotReadyError` → `1006`, `InvalidDepthError` → `1007`
+- [x] Write tests for MCP tools using mock `WikiQuery`
 
 ## Dev Notes
 
@@ -261,4 +261,21 @@ claude-sonnet-4-6
 
 ### Completion Notes List
 
+**Date: 2026-05-19**
+
+Implemented the full MCP tool layer for the LLM Wiki project. All 7 tools delegate to the same service methods used by REST endpoints — no business logic duplication.
+
+**Key decisions:**
+- MCP SDK 1.27.0 provides `ToolError` from `mcp.server.fastmcp.exceptions` as the native error mechanism — preferred over raw JSON-RPC error codes.
+- `Server` was replaced from the old SDK's `Server` to `FastMCP` (installed version). Tool registration uses the `@server.tool()` decorator pattern.
+- Deep queries use `await run_deep_query()` (async) for LLM synthesis, running page content fetch on a thread via `asyncio.to_thread`.
+- `UserJobStore` is created with `state_dir=wiki.wiki_base / "state"` inside `register_tools` — avoids significant changes to the server/stdio entry point.
+
+**Testing:** 12 unit tests covering tool registration (7 tools), query behaviour, error mapping (all 7 WikiError variants), ToolError on not-found, naming conventions, and list_pages pagination. All tests pass. Full test suite: 1306 passed, 0 failures.
+
 ### File List
+
+- **NEW:** `src/llm_wiki/mcp/__main__.py` — stdio transport entry point
+- **MODIFIED:** `src/llm_wiki/mcp/tools.py` — implemented all 7 tools with error handling
+- **MODIFIED:** `src/llm_wiki/mcp/server.py` — added `run_stdio_server()` for stdio transport
+- **NEW:** `tests/unit/test_mcp_tools.py` — 12 unit tests for MCP tools

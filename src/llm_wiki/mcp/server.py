@@ -14,9 +14,14 @@ before any requests are handled.
 Approach: FastAPI lifespan starts the session manager via
 async with session_manager.run(), and a custom ASGI app (MCPAsgiApp)
 wraps handle_request for Mount compatibility.
+
+stdio transport: ``run_stdio_server()`` + ``__main__.py`` enables
+``python -m llm_wiki.mcp.server``.
 """
 
 from __future__ import annotations
+
+import logging
 
 from mcp.server import FastMCP
 from mcp.server.streamable_http_manager import (
@@ -24,13 +29,17 @@ from mcp.server.streamable_http_manager import (
 )
 from starlette.types import Receive, Scope, Send
 
+from llm_wiki.mcp.tools import register_tools
+
+logger = logging.getLogger(__name__)
+
 
 class MCPAsgiApp:
     """ASGI wrapper for MCP session manager handle_request.
 
     Delegates each ASGI call to session_manager.handle_request().
     The session_manager must be running (via run() context manager)
-    before any requests arrive — provided by the FastAPI lifespan.
+    before any requests arrive -- provided by the FastAPI lifespan.
     """
 
     def __init__(self, session_manager) -> None:  # type: ignore[no-untyped-def]
@@ -53,8 +62,6 @@ def create_mcp_server(
         StreamableHTTPSessionManager for lifespan management).
     """
     server = FastMCP("llm-wiki", stateless_http=True)
-    from llm_wiki.mcp.tools import register_tools
-
     register_tools(server, wiki)
 
     # Access streamable_http_app to trigger internal session manager creation
@@ -67,3 +74,17 @@ def create_mcp_server(
     asgi = MCPAsgiApp(mgr)
 
     return server, asgi, mgr
+
+
+async def run_stdio_server(wiki) -> None:  # type: ignore[no-untyped-def]
+    """Run the MCP server over stdio transport.
+
+    Used when a harness spawns the service as a subprocess:
+        python -m llm_wiki.mcp.server
+
+    Args:
+        wiki: WikiQuery singleton to share with MCP tools.
+    """
+    server = FastMCP("llm-wiki", stateless_http=True)
+    register_tools(server, wiki)
+    await server.run_stdio_async()
