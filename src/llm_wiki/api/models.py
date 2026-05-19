@@ -6,7 +6,8 @@ convention — never ``Schema``, ``Model``, or ``Out``.
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -90,48 +91,83 @@ class DomainListResponse(BaseModel):
 
 
 class QueryRequest(BaseModel):
-    """Query request body."""
+    """Query request body.
+
+    ``depth`` controls synchronicity: ``quick``/``standard`` run
+    synchronously; ``deep`` dispatches to a background task and
+    returns 202 Accepted immediately.
+    """
 
     query: str
-    depth: str = Field(default="quick")
+    depth: Literal["quick", "standard", "deep"] = Field(default="quick")
     domain: str | None = None
 
 
-class QueryResponse(BaseModel):
-    """Query response body."""
+class QueryResultItem(BaseModel):
+    """Single result inside a query response."""
 
-    results: list[Any] = Field(default_factory=list)
+    page_id: str
+    title: str
+    confidence: float = 0.0
+    provenance: list[str] = Field(default_factory=list)
+    contradictions: list[str] = Field(default_factory=list)
+
+
+class QueryResponse(BaseModel):
+    """Query response body.
+
+    ``job_id`` / ``status`` are populated only for deep-query submissions
+    (202 response).  ``results`` is populated for quick/standard sync
+    responses and for completed deep-query polls.
+    """
+
+    results: list[QueryResultItem] = Field(default_factory=list)
     timed_out: bool = False
     partial: bool = False
-    vector_search: bool = False
+    was_heuristic: bool = False
+    job_id: str | None = None
+    status: str | None = None
+
+
+class SearchResultItem(BaseModel):
+    """Single result from the search endpoint."""
+
+    page_id: str
+    title: str
+    confidence: float = 0.0
+    score: float = 0.0
 
 
 class SearchResponse(BaseModel):
-    """Search response (stub — populated in Story 1.7)."""
+    """Search response — always merges full-text and vector results."""
 
-    results: list[Any] = Field(default_factory=list)
+    results: list[SearchResultItem] = Field(default_factory=list)
 
 
 class PageResponse(BaseModel):
-    """Single page response (stub)."""
+    """Single page response — full content plus frontmatter."""
 
-    id: str = ""
-    title: str = ""
+    page_id: str
+    title: str
+    content: str
+    frontmatter: dict[str, Any] = Field(default_factory=dict)
     domain: str = ""
     kind: str = ""
-    tags: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
 
 
 class PageListResponse(BaseModel):
-    """Paginated page list (stub)."""
+    """Paginated page list from MetadataIndex."""
 
     pages: list[PageResponse] = Field(default_factory=list)
-    total: int = 0
+    next_cursor: str | None = None
+    total_hint: int = 0
 
 
 class ExportResponse(BaseModel):
-    """Export response (stub — populated in Story 1.7)."""
+    """Export response — serves exported file content."""
 
-    export_id: str = ""
-    status: str = "pending"
-    download_url: str | None = None
+    format: str
+    content: str
+    generated_at: datetime | None = None
+    page_count: int = 0

@@ -102,6 +102,20 @@ async def lifespan(app: FastAPI):
     else:
         yield
 
+    # Start deep query TTL cleanup task
+    async def _cleanup_deep_jobs():
+        while True:
+            await asyncio.sleep(60)
+            expired = [
+                jid
+                for jid, j in app.state.deep_jobs.items()  # type: ignore[attr-defined]
+                if j.is_expired
+            ]
+            for jid in expired:
+                del app.state.deep_jobs[jid]  # type: ignore[attr-defined]
+
+    asyncio.create_task(_cleanup_deep_jobs())
+
     # Shutdown
     logger.info("LLM Wiki service shutting down")
 
@@ -138,6 +152,17 @@ def create_app() -> FastAPI:
     app.include_router(_health.router)
     app.include_router(_ingest.router)
     app.include_router(_domains.router)
+
+    # Mount routers added in Story 1.7
+    from llm_wiki.api.routers import export as _export  # noqa: E303
+    from llm_wiki.api.routers import pages as _pages  # noqa: E303
+    from llm_wiki.api.routers import query as _query  # noqa: E303
+    from llm_wiki.api.routers import search as _search  # noqa: E303
+
+    app.include_router(_query.router)
+    app.include_router(_search.router)
+    app.include_router(_pages.router)
+    app.include_router(_export.router)
 
     # Legacy inline health check endpoint (story 1.6 routes at /v1/health are primary)
 

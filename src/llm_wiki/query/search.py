@@ -47,6 +47,7 @@ class WikiQuery:
         }
 
         self._load_indexes()
+        self._profile_scoping_enabled = False  # Story 1.9: wire up profile domain filtering
 
     def acquire_all_locks(self) -> None:
         """Acquire all index locks. Used by IndexRebuildJob before full rebuild."""
@@ -80,6 +81,7 @@ class WikiQuery:
         kind: str | None = None,
         domain: str | None = None,
         limit: int = 10,
+        scope_to_profile: str | None = None,
     ) -> list[dict[str, Any]]:
         """Search for wiki pages.
 
@@ -87,6 +89,13 @@ class WikiQuery:
         is provided, merges fulltext and vector results via Reciprocal Rank
         Fusion, then applies metadata filters.
         """
+        if scope_to_profile and not self._profile_scoping_enabled:
+            logger.warning(
+                "X-Profile-ID / scope_to_profile=%s accepted but not yet enforced — "
+                "all domains searched. Story 1.9 will implement isolation.",
+                scope_to_profile,
+            )
+
         if query:
             ft_results = self.fulltext_index.search(query, domain=None, limit=limit * 2)
             vec_results = self.vector_index.search(query, domain=None, limit=limit * 2)
@@ -122,17 +131,11 @@ class WikiQuery:
             if query and rrf_scores:
                 score = rrf_scores.get(page_id, 0.0)
 
-            filtered_results.append(
-                {
-                    "id": page_id,
-                    "page_id": page_id,
-                    "title": metadata.get("title", page_id),
-                    "domain": metadata.get("domain", "general"),
-                    "kind": metadata.get("kind", "page"),
-                    "tags": metadata.get("tags", []),
-                    "score": score,
-                }
-            )
+            row = dict(metadata)
+            row["page_id"] = page_id
+            row["id"] = page_id
+            row["score"] = score
+            filtered_results.append(row)
 
         filtered_results.sort(key=lambda x: x["score"], reverse=True)
         return filtered_results[:limit]
@@ -140,6 +143,38 @@ class WikiQuery:
     def get_page(self, page_id: str) -> dict[str, Any] | None:
         """Get page metadata by ID."""
         return self.metadata_index.get_page(page_id)
+
+    def get_pages_with_content(
+        self,
+        page_ids: list[str],
+    ) -> list[dict[str, Any]]:
+        """Return pages with both metadata and markdown content.
+
+        Uses the metadata index for frontmatter (confidence, sources,
+        contradictions, title, etc.) and reads the raw markdown files
+        for content.  Order matches ``page_ids``.
+        """
+        domains_dir = self.wiki_base / "domains"
+        pages: list[dict[str, Any]] = []
+        for pid in page_ids:
+            metadata = self.metadata_index.get_page(pid)
+            if metadata is None:
+                continue
+            domain = metadata.get("domain", "general")
+            # Check promoted location: domains/{domain}/pages/{id}/page.md
+            md_file = domains_dir / domain / "pages" / pid / "page.md"
+            if not md_file.exists():
+                # Fall back to queue location: domains/{domain}/queue/{id}.md
+                md_file = domains_dir / domain / "queue" / f"{pid}.md"
+            content = ""
+            if md_file.exists():
+                content = md_file.read_text(encoding="utf-8")
+            row: dict[str, Any] = dict(metadata)
+            row["page_id"] = pid
+            row["id"] = pid
+            row["content"] = content
+            pages.append(row)
+        return pages
 
     def find_by_tag(self, tag: str) -> list[dict[str, Any]]:
         """Find pages by tag."""
