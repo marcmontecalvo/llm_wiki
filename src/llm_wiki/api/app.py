@@ -20,6 +20,7 @@ from fastapi import Depends, FastAPI, Request
 from llm_wiki.api.errors import register_exception_handlers
 from llm_wiki.deps import get_wiki
 from llm_wiki.initializer import boot_wiki
+from llm_wiki.query.log import QueryLogStore
 from llm_wiki.query.search import WikiQuery
 
 if TYPE_CHECKING:
@@ -60,13 +61,22 @@ async def lifespan(app: FastAPI):
         app.state.wiki_config = _wiki_config
     app.state.user_job_store = user_job_store
     app.state.deep_jobs = deep_jobs  # type: ignore[assignment]
+    try:
+        app.state.query_log = QueryLogStore(wiki_root / "state" / "query_log.db")  # type: ignore[assignment]  # noqa: E501 PLR2004
+        app.state.query_log_error = False  # type: ignore[assignment]
+    except Exception as e:
+        logger.error("Query log init failed (api logging degraded): %s", e)
+        app.state.query_log = None  # type: ignore[assignment]
+        app.state.query_log_error = True  # type: ignore[assignment]
 
     # Create MCP server, mount it, and start the session manager
     mcp_mgr: StreamableHTTPSessionManager | None = None
     try:
         from llm_wiki.mcp.server import create_mcp_server
 
-        _mcp_server, mcp_asgi, mcp_mgr = create_mcp_server(wiki, wiki_config=_wiki_config)
+        _mcp_server, mcp_asgi, mcp_mgr = create_mcp_server(
+            wiki, wiki_config=_wiki_config, query_log=app.state.query_log
+        )  # type: ignore[attr-defined]
         app.mount("/mcp", mcp_asgi)
     except Exception as e:
         logger.warning("MCP server init failed (non-fatal): %s", e)

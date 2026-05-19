@@ -30,6 +30,7 @@ class HealthResponse(BaseModel):
     index_loaded: bool
     scheduler_state: str
     llm_extraction_enabled: bool
+    query_log_ok: bool = True
 
 
 class JobStatus(BaseModel):

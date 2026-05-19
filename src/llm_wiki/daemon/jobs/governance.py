@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.config.loader import load_config
 from llm_wiki.governance.contradictions import ContradictionDetector
 from llm_wiki.governance.duplicates import DuplicateDetector
 from llm_wiki.governance.linter import LintSeverity, MetadataLinter
@@ -16,6 +17,12 @@ from llm_wiki.models.client import ModelClient
 from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewType
 from llm_wiki.review.queue import ReviewQueue
 from llm_wiki.utils.frontmatter import parse_frontmatter
+
+# Lazy import guard — log.py is created by Story 1.12
+try:
+    from llm_wiki.query.log import QueryLogStore  # type: ignore[import-not-found,import-untyped]
+except ImportError:  # pragma: no cover
+    QueryLogStore = None  # type: ignore[misc,assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +136,11 @@ class GovernanceJob:
             if duplicate_report and duplicate_report.total_candidates > 0:
                 duplicates_added = self._add_duplicates_to_review(duplicate_report)
                 logger.info(f"Added {duplicates_added} duplicate candidates to review queue")
+
+            # Prune stale query log entries (Story 1.12)
+            mn = self._prune_query_log()
+            if mn:
+                logger.info("Pruned %d old query log rows", mn)
 
             # Generate report
             report_path = self._generate_report(
@@ -474,6 +486,27 @@ class GovernanceJob:
                 logger.warning(f"Failed to add routing mistake: {e}")
 
         return added
+
+    def _prune_query_log(self) -> int:
+        """Prune old query log entries based on daemon retention config.
+
+        Returns:
+            Number of rows deleted.
+        """
+        if QueryLogStore is None:  # type: ignore[comparison-with-none]
+            return 0
+
+        # Load retention from the actual config file (wiki_base/config/daemon.yaml)
+        retention = 90  # default (matches DaemonConfig default)
+        try:
+            config_dir = self.wiki_base / "config"
+            cfg = load_config(config_dir)
+            retention = cfg.daemon.synthesis_cache_log_retention_days
+        except Exception:
+            logger.warning("Failed to load config for query log retention; using default 90 days")
+
+        store = QueryLogStore(self.wiki_base / "state" / "query_log.db")
+        return store.prune(retention)
 
     def _add_duplicates_to_review(self, duplicate_report) -> int:
         """Add high-confidence duplicates to review queue.

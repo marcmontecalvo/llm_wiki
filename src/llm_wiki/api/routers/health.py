@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import os
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from llm_wiki.api.models import (
     DaemonStatusResponse,
@@ -29,7 +29,9 @@ router = APIRouter(prefix="/v1", tags=["health"])
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health(wiki: WikiQuery = Depends(get_wiki)) -> HealthResponse:
+async def health(
+    wiki: WikiQuery = Depends(get_wiki), request: Request = Depends()
+) -> HealthResponse:
     """Return service health summary."""
     wiki_base = wiki.wiki_base
 
@@ -68,11 +70,15 @@ async def health(wiki: WikiQuery = Depends(get_wiki)) -> HealthResponse:
     except Exception:
         llm_enabled = False
 
+    # Query log health from app state (set by lifespan startup)
+    query_log_ok = not getattr(request.app.state, "query_log_error", False)
+
     return HealthResponse(
         daemon_running=daemon_running,
         index_loaded=index_loaded,
         scheduler_state=scheduler_state,
         llm_extraction_enabled=llm_enabled,
+        query_log_ok=query_log_ok,
     )
 
 
