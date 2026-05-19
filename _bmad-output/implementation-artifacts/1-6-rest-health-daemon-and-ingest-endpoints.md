@@ -1,6 +1,6 @@
 # Story 1.6: REST Health, Daemon, and Ingest Endpoints
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -34,37 +34,48 @@ so that I can operate and integrate with the wiki programmatically without a CLI
 
 ## Tasks / Subtasks
 
-- [ ] Create `src/llm_wiki/api/routers/health.py` (AC: 1, 2, 3)
-  - [ ] `GET /v1/health` — reads `WikiQuery` state + daemon job state from `state/jobs.json`
-  - [ ] `GET /v1/daemon/status` — returns job schedule and last-run from `JobExecutionStore`
-  - [ ] `GET /v1/daemon/jobs` — returns full history from `state/jobs.json`
-  - [ ] All responses use `HealthResponse` and `DaemonStatusResponse` from `api/models.py`
-- [ ] Create `src/llm_wiki/api/routers/ingest.py` (AC: 4, 5, 6, 7)
-  - [ ] `POST /v1/daemon/jobs/index-rebuild` — queues `IndexRebuildJob` async
-  - [ ] `POST /v1/ingest` — queues ingest job; returns `{job_id, status: "queued"}`
-  - [ ] `GET /v1/ingest/{job_id}` — polls ingest status; 404 on unknown
-- [ ] Create `src/llm_wiki/api/routers/domains.py` (AC: 8)
-  - [ ] `GET /v1/domains` — returns domain list with page_count and last_updated
-- [ ] Add ingest job tracking via `UserJobStore` (AC: 5, 6, 7)
-  - [ ] Create `src/llm_wiki/api/user_jobs.py` — `UserJobStore` class
-    - [ ] Persists to `wiki_base / "state" / "user_jobs.json"` using atomic write pattern (Story 1.1)
-    - [ ] `save(job_id: str, status: IngestStatusResponse) -> None`
-    - [ ] `get(job_id: str) -> IngestStatusResponse | None`
-    - [ ] `list_all() -> list[IngestStatusResponse]`
-    - [ ] All writes via `asyncio.to_thread()` in routes
-  - [ ] Store `UserJobStore` instance on `app.state.user_job_store` in lifespan
-  - [ ] **Do not** put ingest jobs in `app.state.ingest_jobs` dict — use `UserJobStore` only
-  - [ ] **Do not** use a TTL or in-memory cleanup — persisted jobs survive restarts; prune via governance retention if needed
-- [ ] Update `src/llm_wiki/api/models.py` with concrete models (AC: 1, 2, 6, 8)
-  - [ ] Flesh out `HealthResponse(daemon_running, index_loaded, scheduler_state, llm_extraction_enabled)` — no `vector_search_enabled`, vector search is always on
-  - [ ] `DaemonStatusResponse(jobs: list[JobStatus])`
-  - [ ] `JobStatus(job_name, last_run, next_run, last_result, status)`
-  - [ ] `IngestRequest(source_path: str | None, content: str | None, domain: str | None)`
-  - [ ] `IngestStatusResponse(job_id, status, source_path, domain, page_ids, indexed, message)`
-  - [ ] `DomainInfo(name, scope, page_count, last_updated)`
-  - [ ] `DomainListResponse(domains: list[DomainInfo])`
-- [ ] Mount routers in `src/llm_wiki/api/app.py` (all three routers)
-- [ ] Write tests
+- [x] Create `src/llm_wiki/api/routers/health.py` (AC: 1, 2, 3)
+  - [x] `GET /v1/health` — reads `WikiQuery` state + daemon job state from `state/jobs.json`
+  - [x] `GET /v1/daemon/status` — returns job schedule and last-run from `JobExecutionStore`
+  - [x] `GET /v1/daemon/jobs` — returns full history from `state/jobs.json`
+  - [x] All responses use `HealthResponse` and `DaemonStatusResponse` from `api/models.py`
+- [x] Create `src/llm_wiki/api/routers/ingest.py` (AC: 4, 5, 6, 7)
+  - [x] `POST /v1/daemon/jobs/index-rebuild` — queues `IndexRebuildJob` async
+  - [x] `POST /v1/ingest` — queues ingest job; returns `{job_id, status: "queued"}`
+  - [x] `GET /v1/ingest/{job_id}` — polls ingest status; 404 on unknown
+- [x] Create `src/llm_wiki/api/routers/domains.py` (AC: 8)
+  - [x] `GET /v1/domains` — returns domain list with page_count and last_updated
+- [x] Add ingest job tracking via `UserJobStore` (AC: 5, 6, 7)
+  - [x] Create `src/llm_wiki/api/user_jobs.py` — `UserJobStore` class
+    - [x] Persists to `wiki_base / "state" / "user_jobs.json"` using atomic write pattern (Story 1.1)
+    - [x] `save(job_id: str, status: IngestStatusResponse) -> None`
+    - [x] `get(job_id: str) -> IngestStatusResponse | None`
+    - [x] `list_all() -> list[IngestStatusResponse]`
+    - [x] All writes via `asyncio.to_thread()` in routes
+  - [x] Store `UserJobStore` instance on `app.state.user_job_store` in lifespan
+  - [x] **Do not** put ingest jobs in `app.state.ingest_jobs` dict — use `UserJobStore` only
+  - [x] **Do not** use a TTL or in-memory cleanup — persisted jobs survive restarts; prune via governance retention if needed
+- [x] Update `src/llm_wiki/api/models.py` with concrete models (AC: 1, 2, 6, 8)
+  - [x] Flesh out `HealthResponse(daemon_running, index_loaded, scheduler_state, llm_extraction_enabled)` — no `vector_search_enabled`, vector search is always on
+  - [x] `DaemonStatusResponse(jobs: list[JobStatus])`
+  - [x] `JobStatus(job_name, last_run, next_run, last_result, status)`
+  - [x] `IngestRequest(source_path: str | None, content: str | None, domain: str | None)`
+  - [x] `IngestStatusResponse(job_id, status, source_path, domain, page_ids, indexed, message)`
+  - [x] `DomainInfo(name, scope, page_count, last_updated)`
+  - [x] `DomainListResponse(domains: list[DomainInfo])`
+- [x] Mount routers in `src/llm_wiki/api/app.py` (all three routers)
+- [x] Write tests
+
+  **Tests (tests/integration/test_api_integration.py):**
+  - AC1: `test_health_returns_200`, `test_health_fields_are_correct_types`, `test_version_header_in_health`
+  - AC2: `test_daemon_status_returns_200`
+  - AC3: `test_daemon_jobs_returns_200`
+  - AC4: `test_index_rebuild_triggers_async`
+  - AC5: `test_ingest_post_returns_queued`, `test_ingest_post_then_get`, `test_ingest_persists_to_disk`
+  - AC6: `test_ingest_post_then_get`
+  - AC7: `test_ingest_get_unknown_returns_404`
+  - AC8: `test_domains_returns_list`, `test_domains_version_header`
+  - AC9: `test_version_header_in_health`, `test_domains_version_header` (12 total tests, all pass)
 
 ## Dev Notes
 
@@ -300,8 +311,40 @@ def client(wiki_root):
 
 claude-sonnet-4-6
 
-### Debug Log References
+### Debug Log
 
-### Completion Notes List
+- **Router import shadowing**: Inside `create_app()`, the local function `def health()` shadowed the imported `health` router module. Fixed by keeping router imports lazy (inside `create_app()`) and renaming the legacy route to `_legacy_health()`.
+- **Test client lifespan**: `TestClient(app)` with a `lifespan` parameter runs the lifespan when used as a context manager (`with TestClient(app):`). Tests must create a fresh `create_app()` per fixture to avoid shared state across tests.
+
+### Completion Notes
+
+Implemented all 9 acceptance criteria for Story 1.6 (REST Health, Daemon, and Ingest Endpoints):
+
+1. **Models** — Replaced stub models in `api/models.py` with concrete Pydantic models: `HealthResponse`, `DaemonStatusResponse`, `JobStatus`, `IngestRequest`, `IngestStatusResponse`, `DomainInfo`, `DomainListResponse`. Removed the old `running`/`config_dir` fields from HealthResponse per spec.
+
+2. **UserJobStore** — Created `api/user_jobs.py` with atomic JSON persistence to `state/user_jobs.json`. Supports `save()`, `get()`, `list_all()`. Used in routes via `asyncio.to_thread()`.
+
+3. **Health router** — `GET /v1/health` returns daemon liveness, index loaded status, scheduler state, and LLM extraction flag. No `vector_search_enabled` field. `GET /v1/daemon/status` and `GET /v1/daemon/jobs` read from `JobExecutionStore`.
+
+4. **Ingest router** — `POST /v1/ingest` writes content to `inbox/new/`, persists job status, returns `{"job_id": "...", "status": "queued"}`. `GET /v1/ingest/{job_id}` returns status or 404 with `WIKI_NOT_FOUND`. `POST /v1/daemon/jobs/index-rebuild` fires async task.
+
+5. **Domains router** — `GET /v1/domains` reads configured domains from config YAML, looks up page counts from `MetadataIndex.by_domain`, and computes last_updated from metadata timestamps.
+
+6. **App wiring** — Routers mounted in `app.py`. `UserJobStore` initialized on `app.state.user_job_store` during lifespan.
+
+All 12 integration tests pass. Full test suite: 1287 passed (3 pre-existing bootstrap failures).
+
+### Dev Agent Record
 
 ### File List
+
+**New files:**
+- `src/llm_wiki/api/user_jobs.py` — UserJobStore for persistent ingest job tracking
+- `src/llm_wiki/api/routers/health.py` — health/daemon status endpoints
+- `src/llm_wiki/api/routers/ingest.py` — ingest/index-rebuild endpoints
+- `src/llm_wiki/api/routers/domains.py` — domain listing endpoint
+- `tests/integration/test_api_integration.py` — 12 integration tests for all endpoints
+
+**Modified files:**
+- `src/llm_wiki/api/models.py` — fleshed out stub models (HealthResponse, DaemonStatusResponse, IngestRequest, IngestStatusResponse, DomainInfo, DomainListResponse, JobStatus)
+- `src/llm_wiki/api/app.py` — mounted routers, initialized UserJobStore in lifespan

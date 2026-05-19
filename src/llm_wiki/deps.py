@@ -2,10 +2,19 @@
 
 Provides DI helpers that routes and services use to access the wiki
 singleton and optional profile identifier.
+
+**Coding standard:** All routes MUST use ``Depends(get_wiki)`` to access the
+``WikiQuery`` singleton. Never read ``request.app.state.wiki`` directly — that
+pattern exists only inside the dependency functions themselves.
+
+For ``UserProfile`` scoped access, use ``Depends(get_profile_id)`` to read the
+``X-Profile-ID`` header.
 """
 
 from fastapi import Header, Request
 
+from llm_wiki.api.user_jobs import UserJobStore
+from llm_wiki.config.loader import WikiConfig
 from llm_wiki.query.search import WikiQuery
 
 
@@ -14,23 +23,24 @@ async def get_wiki(request: Request) -> WikiQuery:
 
     Every route that shares the same FastAPI app receives the exact same
     instance — no new :class:`WikiQuery` is constructed per request.
-
-    Args:
-        request: The incoming FastAPI request.
-
-    Returns:
-        The :class:`WikiQuery` singleton.
     """
     return request.app.state.wiki  # type: ignore[no-any-return]
 
 
-async def get_profile_id(x_profile_id: str | None = Header(default=None)) -> str | None:
-    """Return the ``X-Profile-ID`` header value if provided.
-
-    Args:
-        x_profile_id: Value of the X-Profile-ID request header.
+async def get_wiki_config(request: Request) -> WikiConfig | None:
+    """Return the :class:`WikiConfig` singleton stored on ``app.state``.
 
     Returns:
-        The profile ID string, or ``None``.
+        The :class:`WikiConfig` singleton, or ``None`` if not configured.
     """
+    return getattr(request.app.state, "wiki_config", None)  # type: ignore[return-value]
+
+
+async def get_user_job_store(request: Request) -> UserJobStore:
+    """Return the :class:`UserJobStore` singleton stored on ``app.state``."""
+    return request.app.state.user_job_store  # type: ignore[no-any-return]
+
+
+async def get_profile_id(x_profile_id: str | None = Header(default=None)) -> str | None:
+    """Return the ``X-Profile-ID`` header value if provided."""
     return x_profile_id

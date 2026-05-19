@@ -386,7 +386,8 @@ def get_profile_id(x_profile_id: str | None = Header(default=None)) -> str | Non
 
 **Rules:**
 - Never instantiate WikiQuery inside a route function, tool function, or dependency function — the **single allowed instantiation** is in `app.py` lifespan
-- All routes and MCP tools access WikiQuery via `Depends(get_wiki)` or `request.app.state.wiki`
+- All routes MUST use `Depends(get_wiki)` to access the WikiQuery singleton. **Never** read `request.app.state.wiki` directly in route functions.
+- MCP tools access WikiQuery via the function parameter injected by the server's DI (same `get_wiki` pattern).
 - WikiQuery singleton is shared between uvicorn thread pool and daemon's `ThreadPoolExecutor` — `threading.Lock` is process-wide; the central lock registry in WikiQuery protects both correctly. Do NOT add a second locking layer in route or tool code
 - FAISS index always loads at startup; daemon rebuilds update the file on disk; in-memory index is refreshed via `reload_vector_index()` after rebuild or on process restart
 

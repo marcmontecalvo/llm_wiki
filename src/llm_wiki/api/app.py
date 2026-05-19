@@ -1,21 +1,24 @@
 """FastAPI application entry point and lifespan management.
 
-Populated by Story 1.4 (FastAPI skeleton) and Story 1.8 (MCP + REST endpoints).
+Populated by Story 1.4 (FastAPI skeleton), Story 1.6 (health/daemon/ingest),
+and Story 1.8 (MCP + REST endpoints).
 The lifespan creates a single WikiQuery singleton that is shared across all
 REST and MCP surfaces.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 
 from llm_wiki.api.errors import register_exception_handlers
+from llm_wiki.deps import get_wiki
 from llm_wiki.initializer import _maybe_init_wiki_root
 from llm_wiki.query.search import WikiQuery
 
@@ -26,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 # PID file written by WikiDaemon so FastAPI can check if it is alive.
 _DAEMON_PID_FILE = "/wiki/state/daemon.pid"
+
+# Router imports added in Story 1.6 (lazy, inside create_app to avoid shadowing)
 
 
 def _daemon_running() -> bool:
@@ -69,6 +74,12 @@ async def lifespan(app: FastAPI):
     app.state.wiki = WikiQuery(wiki_base=wiki_root, index_dir=wiki_root / "index")
     if _wiki_config is not None:
         app.state.wiki_config = _wiki_config  # Make config available to routes
+
+    # UserJobStore persists ingest jobs to disk (Story 1.6)
+    user_jobs_path = wiki_root / "state"
+    from llm_wiki.api.user_jobs import UserJobStore  # noqa: E303
+
+    app.state.user_job_store = UserJobStore(state_dir=user_jobs_path)
 
     # Initialize deep query job tracking
     app.state.deep_jobs = {}  # type: ignore[assignment]
@@ -119,23 +130,33 @@ def create_app() -> FastAPI:
         response.headers["X-LLM-Wiki-Version"] = __version__
         return response
 
-    # Health check
-    wiki_root = Path(os.environ.get("WIKI_ROOT", "wiki_system"))
-    pid_file = wiki_root / "state" / "daemon.pid"
+    # Mount routers added in Story 1.6
+    from llm_wiki.api.routers import domains as _domains  # noqa: E303
+    from llm_wiki.api.routers import health as _health
+    from llm_wiki.api.routers import ingest as _ingest
 
-    @app.get("/v1/health")
-    def health():
+    app.include_router(_health.router)
+    app.include_router(_ingest.router)
+    app.include_router(_domains.router)
+
+    # Legacy inline health check endpoint (story 1.6 routes at /v1/health are primary)
+
+    @app.get("/v1/health-legacy")
+    async def _legacy_health(wiki: WikiQuery = Depends(get_wiki)) -> dict:
         daemon_running = False
-        if pid_file.exists():
+        pid_file = wiki.wiki_base / "state" / "daemon.pid"
+        if await asyncio.to_thread(pid_file.exists):
             try:
-                pid = int(pid_file.read_text().strip())
+                pid_text = await asyncio.to_thread(pid_file.read_text)
+                pid = int(pid_text.strip())
                 os.kill(pid, 0)
                 daemon_running = True
             except (ValueError, ProcessLookupError, PermissionError, OSError):
                 daemon_running = False
         llm_enabled = False
-        if hasattr(app.state, "wiki_config") and app.state.wiki_config is not None:
-            llm_enabled = app.state.wiki_config.daemon.daemon.features.llm_extraction
+        config = getattr(app.state, "wiki_config", None)
+        if config is not None:
+            llm_enabled = config.daemon.daemon.features.llm_extraction
         return {
             "running": True,
             "daemon_running": daemon_running,

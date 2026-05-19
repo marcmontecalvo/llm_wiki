@@ -72,6 +72,7 @@ select = [
 ignore = [
     "E501",  # line too long (handled by formatter)
     "B904",  # allow raise SystemExit(1) in CLI exception handlers
+    "B008",  # FastAPI Depends() calls in argument defaults are intentional
 ]
 
 [tool.ruff.format]
