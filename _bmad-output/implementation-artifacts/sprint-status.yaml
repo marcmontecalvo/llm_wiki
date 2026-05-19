@@ -44,11 +44,11 @@ story_location: _bmad-output/implementation-artifacts
 development_status:
   # ─── Epic 1: Docker Service ───────────────────────────────────────────────
   epic-1: in-progress
-  1-1-atomic-index-writes-and-write-mutex: review
-  1-2-inbox-recovery-and-index-integrity-on-startup: review
-  1-3-docker-container-and-process-management: review
-  1-4-fastapi-application-skeleton-and-error-handling: review
-  1-5-feature-flag-system: review
+  1-1-atomic-index-writes-and-write-mutex: done
+  1-2-inbox-recovery-and-index-integrity-on-startup: done
+  1-3-docker-container-and-process-management: done
+  1-4-fastapi-application-skeleton-and-error-handling: done
+  1-5-feature-flag-system: done
   1-6-rest-health-daemon-and-ingest-endpoints: ready-for-dev
   1-7-rest-query-search-pages-and-export-endpoints: ready-for-dev
   1-8-mcp-server-and-all-tools: ready-for-dev

@@ -1,6 +1,6 @@
 # Story 1.1: Atomic Index Writes and Write Mutex
 
-Status: review
+Status: done
 
 ## Story
 
@@ -56,14 +56,14 @@ so that daemon crashes never corrupt indexes and concurrent daemon workers never
 
 **Non-atomic saves (all must be fixed):**
 
-| File | Method | Problem |
-|------|---------|---------|
-| `src/llm_wiki/index/fulltext.py:155` | `save()` | `index_file.open("w")` — non-atomic |
-| `src/llm_wiki/index/metadata.py:208` | `save()` | `index_file.open("w")` — non-atomic |
-| `src/llm_wiki/index/backlinks.py:362` | `save()` | `index_file.open("w")` — non-atomic |
-| `src/llm_wiki/index/graph_edges.py:401` | `save()` | `index_file.open("w")` — non-atomic |
-| `src/llm_wiki/index/vector.py:251` | `save()` | `meta_path.open("w")` + `faiss.write_index()` — both non-atomic |
-| `src/llm_wiki/index/vector.py:199` | `_save_index_to_disk()` | same non-atomic writes as `save()` |
+| File                                    | Method                  | Problem                                                         |
+| --------------------------------------- | ----------------------- | --------------------------------------------------------------- |
+| `src/llm_wiki/index/fulltext.py:155`    | `save()`                | `index_file.open("w")` — non-atomic                             |
+| `src/llm_wiki/index/metadata.py:208`    | `save()`                | `index_file.open("w")` — non-atomic                             |
+| `src/llm_wiki/index/backlinks.py:362`   | `save()`                | `index_file.open("w")` — non-atomic                             |
+| `src/llm_wiki/index/graph_edges.py:401` | `save()`                | `index_file.open("w")` — non-atomic                             |
+| `src/llm_wiki/index/vector.py:251`      | `save()`                | `meta_path.open("w")` + `faiss.write_index()` — both non-atomic |
+| `src/llm_wiki/index/vector.py:199`      | `_save_index_to_disk()` | same non-atomic writes as `save()`                              |
 
 **No mutex:** `WikiQuery` (`src/llm_wiki/query/search.py`) has no `_index_locks` dict. `add_page()`/`remove_page()` update in-memory state only — they do NOT call `save()` currently. After this story they must: update in-memory state, then acquire lock, then save.
 

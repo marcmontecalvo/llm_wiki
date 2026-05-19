@@ -1,6 +1,6 @@
 # Story 1.2: Inbox Recovery and Index Integrity on Startup
 
-Status: review
+Status: done
 
 ## Story
 

@@ -1,6 +1,6 @@
 # Story 1.4: FastAPI Application Skeleton and Error Handling
 
-Status: review
+Status: done
 
 ## Story
 
