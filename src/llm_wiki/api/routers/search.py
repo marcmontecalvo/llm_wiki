@@ -12,7 +12,7 @@ import logging
 from fastapi import APIRouter, Depends, Query, Request
 
 from llm_wiki.api.models import SearchResponse, SearchResultItem
-from llm_wiki.deps import get_wiki
+from llm_wiki.deps import get_profile_id, get_wiki
 from llm_wiki.query.log import QueryLogEntry
 from llm_wiki.query.search import WikiQuery
 
@@ -27,6 +27,7 @@ async def search(
     domain: str | None = Query(default=None, description="Optional domain filter"),
     limit: int = Query(default=10, ge=1, le=100, description="Max results"),
     wiki: WikiQuery = Depends(get_wiki),
+    profile_id: str | None = Depends(get_profile_id),
 ) -> SearchResponse:
     """Search the wiki — merged full-text + vector results.
 
@@ -38,6 +39,7 @@ async def search(
         q,
         domain=domain,
         limit=limit,
+        scope_to_profile=profile_id,
     )
 
     results = [
@@ -53,9 +55,7 @@ async def search(
     # Log search to query log (non-blocking, fire-and-forget)
     store = getattr(request.app.state, "query_log", None)
     if store is not None:
-        confidence_avg = (
-            sum(r.confidence for r in results) / len(results) if results else None
-        )
+        confidence_avg = sum(r.confidence for r in results) / len(results) if results else None
         try:
             entry = QueryLogEntry(
                 query_text=q,

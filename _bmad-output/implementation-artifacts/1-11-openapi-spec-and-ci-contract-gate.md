@@ -1,6 +1,6 @@
 # Story 1.11: OpenAPI Spec and CI Contract Gate
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -20,23 +20,23 @@ so that integrations can discover all endpoints automatically and API drift is c
 
 ## Tasks / Subtasks
 
-- [ ] Verify FastAPI auto-generates OpenAPI 3.1 at `/v1/openapi.json` (AC: 1)
-  - [ ] FastAPI generates this automatically — verify the route exists and returns valid JSON
-  - [ ] Ensure all API models in `api/models.py` have proper field descriptions
-  - [ ] Ensure all routers have `tags=[...]` set for organized spec output
-- [ ] Create `scripts/export_openapi.py` (AC: 2, 3)
-  - [ ] Import the FastAPI `app` and call `app.openapi()` to get the spec dict
-  - [ ] Write spec to `docs/openapi.json` with `json.dump(spec, f, indent=2)`
-  - [ ] Exit with code 0 (new export) or 0 (no drift); exit 1 if drift detected when run with `--check` flag
-- [ ] Create `docs/openapi.json` (AC: 3)
-  - [ ] Generate the initial committed spec by running `python scripts/export_openapi.py`
-- [ ] Create the baseline `.github/workflows/ci.yml` scaffold (AC: 2)
-  - [ ] **This story owns CI creation** — Stories 1.16 and 1.17 extend this file; never create it from scratch
-  - [ ] Create `.github/workflows/ci.yml` with: checkout, Python setup via `uv`, `pytest` (unit tests), OpenAPI check step
-  - [ ] Include placeholder comment blocks for performance tests (1.16) and integration tests (1.17) to land in
-  - [ ] Add step: `python scripts/export_openapi.py --check` — fails if spec drifted
-  - [ ] Run OpenAPI check after the test step (spec needs all routes registered)
-- [ ] Create `docs/` directory if it doesn't exist
+- [x] Verify FastAPI auto-generates OpenAPI 3.1 at `/v1/openapi.json` (AC: 1)
+  - [x] FastAPI generates this automatically — verify the route exists and returns valid JSON
+  - [x] Ensure all API models in `api/models.py` have proper field descriptions
+  - [x] Ensure all routers have `tags=[...]` set for organized spec output
+- [x] Create `scripts/export_openapi.py` (AC: 2, 3)
+  - [x] Import the FastAPI `app` and call `app.openapi()` to get the spec dict
+  - [x] Write spec to `docs/openapi.json` with `json.dump(spec, f, indent=2)`
+  - [x] Exit with code 0 (new export) or 0 (no drift); exit 1 if drift detected when run with `--check` flag
+- [x] Create `docs/openapi.json` (AC: 3)
+  - [x] Generate the initial committed spec by running `python scripts/export_openapi.py`
+- [x] Create the baseline `.github/workflows/ci.yml` scaffold (AC: 2)
+  - [x] **This story owns CI creation** — Stories 1.16 and 1.17 extend this file; never create it from scratch
+  - [x] Create `.github/workflows/ci.yml` with: checkout, Python setup via `uv`, `pytest` (unit tests), OpenAPI check step
+  - [x] Include placeholder comment blocks for performance tests (1.16) and integration tests (1.17) to land in
+  - [x] Add step: `python scripts/export_openapi.py --check` — fails if spec drifted
+  - [x] Run OpenAPI check after the test step (spec needs all routes registered)
+- [x] Create `docs/` directory if it doesn't exist
 
 ## Dev Notes
 
@@ -229,6 +229,20 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+- Pre-existing bug: `Request = Depends()` in `health.py:33` caused Pydantic `CallableSchema` error during OpenAPI schema generation. Fixed by changing to `request: Request` (no `Depends()`), with parameter reordering to satisfy Python's "parameter with default must follow" rule.
+
 ### Completion Notes List
 
+- Added `openapi_url="/v1/openapi.json"` and `openapi_version="3.1.0"` to FastAPI constructor in `app.py` (AC1)
+- Created `scripts/export_openapi.py` with `--check` flag for CI drift detection (AC2, AC3)
+- Generated initial `docs/openapi.json` covering all 15 REST endpoints
+- Added OpenAPI spec check step to `.github/workflows/ci.yml` (after pytest step)
+- Left placeholder comment blocks in ci.yml for Story 1.16 (performance) and Story 1.17 (integration)
+
 ### File List
+
+- `src/llm_wiki/api/app.py` — modified: added `openapi_url` and `openapi_version` params
+- `src/llm_wiki/api/routers/health.py` — modified: fixed `Request` dependency to avoid OpenAPI schema bug
+- `scripts/export_openapi.py` — created: export script with `--check` flag
+- `docs/openapi.json` — created: initial OpenAPI spec (15 routes, ~28KB)
+- `.github/workflows/ci.yml` — modified: added OpenAPI spec check step

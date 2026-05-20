@@ -1,6 +1,6 @@
 # Story 1.9: Multi-User Domain Scoping
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -30,23 +30,23 @@ so that household knowledge stays separate from personal knowledge and each memb
 
 ## Tasks / Subtasks
 
-- [ ] Add `scope` and `owner` fields to `DomainConfig` in `src/llm_wiki/models/config.py` (AC: 1, 2, 3)
-  - [ ] `scope: Literal["shared", "personal"] = "shared"` — default `shared` for backward compat
-  - [ ] `owner: str | None = None` — present only when `scope: "personal"`
-  - [ ] Validator: if `scope == "personal"` and `owner` is `None`, raise validation error
-- [ ] Update `config/domains.yaml` example to show both scope types (AC: 1, 2, 3)
-- [ ] Add `scope_to_profile: str | None` parameter to `WikiQuery.search()` (AC: 4, 5, 6, 7)
-  - [ ] When `scope_to_profile=None`: query all domains (current behavior)
-  - [ ] When `scope_to_profile="marc"`: include `household` (shared domains) + `user-marc` (owner=="marc" personal domains); exclude all other personal domains
-  - [ ] When explicit `domain` param is also set: honor `domain` exclusively; ignore `scope_to_profile`
-  - [ ] Filtering logic lives ONLY in `WikiQuery.search()` — verified by code audit
-- [ ] Update `GET /v1/query`, `GET /v1/search` routes to pass `profile_id` (AC: 7, 8)
-  - [ ] Both routes already use `Depends(get_profile_id)` from Story 1.4
-  - [ ] Pass `scope_to_profile=profile_id` to `wiki.search()` calls
-- [ ] Update MCP `query` and `search` tools to accept and pass `profile_id` (AC: 5, 8)
-  - [ ] Add `profile_id: str | None = None` parameter to both tools
-  - [ ] Pass to `wiki.search(scope_to_profile=profile_id)`
-- [ ] Write tests
+- [x] Add `scope` and `owner` fields to `DomainConfig` in `src/llm_wiki/models/config.py` (AC: 1, 2, 3)
+  - [x] `scope: Literal["shared", "personal"] = "shared"` — default `shared` for backward compat
+  - [x] `owner: str | None = None` — present only when `scope: "personal"`
+  - [x] Validator: if `scope == "personal"` and `owner` is `None`, raise validation error
+- [x] Update `config/domains.yaml` example to show both scope types (AC: 1, 2, 3)
+- [x] Add `scope_to_profile: str | None` parameter to `WikiQuery.search()` (AC: 4, 5, 6, 7)
+  - [x] When `scope_to_profile=None`: query all domains (current behavior)
+  - [x] When `scope_to_profile="marc"`: include `household` (shared domains) + `user-marc` (owner=="marc" personal domains); exclude all other personal domains
+  - [x] When explicit `domain` param is also set: honor `domain` exclusively; ignore `scope_to_profile`
+  - [x] Filtering logic lives ONLY in `WikiQuery.search()` — verified by code audit
+- [x] Update `GET /v1/query`, `GET /v1/search` routes to pass `profile_id` (AC: 7, 8)
+  - [x] Both routes already use `Depends(get_profile_id)` from Story 1.4
+  - [x] Pass `scope_to_profile=profile_id` to `wiki.search()` calls
+- [x] Update MCP `query` and `search` tools to accept and pass `profile_id` (AC: 5, 8)
+  - [x] Add `profile_id: str | None = None` parameter to both tools
+  - [x] Pass to `wiki.search(scope_to_profile=profile_id)`
+- [x] Write tests
 
 ## Dev Notes
 
@@ -207,4 +207,23 @@ claude-sonnet-4-6
 
 ### Completion Notes List
 
+1. Added `scope` and `owner` fields to `DomainConfig` with `model_validator` ensuring `owner` is required when `scope="personal"`. Backward compatible — existing configs without these fields default to `scope="shared"`.
+2. Implemented `_resolve_search_domains()` in `WikiQuery` — the exclusive domain resolution logic per story requirements. When no config exists, returns `None` to skip scoping (backward compatible).
+3. Wired `scope_to_profile` through `WikiQuery.search()` — applies domain filtering using resolved domains set against page metadata domains.
+4. Updated `GET /v1/search` REST route to accept and pass `profile_id` (POST `/v1/query` already did during Story 1.12).
+5. Updated MCP `search` tool to accept `profile_id` parameter (MCP `query` tool already had it from a prior story).
+6. Wrote 16 unit tests covering: config schema validation, domain resolution logic, profile filtering, and explicit domain override. All 1311 tests pass (0 regressions).
+
 ### File List
+
+- `src/llm_wiki/models/config.py` — ADDED scope/owner fields, model_validator
+- `src/llm_wiki/query/search.py` — ADDED wiki_config param, _resolve_search_domains(), scope filtering in search()
+- `src/llm_wiki/api/routers/search.py` — UPDATED to pass scope_to_profile
+- `src/llm_wiki/mcp/tools.py` — UPDATED search tool to accept/profile_id
+- `config/domains.yaml` — UPDATED with scope/owner on all domains
+- `tests/unit/test_domain_scoping.py` — CREATED: 16 tests for domain scoping
+
+### Change Log
+
+- Addressed code review findings - 0 items resolved (2026-05-19)
+- Added multi-user domain scoping with profile-based filtering (Story 1.9)

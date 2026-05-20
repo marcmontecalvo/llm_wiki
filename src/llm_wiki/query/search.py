@@ -21,6 +21,7 @@ class WikiQuery:
         self,
         wiki_base: Path | None = None,
         index_dir: Path | None = None,
+        wiki_config: Any = None,
     ):
         """Initialize wiki query interface.
 
@@ -47,7 +48,7 @@ class WikiQuery:
         }
 
         self._load_indexes()
-        self._profile_scoping_enabled = False  # Story 1.9: wire up profile domain filtering
+        self._wiki_config = wiki_config
 
     def acquire_all_locks(self) -> None:
         """Acquire all index locks. Used by IndexRebuildJob before full rebuild."""
@@ -74,6 +75,55 @@ class WikiQuery:
         except Exception as e:
             logger.warning(f"Failed to load indexes: {e}")
 
+    def _resolve_search_domains(
+        self,
+        domain: str | None,
+        scope_to_profile: str | None,
+    ) -> list[str] | None:
+        """Return list of domain IDs to search, or ``None`` to skip filtering.
+
+        When ``scope_to_profile`` is set but config is ``None``, returns
+        an empty list (fail-closed) to prevent leaking personal-domain
+        content through a missing-config path.
+
+        When ``scope_to_profile`` is set AND ``domain`` is also set,
+        the requested domain is intersected with the caller's allowed
+        domains to prevent bypassing personal-domain ownership checks.
+
+        Logic lives exclusively here — never duplicate in routes/tools.
+        """
+        if self._wiki_config is None or self._wiki_config.domains is None:
+            if scope_to_profile is not None:
+                # Profile scoping requested but config missing — fail-closed
+                return []
+            # No scope request, no config — skip filtering (backward compat)
+            if domain is not None:
+                return [domain]
+            return None
+
+        all_domains_cfg = self._wiki_config.domains.domains
+
+        # Compute the caller's allowed set of domains
+        allowed: set[str] = set()
+        if scope_to_profile is None:
+            # No profile filter: search all configured domains
+            allowed = {d.id for d in all_domains_cfg}
+        else:
+            # Profile filter: shared domains + this profile's personal domain(s)
+            for d in all_domains_cfg:
+                if d.scope == "shared":
+                    allowed.add(d.id)
+                elif d.scope == "personal" and d.owner == scope_to_profile:
+                    allowed.add(d.id)
+
+        if domain is not None:
+            # Explicit domain: intersect with allowed set
+            if domain in allowed:
+                return [domain]
+            return []  # unauthorized explicit domain
+
+        return list(allowed)
+
     def search(
         self,
         query: str | None = None,
@@ -89,16 +139,31 @@ class WikiQuery:
         is provided, merges fulltext and vector results via Reciprocal Rank
         Fusion, then applies metadata filters.
         """
-        if scope_to_profile and not self._profile_scoping_enabled:
-            logger.warning(
-                "X-Profile-ID / scope_to_profile=%s accepted but not yet enforced — "
-                "all domains searched. Story 1.9 will implement isolation.",
-                scope_to_profile,
-            )
+        allowed_domains: set[str] | None = None
+        resolved = self._resolve_search_domains(domain, scope_to_profile)
+        if resolved is not None and resolved != []:
+            allowed_domains = set(resolved)
+        elif resolved == []:
+            # Explicitly unauthorized — empty list means zero access
+            allowed_domains = set()
+        else:
+            # None — no domain filtering
+            allowed_domains = None
 
         if query:
-            ft_results = self.fulltext_index.search(query, domain=None, limit=limit * 2)
-            vec_results = self.vector_index.search(query, domain=None, limit=limit * 2)
+            # Push domain filter into index search to avoid in-scope hits being
+            # pushing underneath the top-N window by out-of-scope results.
+            if allowed_domains is not None:
+                ft_results: list[dict[str, Any]] = []
+                vec_results: list[dict[str, Any]] = []
+                # Sort domains for stable, deterministic concat order;
+                # set order is undefined and would bias RRF ranks.
+                for d in sorted(allowed_domains):
+                    ft_results.extend(self.fulltext_index.search(query, domain=d, limit=limit))
+                    vec_results.extend(self.vector_index.search(query, domain=d, limit=limit))
+            else:
+                ft_results = self.fulltext_index.search(query, domain=None, limit=limit * 2)
+                vec_results = self.vector_index.search(query, domain=None, limit=limit * 2)
 
             # Reciprocal Rank Fusion
             rrf_scores: dict[str, float] = {}
@@ -111,14 +176,18 @@ class WikiQuery:
         else:
             candidate_ids = list(self.metadata_index.pages.keys())
 
-        # Apply metadata filters
+        # Apply metadata filters including domain scoping
         filtered_results = []
         for page_id in candidate_ids:
             metadata = self.metadata_index.get_page(page_id)
             if not metadata:
                 continue
-            if domain and metadata.get("domain") != domain:
-                continue
+            page_domain = metadata.get("domain", "general")
+
+            # Scope filtering: page must be in a domain the caller is allowed to see
+            if allowed_domains is not None:
+                if page_domain not in allowed_domains:
+                    continue
             if kind and metadata.get("kind") != kind:
                 continue
             if tags:

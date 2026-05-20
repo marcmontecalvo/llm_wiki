@@ -23,9 +23,16 @@ _COMMON_SUBDIRS = (
     "inbox/processing",
     "inbox/failed",
     "inbox/done",
+    "inbox/staging",
+    "index",
     "exports",
-    "logs",
+    "reports",
+    "review_queue/pending",
+    "review_queue/approved",
+    "review_queue/rejected",
+    "review_queue/deferred",
     "state",
+    "logs",
 )
 
 logger = logging.getLogger(__name__)
@@ -40,18 +47,50 @@ class WikiInitializer:
     def initialize(cls, wiki_root: Path | str) -> None:
         """Create all required subdirectories under *wiki_root*.
 
-        Idempotent — safe to call multiple times.
+        Idempotent — safe to call on a fresh or already-initialised wiki.
+        Only creates directories; seed files for indexes are populated by
+        rebuild作业时, not by the bootstrap path so that the startup
+        integrity gate can still detect missing/empty indexes.
 
         Args:
             wiki_root: Path to the wiki root directory.
         """
         root = Path(wiki_root)
         root.mkdir(parents=True, exist_ok=True)
-        # Domain root — domains themselves are created per-domain below
-        (root / "domains").mkdir(parents=True, exist_ok=True)
-        # Generic dirs shared by all domains
+
+        created_dirs = 0
+        existed_dirs = 0
+
+        # Domain root
+        if not (root / "domains").exists():
+            (root / "domains").mkdir(parents=True, exist_ok=True)
+            logger.info("Created directory: %s/domains", root)
+            created_dirs += 1
+        else:
+            existed_dirs += 1
+
+        # Generic shared directories
         for subdir in _COMMON_SUBDIRS:
-            (root / subdir).mkdir(parents=True, exist_ok=True)
+            path = root / subdir
+            if not path.exists():
+                path.mkdir(parents=True, exist_ok=True)
+                logger.info("Created directory: %s/%s", root, subdir)
+                created_dirs += 1
+            else:
+                existed_dirs += 1
+
+        # Create empty changelog (append-only; does not affect index integrity)
+        changelog = root / "logs" / "changelog.jsonl"
+        if not changelog.exists():
+            changelog.touch()
+            logger.info("Created changelog: %s/logs/changelog.jsonl", root)
+            created_dirs += 1
+
+        logger.info(
+            "Wiki initialization complete: %d dirs created, %d dirs existed",
+            created_dirs,
+            existed_dirs,
+        )
 
     @classmethod
     def initialize_domain(cls, wiki_root: Path | str, domain: str) -> None:
@@ -144,7 +183,7 @@ def boot_wiki(
         logger.warning("Config load failed (non-fatal for MCP bootstrap)")
 
     # Build indexes
-    wiki = WikiQuery(wiki_base=wiki_root, index_dir=wiki_root / "index")
+    wiki = WikiQuery(wiki_base=wiki_root, index_dir=wiki_root / "index", wiki_config=wiki_config)
 
     # UserJobStore — shared factory
     user_job_store = get_user_job_store(wiki_root)

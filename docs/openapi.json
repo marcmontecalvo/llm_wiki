@@ -1,0 +1,1096 @@
+{
+  "components": {
+    "schemas": {
+      "DaemonStatusResponse": {
+        "description": "Daemon status \u2014 list of all registered jobs with schedule info.",
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/JobStatus"
+            },
+            "title": "Jobs",
+            "type": "array"
+          }
+        },
+        "title": "DaemonStatusResponse",
+        "type": "object"
+      },
+      "DomainInfo": {
+        "description": "Single domain with metadata.",
+        "properties": {
+          "last_updated": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Updated"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "page_count": {
+            "default": 0,
+            "title": "Page Count",
+            "type": "integer"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "scope"
+        ],
+        "title": "DomainInfo",
+        "type": "object"
+      },
+      "DomainListResponse": {
+        "description": "List of configured domains with metadata.",
+        "properties": {
+          "domains": {
+            "items": {
+              "$ref": "#/components/schemas/DomainInfo"
+            },
+            "title": "Domains",
+            "type": "array"
+          }
+        },
+        "title": "DomainListResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "description": "Health check response.",
+        "properties": {
+          "daemon_running": {
+            "title": "Daemon Running",
+            "type": "boolean"
+          },
+          "index_loaded": {
+            "title": "Index Loaded",
+            "type": "boolean"
+          },
+          "llm_extraction_enabled": {
+            "title": "Llm Extraction Enabled",
+            "type": "boolean"
+          },
+          "query_log_ok": {
+            "default": true,
+            "title": "Query Log Ok",
+            "type": "boolean"
+          },
+          "scheduler_state": {
+            "title": "Scheduler State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "daemon_running",
+          "index_loaded",
+          "scheduler_state",
+          "llm_extraction_enabled"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "IngestRequest": {
+        "description": "Ingest request body.\n\nProvide either ``source_path`` (file to ingest) or ``content`` (markdown text),\noptionally scoped to a domain.",
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "source_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Path"
+          }
+        },
+        "title": "IngestRequest",
+        "type": "object"
+      },
+      "IngestStatusResponse": {
+        "description": "Ingest job status response.",
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "indexed": {
+            "default": false,
+            "title": "Indexed",
+            "type": "boolean"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "page_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Page Ids",
+            "type": "array"
+          },
+          "source_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Path"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "IngestStatusResponse",
+        "type": "object"
+      },
+      "JobStatus": {
+        "description": "Single daemon job status for daemon/status endpoint.",
+        "properties": {
+          "job_name": {
+            "title": "Job Name",
+            "type": "string"
+          },
+          "last_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Result"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run"
+          },
+          "next_run": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run"
+          },
+          "status": {
+            "default": "unknown",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_name"
+        ],
+        "title": "JobStatus",
+        "type": "object"
+      },
+      "PageListResponse": {
+        "description": "Paginated page list from MetadataIndex.",
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/PageResponse"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "total_hint": {
+            "default": 0,
+            "title": "Total Hint",
+            "type": "integer"
+          }
+        },
+        "title": "PageListResponse",
+        "type": "object"
+      },
+      "PageResponse": {
+        "description": "Single page response \u2014 full content plus frontmatter.",
+        "properties": {
+          "confidence": {
+            "default": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "domain": {
+            "default": "",
+            "title": "Domain",
+            "type": "string"
+          },
+          "frontmatter": {
+            "additionalProperties": true,
+            "title": "Frontmatter",
+            "type": "object"
+          },
+          "kind": {
+            "default": "",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_id": {
+            "title": "Page Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_id",
+          "title",
+          "content"
+        ],
+        "title": "PageResponse",
+        "type": "object"
+      },
+      "QueryRequest": {
+        "description": "Query request body.\n\n``depth`` controls synchronicity: ``quick``/``standard`` run\nsynchronously; ``deep`` dispatches to a background task and\nreturns 202 Accepted immediately.",
+        "properties": {
+          "depth": {
+            "default": "quick",
+            "enum": [
+              "quick",
+              "standard",
+              "deep"
+            ],
+            "title": "Depth",
+            "type": "string"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "QueryRequest",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "description": "Search response \u2014 always merges full-text and vector results.",
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResultItem"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "SearchResultItem": {
+        "description": "Single result from the search endpoint.",
+        "properties": {
+          "confidence": {
+            "default": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "page_id": {
+            "title": "Page Id",
+            "type": "string"
+          },
+          "score": {
+            "default": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_id",
+          "title"
+        ],
+        "title": "SearchResultItem",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "LLM Wiki",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/daemon/jobs": {
+      "get": {
+        "description": "Return full job execution history.",
+        "operationId": "daemon_jobs_v1_daemon_jobs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IngestStatusResponse"
+                  },
+                  "title": "Response Daemon Jobs V1 Daemon Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Daemon Jobs",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/daemon/jobs/index-rebuild": {
+      "post": {
+        "description": "Trigger an asynchronous index rebuild.",
+        "operationId": "index_rebuild_v1_daemon_jobs_index_rebuild_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Index Rebuild V1 Daemon Jobs Index Rebuild Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Index Rebuild",
+        "tags": [
+          "ingest"
+        ]
+      }
+    },
+    "/v1/daemon/status": {
+      "get": {
+        "description": "Return daemon job schedules, last-run results, and next-run times.",
+        "operationId": "daemon_status_v1_daemon_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DaemonStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Daemon Status",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/domains": {
+      "get": {
+        "description": "Return configured domains with page_count and last_updated metadata.",
+        "operationId": "list_domains_v1_domains_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Domains",
+        "tags": [
+          "domains"
+        ]
+      }
+    },
+    "/v1/export": {
+      "post": {
+        "description": "Trigger an export job asynchronously.\n\nReturns immediately \u2014 the actual export is performed by the daemon\n(see the ``export`` scheduled job).  The GET endpoint will return\n404 until the export file is generated.",
+        "operationId": "trigger_export_v1_export_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Trigger Export V1 Export Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Trigger Export",
+        "tags": [
+          "export"
+        ]
+      }
+    },
+    "/v1/export/{format}": {
+      "get": {
+        "description": "Read a generated export file.\n\nReturns the file content with ``Last-Modified`` header.\nRaises ``ExportNotReadyError`` (404) if the export doesn't exist\nor the format is unknown.",
+        "operationId": "get_export_v1_export__format__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "title": "Format",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Export",
+        "tags": [
+          "export"
+        ]
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "description": "Return service health summary.",
+        "operationId": "health_v1_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/health-legacy": {
+      "get": {
+        "operationId": "_legacy_health_v1_health_legacy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Legacy Health V1 Health Legacy Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": " Legacy Health"
+      }
+    },
+    "/v1/ingest": {
+      "post": {
+        "description": "Submit content for ingestion.\n\nWrites the content to ``inbox/new/`` and persists job status via UserJobStore.",
+        "operationId": "submit_ingest_v1_ingest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Ingest",
+        "tags": [
+          "ingest"
+        ]
+      }
+    },
+    "/v1/ingest/{job_id}": {
+      "get": {
+        "description": "Poll ingest job status.\n\nReturns 404 if the job_id is not found.",
+        "operationId": "get_ingest_status_v1_ingest__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ingest Status",
+        "tags": [
+          "ingest"
+        ]
+      }
+    },
+    "/v1/pages": {
+      "get": {
+        "description": "List pages with cursor-based pagination and optional filters.\n\nReads from the MetadataIndex (not the filesystem directly for\nfiltering since the search endpoint already applies metadata filters).",
+        "operationId": "list_pages_v1_pages_get",
+        "parameters": [
+          {
+            "description": "Filter by domain",
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by domain",
+              "title": "Domain"
+            }
+          },
+          {
+            "description": "Filter by kind",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by kind",
+              "title": "Kind"
+            }
+          },
+          {
+            "description": "Pagination cursor",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Pagination cursor",
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "Page size",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Page size",
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Pages",
+        "tags": [
+          "pages"
+        ]
+      }
+    },
+    "/v1/pages/{page_id}": {
+      "get": {
+        "description": "Read a single page by ID.\n\nReturns full content plus frontmatter provenance metadata.\nRaises WikiNotFoundError (404) if page doesn't exist.",
+        "operationId": "read_page_v1_pages__page_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page_id",
+            "required": true,
+            "schema": {
+              "title": "Page Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Page",
+        "tags": [
+          "pages"
+        ]
+      }
+    },
+    "/v1/query": {
+      "post": {
+        "description": "Dispatch a query \u2014 sync (quick/standard) or async (deep).",
+        "operationId": "query_v1_query_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-profile-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Profile-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Query",
+        "tags": [
+          "query"
+        ]
+      }
+    },
+    "/v1/query/{job_id}": {
+      "get": {
+        "description": "Poll a deep query job \u2014 returns 200 with results or 404 if not found.",
+        "operationId": "get_query_job_v1_query__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Query Job",
+        "tags": [
+          "query"
+        ]
+      }
+    },
+    "/v1/search": {
+      "get": {
+        "description": "Search the wiki \u2014 merged full-text + vector results.\n\nVector search is always active; there is no feature flag.",
+        "operationId": "search_v1_search_get",
+        "parameters": [
+          {
+            "description": "Search query text",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "Search query text",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional domain filter",
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional domain filter",
+              "title": "Domain"
+            }
+          },
+          {
+            "description": "Max results",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "description": "Max results",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-profile-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Profile-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "search"
+        ]
+      }
+    }
+  }
+}
