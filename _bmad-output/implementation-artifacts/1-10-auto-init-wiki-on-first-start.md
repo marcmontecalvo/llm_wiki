@@ -1,6 +1,6 @@
 # Story 1.10: Auto-Init Wiki on First Start
 
-Status: review
+Status: done
 
 ## Story
 
