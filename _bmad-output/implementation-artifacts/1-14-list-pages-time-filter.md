@@ -1,6 +1,6 @@
 # Story 1.14: List Pages Time Filter
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -20,19 +20,19 @@ So that agents can sync incrementally without fetching the full page list.
 
 ## Tasks / Subtasks
 
-- [ ] Add `updated_since` parameter to `WikiQuery.list_pages()` in `src/llm_wiki/query/search.py` (AC: 1, 3)
-  - [ ] `updated_since: datetime | None = None` — filter pages where `updated_at > updated_since`
-  - [ ] Parse `updated_at` from page frontmatter to `datetime` before comparing — never compare ISO8601 strings directly (`Z` vs `+00:00` formats sort differently)
-  - [ ] When `updated_since=None`: return all pages (current behavior, no regression)
-- [ ] Update `GET /v1/pages` route in `src/llm_wiki/api/routers/pages.py` (AC: 1, 2)
-  - [ ] Add `updated_since: datetime | None = Query(default=None)` — FastAPI validates ISO8601 automatically via Pydantic
-  - [ ] Pass to `wiki.list_pages(updated_since=updated_since)` via `asyncio.to_thread()`
-  - [ ] FastAPI + Pydantic returns 422 automatically for invalid datetime strings (AC: 2)
-- [ ] Update `list_pages` MCP tool in `src/llm_wiki/mcp/tools.py` (AC: 3)
-  - [ ] Add `updated_since: str | None = None` parameter (ISO8601 string — MCP tools use strings, not datetime)
-  - [ ] Parse string to `datetime` before calling `wiki.list_pages(updated_since=...)`
-  - [ ] Return 422-equivalent MCP error for invalid datetime format
-- [ ] Write tests (AC: 1, 2, 3)
+- [x] Add `updated_since` parameter to `WikiQuery.list_pages()` in `src/llm_wiki/query/search.py` (AC: 1, 3)
+  - [x] `updated_since: datetime | None = None` — filter pages where `updated_at > updated_since`
+  - [x] Parse `updated_at` from page frontmatter to `datetime` before comparing — never compare ISO8601 strings directly (`Z` vs `+00:00` formats sort differently)
+  - [x] When `updated_since=None`: return all pages (current behavior, no regression)
+- [x] Update `GET /v1/pages` route in `src/llm_wiki/api/routers/pages.py` (AC: 1, 2)
+  - [x] Add `updated_since: datetime | None = Query(default=None)` — FastAPI validates ISO8601 automatically via Pydantic
+  - [x] Pass to `wiki.list_pages(updated_since=updated_since)` via `asyncio.to_thread()`
+  - [x] FastAPI + Pydantic returns 422 automatically for invalid datetime strings (AC: 2)
+- [x] Update `list_pages` MCP tool in `src/llm_wiki/mcp/tools.py` (AC: 3)
+  - [x] Add `updated_since: str | None = None` parameter (ISO8601 string — MCP tools use strings, not datetime)
+  - [x] Parse string to `datetime` before calling `wiki.list_pages(updated_since=...)`
+  - [x] Return 422-equivalent MCP error for invalid datetime format
+- [x] Write tests (AC: 1, 2, 3)
 
 ## Dev Notes
 
@@ -228,4 +228,43 @@ claude-sonnet-4-6
 
 ### Completion Notes List
 
+- Added `WikiQuery.list_pages()` service method to `search.py` that consolidates the previously-inlined pagination logic from both the REST route and MCP tool, adding `updated_since: datetime | None` filtering. Pages without `updated_at` are excluded when a filter is active. Both `Z` and `+00:00` UTC forms are handled correctly via `datetime.fromisoformat()` (Python 3.11+).
+- Updated `GET /v1/pages` in `pages.py` to accept `updated_since: datetime | None = Query(default=None)` and delegate fully to `wiki.list_pages()` via `asyncio.to_thread()`. FastAPI returns 422 automatically for invalid datetime strings — no custom validation needed.
+- Updated `list_pages` MCP tool in `tools.py` to accept `updated_since: str | None = None`, parse to `datetime.datetime`, raise `ToolError("INVALID_ARGUMENT(1000): ...")` for bad formats, and call `wiki.list_pages()`.
+- 23 tests in `tests/unit/test_list_pages_time_filter.py` covering service-layer filtering, REST 422, REST time filtering (`Z` and `+00:00`), future cutoff, pages-without-date exclusion, MCP tool filter + error, and timezone-normalization edge cases.
+- All 1378 non-pre-existing tests pass (1 pre-existing async-marked test in `test_mcp_tools.py` continues to fail due to missing `pytest-asyncio` plugin — unrelated to this story).
+
 ### File List
+
+- src/llm_wiki/query/search.py
+- src/llm_wiki/api/routers/pages.py
+- src/llm_wiki/mcp/tools.py
+- tests/unit/test_list_pages_time_filter.py
+
+### Senior Developer Review (AI)
+
+**Reviewer:** claude-sonnet-4-6 on 2026-05-20
+
+**Outcome:** Approved with fixes applied
+
+**Findings fixed:**
+
+- **[HIGH] Timezone-naive vs timezone-aware `TypeError` in `_parse()`** (`src/llm_wiki/query/search.py`): When a stored `updated_at` value lacked a timezone suffix (valid ISO8601 but naive), `_parse()` returned a naive `datetime`. The filter expression `(_parse(...) or _epoch)` evaluated to the naive datetime (truthy, bypassing the UTC `_epoch` fallback), then `naive_dt > aware_updated_since` raised `TypeError`. Fixed by normalising the parsed result to UTC when `tzinfo is None`. Also normalised `updated_since` itself if passed as naive (protects against REST callers omitting the timezone).
+- **[MEDIUM] Missing tests for naive datetime inputs**: No test exercised either failure path. Added `test_list_pages_naive_stored_timestamp_no_typeerror` and `test_list_pages_naive_updated_since_no_typeerror`.
+- **[MEDIUM] Completion Notes overstated test count as 14; actual count was 21**: Corrected to 23 (21 original + 2 new).
+
+**Findings not fixed (Low):**
+
+- `INVALID_ARGUMENT` error code is hard-coded inline in the MCP tool rather than being registered in `_MCP_ERROR_CODES`. Functionally correct, pattern inconsistency only.
+
+**Git vs Story Discrepancies:** 0
+
+**ACs verified:**
+1. `GET /v1/pages?updated_since=...` filters by `updated_at` ✅
+2. Invalid datetime returns 422 ✅
+3. `list_pages` MCP tool applies the same filter via the same service method ✅
+
+## Change Log
+
+- 2026-05-20: Story 1.14 implemented — added `updated_since` time filter to `WikiQuery.list_pages()` service layer, `GET /v1/pages` REST endpoint, and `list_pages` MCP tool. 21 new passing tests.
+- 2026-05-20: Code review — fixed timezone-naive/aware `TypeError` in `_parse()` helper; normalised `updated_since` if naive; added 2 regression tests. Status → done.

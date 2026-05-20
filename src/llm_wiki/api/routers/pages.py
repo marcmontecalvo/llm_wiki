@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 
@@ -87,63 +88,45 @@ async def read_page(
 async def list_pages(
     domain: str | None = Query(default=None, description="Filter by domain"),
     kind: str | None = Query(default=None, description="Filter by kind"),
+    updated_since: datetime | None = Query(
+        default=None,
+        description="Return only pages with updated_at after this ISO8601 timestamp",
+    ),
     cursor: str | None = Query(default=None, description="Pagination cursor"),
     limit: int = Query(default=50, ge=1, le=200, description="Page size"),
     wiki: WikiQuery = Depends(get_wiki),
 ) -> PageListResponse:
     """List pages with cursor-based pagination and optional filters.
 
-    Reads from the MetadataIndex (not the filesystem directly for
-    filtering since the search endpoint already applies metadata filters).
+    Reads from the MetadataIndex. The updated_since filter is applied in
+    the service layer (WikiQuery.list_pages) so REST and MCP share identical
+    semantics. FastAPI validates the datetime format and returns 422 automatically
+    for invalid strings.
     """
-    all_pages: list[dict] = []
+    page_items, next_cursor = await asyncio.to_thread(
+        wiki.list_pages,
+        domain=domain,
+        kind=kind,
+        updated_since=updated_since,
+        cursor=cursor,
+        limit=limit,
+    )
 
-    if domain or kind:
-        # Use metadata index which already has filtered structures
-        if domain:
-            page_ids = wiki.metadata_index.by_domain.get(domain, set())
-        else:
-            page_ids = set(wiki.metadata_index.pages.keys())
-
-        for pid in page_ids:
-            meta = wiki.metadata_index.get_page(pid)
-            if meta is None:
-                continue
-            if kind and meta.get("kind") != kind:
-                continue
-            all_pages.append(meta)
-    else:
-        # No filters — list all pages from metadata index
-        all_pages = list(wiki.metadata_index.pages.values())
-
-    # Apply cursor-based pagination
-    offset = 0
-    if cursor:
-        try:
-            offset = _decode_cursor(cursor)
-        except ValueError:
-            offset = 0
-
-    total = len(all_pages)
-    page_items = all_pages[offset : offset + limit]
-    next_cursor = _encode_cursor(offset + limit) if (offset + limit) < total else None
-
-    results = []
-    for meta in page_items:
-        results.append(
-            PageResponse(
-                page_id=meta.get("page_id", meta.get("id", "")),
-                title=meta.get("title", ""),
-                content="",
-                frontmatter=meta,
-                domain=meta.get("domain", "general"),
-                kind=meta.get("kind", "page"),
-                confidence=meta.get("confidence", 0.0),
-            )
+    results = [
+        PageResponse(
+            page_id=meta.get("page_id", meta.get("id", "")),
+            title=meta.get("title", ""),
+            content="",
+            frontmatter=meta,
+            domain=meta.get("domain", "general"),
+            kind=meta.get("kind", "page"),
+            confidence=meta.get("confidence", 0.0),
         )
+        for meta in page_items
+    ]
 
     return PageListResponse(
         pages=results,
         next_cursor=next_cursor,
-        total_hint=total,
+        total_hint=len(results),
     )

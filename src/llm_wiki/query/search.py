@@ -1,7 +1,9 @@
 """Unified search interface for wiki queries."""
 
+import base64
 import logging
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -212,6 +214,76 @@ class WikiQuery:
     def get_page(self, page_id: str) -> dict[str, Any] | None:
         """Get page metadata by ID."""
         return self.metadata_index.get_page(page_id)
+
+    def list_pages(
+        self,
+        domain: str | None = None,
+        kind: str | None = None,
+        updated_since: datetime | None = None,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """List pages with optional filtering and cursor-based pagination."""
+        all_pages: list[dict[str, Any]] = []
+
+        if domain or kind:
+            if domain:
+                page_ids: set[str] = self.metadata_index.by_domain.get(domain, set())
+            else:
+                page_ids = set(self.metadata_index.pages.keys())
+
+            for pid in page_ids:
+                meta = self.metadata_index.get_page(pid)
+                if meta is None:
+                    continue
+                if kind and meta.get("kind") != kind:
+                    continue
+                all_pages.append(meta)
+        else:
+            all_pages = list(self.metadata_index.pages.values())
+
+        if updated_since is not None:
+            # Normalise to UTC-aware so comparisons never raise TypeError between
+            # naive and aware datetimes (e.g. stored timestamps without Z suffix).
+            if updated_since.tzinfo is None:
+                updated_since = updated_since.replace(tzinfo=UTC)
+
+            def _parse(ts: str | None) -> datetime | None:
+                if not ts:
+                    return None
+                try:
+                    parsed = datetime.fromisoformat(ts)
+                    # Treat timezone-naive stored timestamps as UTC.
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=UTC)
+                    return parsed
+                except ValueError:
+                    return None
+
+            # Pages without updated_at are excluded from filtered results.
+            # Pages with an unparseable updated_at also fall back to datetime.min
+            # (UTC) which is always <= any realistic filter — effectively excluded.
+            _epoch = datetime.min.replace(tzinfo=UTC)
+            all_pages = [
+                p for p in all_pages if (_parse(p.get("updated_at")) or _epoch) > updated_since
+            ]
+
+        offset = 0
+        if cursor:
+            try:
+                offset = int(base64.b64decode(cursor).decode())
+            except Exception:
+                offset = 0
+
+        total = len(all_pages)
+        page_items = all_pages[offset : offset + limit]
+        next_cursor = (
+            base64.b64encode(str(offset + limit).encode()).decode()
+            if (offset + limit) < total
+            else None
+        )
+
+        return page_items, next_cursor
 
     def get_pages_with_content(
         self,

@@ -12,7 +12,6 @@ are included in the error message alongside the HTTP error-code string.
 from __future__ import annotations
 
 import asyncio
-import base64
 import datetime
 import logging
 import uuid
@@ -380,6 +379,7 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
     async def list_pages(
         domain: str | None = None,
         kind: str | None = None,
+        updated_since: str | None = None,
         cursor: str | None = None,
         limit: int = 50,
     ) -> dict:
@@ -388,62 +388,49 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
         Args:
             domain: Filter by domain.
             kind: Filter by page kind.
+            updated_since: ISO8601 datetime string — return only pages updated after this time.
             cursor: Pagination cursor (base64-encoded offset).
             limit: Page size (1-200).
         """
         try:
-            all_pages: list[dict] = []
-
-            if domain or kind:
-                if domain:
-                    page_ids = wiki.metadata_index.by_domain.get(domain, set())
-                else:
-                    page_ids = set(wiki.metadata_index.pages.keys())
-
-                for pid in page_ids:
-                    meta = wiki.metadata_index.get_page(pid)
-                    if meta is None:
-                        continue
-                    if kind and meta.get("kind") != kind:
-                        continue
-                    all_pages.append(meta)
-            else:
-                all_pages = list(wiki.metadata_index.pages.values())
-
-            offset = 0
-            if cursor:
+            parsed_since: datetime.datetime | None = None
+            if updated_since is not None:
                 try:
-                    offset = int(base64.b64decode(cursor).decode())
-                except Exception:
-                    offset = 0
+                    parsed_since = datetime.datetime.fromisoformat(updated_since)
+                except ValueError:
+                    raise ToolError(
+                        f"INVALID_ARGUMENT(1000): Invalid updated_since format: {updated_since!r}"
+                    )
 
-            total = len(all_pages)
-            page_items = all_pages[offset : offset + limit]
-            next_cursor = (
-                base64.b64encode(str(offset + limit).encode()).decode()
-                if (offset + limit) < total
-                else None
+            page_items, next_cursor = await asyncio.to_thread(
+                wiki.list_pages,
+                domain=domain,
+                kind=kind,
+                updated_since=parsed_since,
+                cursor=cursor,
+                limit=limit,
             )
 
-            results = []
-            for meta in page_items:
-                results.append(
-                    {
-                        "page_id": meta.get("page_id", meta.get("id", "")),
-                        "title": meta.get("title", ""),
-                        "content": "",
-                        "frontmatter": meta,
-                        "domain": meta.get("domain", "general"),
-                        "kind": meta.get("kind", "page"),
-                        "confidence": meta.get("confidence", 0.0),
-                    }
-                )
+            results = [
+                {
+                    "page_id": meta.get("page_id", meta.get("id", "")),
+                    "title": meta.get("title", ""),
+                    "content": "",
+                    "frontmatter": meta,
+                    "domain": meta.get("domain", "general"),
+                    "kind": meta.get("kind", "page"),
+                    "confidence": meta.get("confidence", 0.0),
+                }
+                for meta in page_items
+            ]
 
             return {
                 "pages": results,
                 "next_cursor": next_cursor,
-                "total_hint": total,
+                "total_hint": len(results),
             }
+        except ToolError:
+            raise
         except WikiError as e:
             raise _handle_wiki_error(e) from e
 

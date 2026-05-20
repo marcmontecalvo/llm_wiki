@@ -60,7 +60,7 @@ development_status:
   1-12-sqlite-query-log: done
   1-12.5-observability-pipeline: done
   1-13-claude-code-hooks: done  # atomic write fix + test_hooks_install.py; review: empty-hooks cleanup + stderr + test fix; last_updated: 2026-05-20
-  1-14-list-pages-time-filter: review  # updated_since filter in service+REST+MCP; last_updated: 2026-05-20
+  1-14-list-pages-time-filter: done  # updated_since filter in service+REST+MCP; tz-normalization fix in review; last_updated: 2026-05-20
   1-15-governance-cli-commands: ready-for-dev
   1-16-query-performance-baseline-tests: ready-for-dev
   1-17-container-cold-start-test: ready-for-dev
