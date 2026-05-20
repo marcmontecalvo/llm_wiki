@@ -52,11 +52,11 @@ development_status:
   1-5-feature-flag-system: done
   1-6-rest-health-daemon-and-ingest-endpoints: done
   1-7-rest-query-search-pages-and-export-endpoints: done
-  1-8-mcp-server-and-all-tools: review
-  1-9-multi-user-domain-scoping: review
+  1-8-mcp-server-and-all-tools: done
+  1-9-multi-user-domain-scoping: done
   1-10-auto-init-wiki-on-first-start: ready-for-dev
   1-11-openapi-spec-and-ci-contract-gate: ready-for-dev
-  1-12-sqlite-query-log: review
+  1-12-sqlite-query-log: done
   1-12.5-observability-pipeline: backlog
   1-13-claude-code-hooks: ready-for-dev  # capture_session.py + hooks install/uninstall in cli.py exist; verification tasks + integration tests remain
   1-14-list-pages-time-filter: ready-for-dev
