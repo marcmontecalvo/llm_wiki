@@ -57,23 +57,36 @@ def initialize() -> None:
 
     _resource = _make_resource()
 
-    # Tracing -- OTLP exporter with BatchSpanProcessor
+    # Configure global trace SDK — FastAPIInstrumentor and manual tracers
+    # look up the global TracerProvider by default.
+    from opentelemetry import trace as trace_api
+
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
         OTLPSpanExporter as GRPCTraceExporter,
     )
     proc = BatchSpanProcessor(GRPCTraceExporter())
     _trace_provider = TracerProvider(resource=_resource)
     _trace_provider.add_span_processor(proc)
+    trace_api.set_tracer_provider(_trace_provider)
 
-    # Metrics -- PeriodicExportingMetricReader with OTLP metric exporter
+    # Configure global metrics SDK — module-level
+    # metrics_api.get_meter() resolves via the global MeterProvider.
+    from opentelemetry import metrics as metrics_api
+
     from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
         OTLPMetricExporter as GRPCCMetricExporter,
     )
     reader = PeriodicExportingMetricReader(GRPCCMetricExporter())
     _meter_provider = MeterProvider(resource=_resource, metric_readers=[reader])
+    metrics_api.set_meter_provider(_meter_provider)
 
-    # Logging -- LoggerProvider with OTel LoggingHandler
+    # Configure global log SDK — LoggingHandler is already registered
+    # by setup_otel_logging(), but set the global provider so any SDK-
+    # internal log events propagate correctly.
+    from opentelemetry._logs import set_logger_provider as _set_log_provider
+
     _logger_provider = LoggerProvider(resource=_resource)
+    _set_log_provider(_logger_provider)
 
     logger.debug("OpenTelemetry SDK initialized (traces, metrics, logs)")
 

@@ -156,7 +156,9 @@ class WikiQuery:
             if allowed_domains is not None:
                 ft_results: list[dict[str, Any]] = []
                 vec_results: list[dict[str, Any]] = []
-                for d in allowed_domains:
+                # Sort domains for stable, deterministic concat order;
+                # set order is undefined and would bias RRF ranks.
+                for d in sorted(allowed_domains):
                     ft_results.extend(self.fulltext_index.search(query, domain=d, limit=limit))
                     vec_results.extend(self.vector_index.search(query, domain=d, limit=limit))
             else:
