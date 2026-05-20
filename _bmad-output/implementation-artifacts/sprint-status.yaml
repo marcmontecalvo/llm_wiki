@@ -56,10 +56,10 @@ development_status:
   1-8-mcp-server-and-all-tools: done
   1-9-multi-user-domain-scoping: done
   1-10-auto-init-wiki-on-first-start: done
-  1-11-openapi-spec-and-ci-contract-gate: review
+  1-11-openapi-spec-and-ci-contract-gate: done
   last_updated_1-11-openapi-spec-and-ci-contract-gate: "2026-05-20"
   1-12-sqlite-query-log: done
-  1-12.5-observability-pipeline: review
+  1-12.5-observability-pipeline: done
   last_updated_1-12.5-observability-pipeline: "2026-05-20"
   1-13-claude-code-hooks: ready-for-dev  # capture_session.py + hooks install/uninstall in cli.py exist; verification tasks + integration tests remain
   1-14-list-pages-time-filter: ready-for-dev
