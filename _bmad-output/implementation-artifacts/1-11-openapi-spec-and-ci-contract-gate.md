@@ -1,6 +1,6 @@
 # Story 1.11: OpenAPI Spec and CI Contract Gate
 
-Status: review
+Status: done
 
 ## Story
 

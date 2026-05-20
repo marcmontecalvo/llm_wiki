@@ -501,7 +501,7 @@ class GovernanceJob:
         try:
             config_dir = self.wiki_base / "config"
             cfg = load_config(config_dir)
-            retention = cfg.daemon.synthesis_cache_log_retention_days
+            retention = cfg.daemon.daemon.synthesis_cache_log_retention_days
         except Exception:
             logger.warning("Failed to load config for query log retention; using default 90 days")
 

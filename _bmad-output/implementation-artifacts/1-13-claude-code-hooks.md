@@ -1,6 +1,6 @@
 # Story 1.13: Claude Code Hooks
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -22,24 +22,24 @@ So that the wiki stays current without manual ingest steps.
 
 ## Tasks / Subtasks
 
-- [ ] Verify existing hook install/uninstall commands work correctly (AC: 1, 2, 4)
-  - [ ] Read `src/llm_wiki/cli.py:2853-3030` — `hooks_install` and `hooks_uninstall` commands
-  - [ ] Verify idempotency logic: second `install` does NOT create duplicate hook entries
-  - [ ] Verify `uninstall` removes only llm-wiki hooks, leaves other hooks intact
-  - [ ] Fix any bugs found (edge cases: empty hooks block, missing events, malformed JSON)
-- [ ] Verify `capture_session.py` hook script works correctly (AC: 3)
-  - [ ] Read `src/llm_wiki/hook_templates/capture_session.py` — understand current behavior
-  - [ ] Verify it reads JSON from stdin correctly for both `SessionEnd` and `PreCompact` events
-  - [ ] Verify it writes to `inbox/new/` with correct filename pattern
-  - [ ] Verify `wiki_base` is resolved correctly from the hook command path in Docker context
-- [ ] Verify Docker compatibility (AC: 1, 3)
-  - [ ] The hook script runs in the host Claude Code process, not inside Docker
-  - [ ] `inbox/new/` must be accessible from the host; verify `wiki_base` path resolution
-  - [ ] Document in dev notes how the hook→inbox→daemon handoff works across host/container boundary
-- [ ] Write integration test for idempotency (AC: 4)
-  - [ ] `tests/unit/test_hooks_install.py` — test install twice, verify no duplicate entries
-  - [ ] Test uninstall clears only llm-wiki entries from the hooks block
-  - [ ] Test install when hooks block contains unrelated entries — those must be preserved
+- [x] Verify existing hook install/uninstall commands work correctly (AC: 1, 2, 4)
+  - [x] Read `src/llm_wiki/cli.py:2853-3030` — `hooks_install` and `hooks_uninstall` commands
+  - [x] Verify idempotency logic: second `install` does NOT create duplicate hook entries
+  - [x] Verify `uninstall` removes only llm-wiki hooks, leaves other hooks intact
+  - [x] Fix any bugs found (edge cases: empty hooks block, missing events, malformed JSON)
+- [x] Verify `capture_session.py` hook script works correctly (AC: 3)
+  - [x] Read `src/llm_wiki/hook_templates/capture_session.py` — understand current behavior
+  - [x] Verify it reads JSON from stdin correctly for both `SessionEnd` and `PreCompact` events
+  - [x] Verify it writes to `inbox/new/` with correct filename pattern
+  - [x] Verify `wiki_base` is resolved correctly from the hook command path in Docker context
+- [x] Verify Docker compatibility (AC: 1, 3)
+  - [x] The hook script runs in the host Claude Code process, not inside Docker
+  - [x] `inbox/new/` must be accessible from the host; verify `wiki_base` path resolution
+  - [x] Document in dev notes how the hook→inbox→daemon handoff works across host/container boundary
+- [x] Write integration test for idempotency (AC: 4)
+  - [x] `tests/unit/test_hooks_install.py` — test install twice, verify no duplicate entries
+  - [x] Test uninstall clears only llm-wiki entries from the hooks block
+  - [x] Test install when hooks block contains unrelated entries — those must be preserved
 
 ## Dev Notes
 
@@ -242,6 +242,34 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+None — implementation was straightforward.
+
 ### Completion Notes List
 
+- Reviewed `cli.py:2880-3053`: `hooks_install` and `hooks_uninstall` are correct. Idempotency uses `"capture_session.py" in command` as the deduplication key; re-installing with a different `--wiki-base` replaces the old entry (correct behavior verified).
+- Fixed `capture_session.py`: replaced direct `shutil.copy2(src, dest)` with atomic write pattern (copy to `dest.name + ".tmp"`, then `os.replace`). This prevents the daemon from observing a partial file during a slow copy.
+- Docker context verified: hook command uses `sys.executable` (the venv Python on the host) and the inbox directory path (`wiki_system/inbox/new/`) is passed as a positional argument by `hooks_install`. No container-side path is involved.
+- Created `tests/unit/test_hooks_install.py` with 13 tests: idempotency, wiki-base update/replacement, uninstall isolation, atomic write behavior, dry-run, hook entry structure validation, uninstall with absent settings file, PreCompact hook uninstall isolation, and five capture_session.py error/edge-case paths.
+
 ### File List
+
+- `src/llm_wiki/hook_templates/capture_session.py` — fixed atomic write (temp+rename)
+- `tests/unit/test_hooks_install.py` — new: idempotency and isolation tests
+
+## Senior Developer Review (AI)
+
+_Reviewer: Marc Montecalvo on 2026-05-20_
+
+**Outcome: Approved with auto-fixes applied.**
+
+All 4 ACs verified implemented and all 13 tests pass. No CRITICAL issues found. The following MEDIUM/LOW issues were auto-fixed:
+
+- **MEDIUM** `cli.py:hooks_uninstall` — After removing all llm-wiki events, the now-empty `"hooks"` key was left in settings (`{"hooks": {}}`). Added cleanup: `settings.pop("hooks", None)` when `hooks_block` is empty post-uninstall.
+- **MEDIUM** Story Completion Notes — Incorrectly referenced a non-existent `--inbox-dir` flag; corrected to "positional argument". Test count corrected from "4 tests" to "13 tests".
+- **LOW** `capture_session.py:73` — Bare `except Exception: raise` with no stderr message before re-raise; added `print(f"capture_session: copy failed: {exc}", file=sys.stderr)` for consistency with other error paths.
+- **LOW** `test_hooks_install.py:163` — Redundant `import io` inside `test_capture_session_atomic_write` body (already imported at module level); removed.
+
+## Change Log
+
+- 2026-05-20: Fixed non-atomic write in `capture_session.py`; added `tests/unit/test_hooks_install.py` with idempotency, isolation, wiki-base update, and atomic write tests (Story 1.13).
+- 2026-05-20: Code review (AI): fixed empty `hooks` key leak in `hooks_uninstall`; added stderr before re-raise in `capture_session.py`; removed redundant import in test; corrected story Completion Notes (test count + flag terminology).

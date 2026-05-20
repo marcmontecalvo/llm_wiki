@@ -3049,6 +3049,9 @@ def hooks_uninstall(scope: str):
         else:
             hooks_block.pop(event, None)
 
+    if not hooks_block:
+        settings.pop("hooks", None)
+
     settings_path.write_text(_json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     click.echo(f"✓ Removed {removed} llm-wiki hook entries from {settings_path}")
 

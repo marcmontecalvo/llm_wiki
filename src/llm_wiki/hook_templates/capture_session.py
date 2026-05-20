@@ -18,6 +18,7 @@ We never touch the original transcript; we only copy it.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 from datetime import UTC, datetime
@@ -63,7 +64,19 @@ def main() -> int:
     # Filename matches ClaudeSessionAdapter.SESSION_PREFIX
     dest = inbox_dir / f"session-{ts}-{session_id}-{hook_name}{suffix}"
 
-    shutil.copy2(transcript_path, dest)
+    # Atomic write: copy to a sibling temp file then rename so the daemon
+    # never observes a partial file during a long copy.
+    tmp = dest.with_name(dest.name + ".tmp")
+    try:
+        shutil.copy2(transcript_path, tmp)
+        os.replace(str(tmp), str(dest))
+    except Exception as exc:
+        print(f"capture_session: copy failed: {exc}", file=sys.stderr)
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
     return 0
 
 
