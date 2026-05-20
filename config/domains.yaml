@@ -4,23 +4,29 @@ domains:
     description: MSP, operations, sales, security, client delivery
     owners: [user]
     promote_to_shared: true
+    scope: shared
   - id: home-assistant
     title: Home Assistant
     description: automation, voice assistant, ESP32, local AI, sensors
     owners: [user]
     promote_to_shared: true
+    scope: shared
   - id: homelab
     title: Homelab
     description: proxmox, k3s, storage, networking, GPUs, services
     owners: [user]
     promote_to_shared: true
+    scope: shared
   - id: personal
     title: Personal
     description: family logistics, hobbies, plans, notes
     owners: [user]
     promote_to_shared: false
+    scope: personal
+    owner: marc
   - id: general
     title: General
     description: fallback bucket for unclassified or low-confidence content
     owners: [system]
     promote_to_shared: false
+    scope: shared

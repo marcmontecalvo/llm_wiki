@@ -144,7 +144,7 @@ def boot_wiki(
         logger.warning("Config load failed (non-fatal for MCP bootstrap)")
 
     # Build indexes
-    wiki = WikiQuery(wiki_base=wiki_root, index_dir=wiki_root / "index")
+    wiki = WikiQuery(wiki_base=wiki_root, index_dir=wiki_root / "index", wiki_config=wiki_config)
 
     # UserJobStore — shared factory
     user_job_store = get_user_job_store(wiki_root)

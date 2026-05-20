@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class DomainConfig(BaseModel):
@@ -17,6 +17,27 @@ class DomainConfig(BaseModel):
     promote_to_shared: bool = Field(
         default=True, description="Allow promoting content to shared space"
     )
+    scope: Literal["shared", "personal"] = Field(
+        default="shared", description="Domain scope: shared (all users) or personal (single user)"
+    )
+    owner: str | None = Field(
+        default=None, description="Profile ID of the owner (required when scope is 'personal')"
+    )
+
+    @field_validator("owner", mode="before")
+    @classmethod
+    def coerce_owner(cls, v):  # type: ignore[no-untyped-def]
+        """Coerce empty string owner to None."""
+        if isinstance(v, str) and v == "":
+            return None
+        return v
+
+    @model_validator(mode="after")
+    def validate_personl_owner(self) -> "DomainConfig":  # type: ignore[no-untyped-def]
+        """If scope is 'personal', owner must be set."""
+        if self.scope == "personal" and not self.owner:
+            raise ValueError("owner is required when scope is 'personal'")
+        return self
 
     @field_validator("id")
     @classmethod

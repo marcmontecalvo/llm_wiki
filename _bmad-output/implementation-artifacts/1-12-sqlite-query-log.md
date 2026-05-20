@@ -1,6 +1,6 @@
 # Story 1.12: SQLite Query Log
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 

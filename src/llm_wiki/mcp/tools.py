@@ -327,6 +327,7 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
         q: str,
         domain: str | None = None,
         limit: int = 10,
+        profile_id: str | None = None,
     ) -> dict:
         """Search the wiki with merged full-text + vector results.
 
@@ -334,9 +335,12 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
             q: Search query text.
             domain: Optional domain filter.
             limit: Max results (1-100).
+            profile_id: Optional profile ID for multi-user domain scoping.
         """
         try:
-            pages = await asyncio.to_thread(wiki.search, q, domain=domain, limit=limit)
+            pages = await asyncio.to_thread(
+                wiki.search, q, domain=domain, limit=limit, scope_to_profile=profile_id
+            )
             results = [_page_to_search_result(p) for p in pages]
             return {"results": results}
         except WikiError as e:

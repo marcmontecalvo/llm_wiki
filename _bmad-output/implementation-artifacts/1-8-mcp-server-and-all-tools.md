@@ -1,6 +1,6 @@
 # Story 1.8: MCP Server and All Tools
 
-Status: review
+Status: done
 
 ## Story
 
