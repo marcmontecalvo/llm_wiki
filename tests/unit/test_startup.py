@@ -12,7 +12,7 @@ class TestCheckIndexIntegrity:
         """No corruption when all index files exist and are non-empty."""
         index_dir = wiki_root / "index"
         index_dir.mkdir(exist_ok=True)
-        for name in ["fulltext.json", "metadata.json", "backlinks.json", "graph_edges.json"]:
+        for name in ["fulltext.json", "metadata.json", "backlinks.json", "edges.json"]:
             (index_dir / name).write_text("{}", encoding="utf-8")
         result = check_index_integrity(wiki_root, check_vector=False)
         assert result == []
@@ -21,7 +21,7 @@ class TestCheckIndexIntegrity:
         """Missing required index file is reported."""
         index_dir = wiki_root / "index"
         index_dir.mkdir(exist_ok=True)
-        for name in ["metadata.json", "backlinks.json", "graph_edges.json"]:
+        for name in ["metadata.json", "backlinks.json", "edges.json"]:
             (index_dir / name).write_text("{}", encoding="utf-8")
         result = check_index_integrity(wiki_root, check_vector=False)
         assert "index/fulltext.json" in result
@@ -30,7 +30,7 @@ class TestCheckIndexIntegrity:
         """Zero-byte index file is reported as corrupt."""
         index_dir = wiki_root / "index"
         index_dir.mkdir(exist_ok=True)
-        for name in ["fulltext.json", "metadata.json", "backlinks.json", "graph_edges.json"]:
+        for name in ["fulltext.json", "metadata.json", "backlinks.json", "edges.json"]:
             (index_dir / name).write_text("" if name == "fulltext.json" else "{}", encoding="utf-8")
         result = check_index_integrity(wiki_root, check_vector=False)
         assert "index/fulltext.json" in result
@@ -39,7 +39,7 @@ class TestCheckIndexIntegrity:
         """Vector index files are reported missing when check_vector=True."""
         index_dir = wiki_root / "index"
         index_dir.mkdir(exist_ok=True)
-        for name in ["fulltext.json", "metadata.json", "backlinks.json", "graph_edges.json"]:
+        for name in ["fulltext.json", "metadata.json", "backlinks.json", "edges.json"]:
             (index_dir / name).write_text("{}", encoding="utf-8")
         result = check_index_integrity(wiki_root, check_vector=True)
         assert "index/vector_index.faiss" in result
@@ -49,7 +49,7 @@ class TestCheckIndexIntegrity:
         """Vector index files are skipped when check_vector=False."""
         index_dir = wiki_root / "index"
         index_dir.mkdir(exist_ok=True)
-        for name in ["fulltext.json", "metadata.json", "backlinks.json", "graph_edges.json"]:
+        for name in ["fulltext.json", "metadata.json", "backlinks.json", "edges.json"]:
             (index_dir / name).write_text("{}", encoding="utf-8")
         result = check_index_integrity(wiki_root, check_vector=False)
         assert all("vector" not in item for item in result)

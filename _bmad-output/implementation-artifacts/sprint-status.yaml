@@ -37,6 +37,7 @@
 generated: "2026-05-17"
 last_updated: "2026-05-19T00:00:00"
 last_updated_1-9-multi-user-domain-scoping: "2026-05-19"
+last_updated_1-10-auto-init-wiki-on-first-start: "2026-05-19"
 project: llm_wiki
 project_key: NOKEY
 tracking_system: file-system
@@ -54,7 +55,7 @@ development_status:
   1-7-rest-query-search-pages-and-export-endpoints: done
   1-8-mcp-server-and-all-tools: done
   1-9-multi-user-domain-scoping: done
-  1-10-auto-init-wiki-on-first-start: ready-for-dev
+  1-10-auto-init-wiki-on-first-start: review
   1-11-openapi-spec-and-ci-contract-gate: ready-for-dev
   1-12-sqlite-query-log: done
   1-12.5-observability-pipeline: backlog

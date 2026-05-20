@@ -10,7 +10,7 @@ _REQUIRED_INDEX_FILES = [
     "index/fulltext.json",
     "index/metadata.json",
     "index/backlinks.json",
-    "index/graph_edges.json",
+    "index/edges.json",
 ]
 # Vector index files — only checked when vector_search is enabled
 _VECTOR_INDEX_FILES = [
