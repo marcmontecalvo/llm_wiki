@@ -146,9 +146,9 @@ class WikiQuery:
         elif resolved == []:
             # Explicitly unauthorized — empty list means zero access
             allowed_domains = set()
-            _unauthorized = True
         else:
-            _unauthorized = False
+            # None — no domain filtering
+            allowed_domains = None
 
         if query:
             # Push domain filter into index search to avoid in-scope hits being
@@ -184,8 +184,6 @@ class WikiQuery:
 
             # Scope filtering: page must be in a domain the caller is allowed to see
             if allowed_domains is not None:
-                # Empty set with _unauthorized = unauthorized request (zero access)
-                # Empty set without _unauthorized = config-driven empty domain list
                 if page_domain not in allowed_domains:
                     continue
             if kind and metadata.get("kind") != kind:

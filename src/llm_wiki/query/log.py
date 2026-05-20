@@ -90,6 +90,14 @@ class QueryLogStore:
                 )
         except Exception as e:
             logger.error("Failed to log query: %s", e)
+            try:
+                from llm_wiki.observability.metrics import (
+                    query_log_write_failures_counter,
+                )
+
+                query_log_write_failures_counter.add(1)
+            except Exception:
+                pass  # Never let metrics failures propagate
 
     def stats(self) -> dict:
         """Return row count, oldest entry, top 10 repeated queries."""

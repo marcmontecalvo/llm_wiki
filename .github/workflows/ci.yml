@@ -55,6 +55,12 @@ jobs:
       run: |
         uv run pytest --cov=src/llm_wiki --cov-report=xml --cov-report=term
 
+    - name: Check OpenAPI spec
+      # Validates that docs/openapi.json matches the current app routes.
+      # Fails CI if exported spec has drifted from the committed version.
+      #CreatedBy: Story 1.11 (OpenAPI spec and CI contract gate)
+      run: uv run python scripts/export_openapi.py --check
+
     - name: Upload coverage
       # Codecov: Tracks coverage trends over time
       # fail_ci_if_error: false prevents flaky coverage from blocking PRs

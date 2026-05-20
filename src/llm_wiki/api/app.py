@@ -68,6 +68,13 @@ async def lifespan(app: FastAPI):
         logger.error("Query log init failed (api logging degraded): %s", e)
         app.state.query_log = None  # type: ignore[assignment]
         app.state.query_log_error = True  # type: ignore[assignment]
+        # Wire init failure signal into OTel metrics (Story 1.12.5)
+        try:
+            from llm_wiki.observability.metrics import set_init_failed
+
+            set_init_failed(str(e))
+        except Exception:
+            pass
 
     # Create MCP server, mount it, and start the session manager
     mcp_mgr: StreamableHTTPSessionManager | None = None
@@ -106,6 +113,11 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("LLM Wiki service shutting down")
 
+    # Shutdown OTel SDK (flush pending spans/metrics/logs)
+    from llm_wiki.observability import sdk as _sdk
+
+    _sdk.shutdown()
+
 
 def create_app() -> FastAPI:
     """Factory function to create the FastAPI application.
@@ -119,7 +131,24 @@ def create_app() -> FastAPI:
         title="LLM Wiki",
         version=__version__,
         lifespan=lifespan,
+        openapi_url="/v1/openapi.json",
+        openapi_version="3.1.0",
     )
+
+    # OTel SDK init (Story 1.12.5)
+    from llm_wiki.observability import sdk
+
+    sdk.initialize()
+
+    # FastAPI auto-instrumentation — instruments every HTTP request with a span
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+    FastAPIInstrumentor.instrument_app(app)
+
+    # Register OTel logging handler (injects trace_id/span_id into log records)
+    from llm_wiki.observability import logging as otel_logging
+
+    otel_logging.setup_otel_logging()
 
     # Register exception handlers before adding other middleware
     register_exception_handlers(app)
