@@ -37,7 +37,25 @@ def _generate_pages(wiki_system: Path, count: int = 100) -> None:
 
 
 @pytest.fixture(scope="session")
-def seeded_wiki_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def _disable_vector_search_for_performance_tests() -> Generator[None, None, None]:
+    """Keep latency tests independent of external model downloads.
+
+    Query endpoints still exercise the real FastAPI, WikiQuery, metadata, and
+    fulltext paths. Vector search is deliberately disabled here because loading
+    all-MiniLM-L6-v2 can require network/cache state and would make the
+    performance gate non-deterministic.
+    """
+    patch = pytest.MonkeyPatch()
+    patch.setattr("llm_wiki.index.vector.VectorIndex._ensure_model", lambda self: False)
+    yield
+    patch.undo()
+
+
+@pytest.fixture(scope="session")
+def seeded_wiki_path(
+    tmp_path_factory: pytest.TempPathFactory,
+    _disable_vector_search_for_performance_tests: None,
+) -> Path:
     """Create, seed, and index a 100-page wiki once per session.
 
     scope="session" is critical — rebuilding 100 pages per test blows every
@@ -59,7 +77,7 @@ def _wiki_env(seeded_wiki_path: Path) -> Generator[None, None, None]:
     prev_root = os.environ.get("WIKI_ROOT")
     prev_cfg = os.environ.get("WIKI_CONFIG_DIR")
     os.environ["WIKI_ROOT"] = str(seeded_wiki_path)
-    os.environ.pop("WIKI_CONFIG_DIR", None)  # no config → llm_extraction defaults to False
+    os.environ["WIKI_CONFIG_DIR"] = str(seeded_wiki_path / "missing_config")
     yield
     if prev_root is None:
         os.environ.pop("WIKI_ROOT", None)
@@ -80,15 +98,15 @@ def seeded_wiki_client(
     scope="session" keeps the lifespan (and its loaded indexes) alive for the
     entire test run — avoids paying startup cost on every test.
 
-    A warm-up request is issued before yielding so that sentence-transformer
-    model weights are loaded before any latency assertions are made.
+    A warm-up request is issued before yielding so startup/runtime caches are
+    populated before any latency assertions are made.
     """
     from llm_wiki.api.app import create_app
 
     app = create_app()
     with TestClient(app) as client:
-        # Warm up: preload sentence-transformer model weights and caches so the
-        # first timed query doesn't include model-load overhead.
+        # Warm up runtime caches so the first timed query doesn't include
+        # one-time setup overhead.
         client.post("/v1/query", json={"query": "warmup", "depth": "quick"})
         yield client
 

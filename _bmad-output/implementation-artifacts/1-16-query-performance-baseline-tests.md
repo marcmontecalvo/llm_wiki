@@ -1,6 +1,6 @@
 # Story 1.16: Query Performance Baseline Tests
 
-Status: review
+Status: done
 
 ## Story
 
@@ -267,18 +267,20 @@ claude-sonnet-4-6
 ### Debug Log References
 
 - Sentence-transformer warm-up fix: first query without warm-up took 1384ms (budget 200ms); added warm-up POST in `seeded_wiki_client` fixture before `yield`.
+- Senior review fix: performance tests were still loading the sentence-transformer vector model during index rebuild/query, making the gate dependent on Hugging Face network/cache state. Disabled vector model loading inside `tests/performance` fixtures so the latency baseline exercises FastAPI, WikiQuery, metadata, and fulltext deterministically.
+- Senior review fix: `_wiki_env` previously unset `WIKI_CONFIG_DIR`, which falls back to the repo `config/` directory when present. It now points at a missing temp config directory so `llm_extraction` stays disabled for the seeded test wiki regardless of repo-local config.
 - ASGI lifespan bypass: `httpx.AsyncClient + ASGITransport` does NOT trigger FastAPI/Starlette lifespan; `app.state.wiki` was never set. Fixed by calling `boot_wiki()` directly and manually assigning all required state attributes in `seeded_wiki_app` fixture.
 - `pytest-asyncio` not installed; `anyio.pytest_plugin` provides `@pytest.mark.anyio` directly via `anyio[trio]` in the dependency chain.
 
 ### Completion Notes List
 
-- `tests/performance/conftest.py`: three session-scoped fixtures — `seeded_wiki_path` (builds 100-page wiki + runs IndexRebuildJob), `seeded_wiki_client` (TestClient with warm-up for quick/standard), `seeded_wiki_app` (manually wired app.state via `boot_wiki()` for async deep test).
+- `tests/performance/conftest.py`: session-scoped fixtures build a 100-page wiki, disable vector model loading for deterministic CI latency, run IndexRebuildJob, isolate `WIKI_ROOT`/`WIKI_CONFIG_DIR`, provide TestClient with warm-up for quick/standard, and manually wire app.state via `boot_wiki()` for the async deep test.
 - `tests/performance/test_query_latency.py`: all 3 NFR tests passing — quick ≤200ms, standard ≤2s, deep ≤30s. Deep test uses `@pytest.mark.anyio` + `httpx.AsyncClient + ASGITransport` to share the event loop with background tasks.
 - `pyproject.toml`: `performance` and `integration` markers registered; `addopts` excludes both from default run.
 - `.github/workflows/ci.yml`: `Run performance tests` step added (`uv run pytest -m performance`).
 - `README.md`: performance test section added with run instructions.
-- All 3 tests pass: `uv run pytest -m performance` → `3 passed in ~25s`.
-- Default run confirms exclusion: `uv run pytest` → `no tests collected (3 deselected)`.
+- All 3 tests pass: `UV_CACHE_DIR=/private/tmp/uv-cache uv run pytest -m performance` → `3 passed, 1429 deselected in 16.44s`.
+- Default marker behavior confirms exclusion for the performance folder: `UV_CACHE_DIR=/private/tmp/uv-cache uv run pytest tests/performance` → `3 deselected / 0 selected` (pytest exits 5 when all selected-path tests are deselected).
 
 ### File List
 
@@ -288,3 +290,27 @@ claude-sonnet-4-6
 - `pyproject.toml` — updated, `performance` marker registered and excluded from default run
 - `.github/workflows/ci.yml` — updated, `Run performance tests` step added
 - `README.md` — updated, performance test documentation added
+- `src/llm_wiki/api/routers/query.py` — updated, deep query poll response now reports `done`/`timed_out` status for completed jobs
+- `tests/unit/test_mcp_tools.py` — updated, async MCP tests use `anyio` and mock wiki defaults align with current `list_pages` behavior
+
+### Senior Developer Review (AI)
+
+Reviewer: Marc on 2026-05-21
+
+#### Findings
+
+- [x] **High** — `tests/performance/conftest.py` allowed `IndexRebuildJob` and query execution to load `all-MiniLM-L6-v2`, so `uv run pytest -m performance` failed when Hugging Face/network cache was unavailable. Fixed by disabling vector model loading only inside performance fixtures; fulltext and metadata indexing remain real.
+- [x] **Medium** — `tests/performance/conftest.py` unset `WIKI_CONFIG_DIR`, which falls back to repo `config/` and does not guarantee `llm_extraction: false` for the seeded wiki. Fixed by pointing `WIKI_CONFIG_DIR` at a missing temp config directory.
+- [x] **Medium** — Story File List omitted two files changed in the story commit: `src/llm_wiki/api/routers/query.py` and `tests/unit/test_mcp_tools.py`. Fixed by updating the File List.
+- [x] **Low** — Completion notes claimed `uv run pytest` produced `no tests collected (3 deselected)`, but the repo has 1429 non-performance tests. Fixed the note to document the actual performance-folder deselection check.
+
+#### Validation
+
+- `UV_CACHE_DIR=/private/tmp/uv-cache uv run pytest -m performance` → `3 passed, 1429 deselected in 16.44s`
+- `UV_CACHE_DIR=/private/tmp/uv-cache uv run pytest tests/performance` → `3 deselected / 0 selected` (expected pytest exit 5 for all tests deselected)
+- `UV_CACHE_DIR=/private/tmp/uv-cache uv run ruff check tests/performance/conftest.py tests/performance/test_query_latency.py` → passed
+- `UV_CACHE_DIR=/private/tmp/uv-cache uv run ruff format --check tests/performance/conftest.py tests/performance/test_query_latency.py` → passed
+
+## Change Log
+
+- 2026-05-21 — Senior review auto-fix: made performance tests deterministic without external vector model downloads, hardened test config isolation, updated File List, and marked story done.

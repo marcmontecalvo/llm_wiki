@@ -1,6 +1,6 @@
 # Story 1.17: Container Cold Start Test
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -20,23 +20,23 @@ So that Docker or supervisord configuration regressions are caught before releas
 
 ## Tasks / Subtasks
 
-- [ ] Create `tests/integration/test_cold_start.py` (AC: 1, 2, 3)
-  - [ ] `@pytest.mark.integration` on all tests
-  - [ ] Skip fixture: detect Docker availability via `docker info`; skip if unavailable
-  - [ ] Start container: `docker-compose up --build -d` against fresh empty temp volume
-  - [ ] Poll `GET /v1/health` with 1s interval, timeout at 30s
-  - [ ] Assert HTTP 200 received within budget
-  - [ ] Assert response body contains required fields (AC: 3)
-  - [ ] Teardown: `docker-compose down -v` — remove container and volume
-- [ ] Verify `GET /v1/health` response schema includes all required fields (AC: 3)
-  - [ ] `daemon_running: bool`
-  - [ ] `index_loaded: bool`
-  - [ ] `llm_extraction_enabled: bool`
-  - [ ] `vector_search_enabled: bool`
-  - [ ] If any field is missing, update Story 1.6's health endpoint implementation
-- [ ] Register `integration` mark in `pyproject.toml` (AC: 2)
-  - [ ] Already added in Story 1.16 if done first; verify `integration` mark is registered
-  - [ ] Ensure `addopts = "-m 'not performance and not integration'"` excludes integration tests by default
+- [x] Create `tests/integration/test_cold_start.py` (AC: 1, 2, 3)
+  - [x] `@pytest.mark.integration` on all tests
+  - [x] Skip fixture: detect Docker availability via `docker info`; skip if unavailable
+  - [x] Start container: `docker-compose up --build -d` against fresh empty temp volume
+  - [x] Poll `GET /v1/health` with 1s interval, timeout at 30s
+  - [x] Assert HTTP 200 received within budget
+  - [x] Assert response body contains required fields (AC: 3)
+  - [x] Teardown: `docker-compose down -v` — remove container and volume
+- [x] Verify `GET /v1/health` response schema includes all required fields (AC: 3)
+  - [x] `daemon_running: bool`
+  - [x] `index_loaded: bool`
+  - [x] `llm_extraction_enabled: bool`
+  - [x] `vector_search_enabled: bool` — absent per AC:3; assertion `not in data` confirms this
+  - [x] If any field is missing, update Story 1.6's health endpoint implementation — not needed, all fields present
+- [x] Register `integration` mark in `pyproject.toml` (AC: 2)
+  - [x] Already added in Story 1.16 if done first; verify `integration` mark is registered — confirmed present
+  - [x] Ensure `addopts = "-m 'not performance and not integration'"` excludes integration tests by default — confirmed present
 
 ## Dev Notes
 
@@ -243,6 +243,47 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+None.
+
 ### Completion Notes List
 
+- Created `tests/integration/test_cold_start.py` with `@pytest.mark.integration`, Docker skip guard, `docker-compose up --build -d` cold start, 1s-poll / 30s-timeout health check, AC:3 field assertions, and `docker-compose down -v` teardown in `finally`.
+- Updated `docker-compose.yml` to use `${WIKI_VOLUME:-./wiki_data}:/wiki` so tests can inject a fresh temp volume without affecting production defaults.
+- Added "Run integration tests" step to `.github/workflows/ci.yml` (main-push only, `uv run pytest -m integration --timeout=120`). "Run performance tests" step already existed from Story 1.16.
+- Review fix: cold-start test now uses a unique `COMPOSE_PROJECT_NAME`, a free host/container `WIKI_PORT`, and monotonic timing so it does not collide with or tear down a developer's normal compose stack.
+- Review fix: `docker-compose.yml` now applies `${WIKI_PORT:-3050}` consistently to the host mapping, container port, and service environment.
+- Review fix: CI integration-test timeout now uses a Python subprocess timeout instead of the unavailable `pytest --timeout` option.
+- `pyproject.toml`: `integration` mark and `addopts` exclusion were already in place from Story 1.16 — no changes needed.
+- `HealthResponse` model already had all three required fields (`daemon_running`, `index_loaded`, `llm_extraction_enabled`); no `vector_search_enabled` — correct per AC:3.
+- Full test suite: 1428 passed, 0 failed (excluding cold start which requires Docker).
+
 ### File List
+
+- tests/integration/test_cold_start.py (NEW)
+- docker-compose.yml (MODIFIED — WIKI_VOLUME env var and consistent WIKI_PORT override)
+- .github/workflows/ci.yml (MODIFIED — integration test CI step with portable 120s timeout)
+
+### Senior Developer Review (AI)
+
+Reviewer: Codex on 2026-05-21
+
+Outcome: Approved after automatic fixes.
+
+Findings fixed:
+
+- HIGH: `.github/workflows/ci.yml` used `pytest --timeout=120`, but `pytest-timeout` is not declared and local collection rejected the option. Replaced it with a Python subprocess timeout around `python -m pytest -m integration`.
+- HIGH: `docker-compose.yml` mapped `3050:${WIKI_PORT:-3050}` while setting container `WIKI_PORT` to `"3050"`, so any `WIKI_PORT` override broke the health endpoint mapping. Updated the mapping and service environment to use `${WIKI_PORT:-3050}` consistently.
+- MEDIUM: `tests/integration/test_cold_start.py` used the default compose project and port, so a review run could collide with or tear down a developer's normal `llm-wiki` compose stack. The test now sets a unique `COMPOSE_PROJECT_NAME` and allocates a free port.
+- LOW: The health polling budget used wall-clock time. Switched to `time.monotonic()` for timeout accounting.
+
+Validation:
+
+- `UV_CACHE_DIR=.uv-cache uv run pytest tests/integration/test_cold_start.py -m integration -q` -> skipped because Docker is unavailable in this environment.
+- `UV_CACHE_DIR=.uv-cache uv run ruff check tests/integration/test_cold_start.py` -> passed.
+- `UV_CACHE_DIR=.uv-cache uv run python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml')); yaml.safe_load(open('docker-compose.yml')); print('yaml ok')"` -> passed.
+- Portable CI timeout snippet verified locally against `tests/integration/test_cold_start.py`.
+
+## Change Log
+
+- 2026-05-21: Implemented Story 1.17 — Docker cold start integration test, WIKI_VOLUME env override in docker-compose.yml, CI integration step (claude-sonnet-4-6)
+- 2026-05-21: Review fixes applied — isolated compose project/port in cold-start test, consistent WIKI_PORT compose mapping, portable CI timeout wrapper; story marked done (Codex)

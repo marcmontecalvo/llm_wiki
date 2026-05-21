@@ -59,7 +59,22 @@ jobs:
       # Integration tests start a real Docker container to verify NFR-O1 (cold start < 30s).
       # Only runs on main pushes; PRs skip to avoid slow Docker builds on every commit.
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      run: uv run pytest -m integration --timeout=120
+      run: |
+        uv run python - <<'PY'
+        import subprocess
+        import sys
+
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pytest", "-m", "integration"],
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired:
+            print("integration tests exceeded 120 seconds", file=sys.stderr)
+            raise SystemExit(124)
+
+        raise SystemExit(result.returncode)
+        PY
 
     - name: Run performance tests
       # Story 1.16: Query latency baselines — NFR-P1 (≤200ms quick), NFR-P2 (≤2s standard), NFR-P3 (≤30s deep)
