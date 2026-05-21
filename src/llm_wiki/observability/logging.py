@@ -13,8 +13,6 @@ from __future__ import annotations
 import logging
 
 from opentelemetry._logs import set_logger_provider
-from opentelemetry.sdk._logs import LoggerProvider
-from opentelemetry.sdk._logs.export import LogExportResult
 
 from llm_wiki.observability import sdk
 

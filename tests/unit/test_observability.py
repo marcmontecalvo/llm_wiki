@@ -5,9 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 
 class TestSdkInitialization:
@@ -80,8 +77,6 @@ class TestMetrics:
         """query_log_write_failures_total should be addable."""
         from opentelemetry.sdk.metrics import MeterProvider
         from opentelemetry.sdk.metrics.export import InMemoryMetricReader
-
-        from llm_wiki.observability import metrics
 
         # Save existing provider and replace with test reader
         reader = InMemoryMetricReader()
@@ -185,7 +180,7 @@ class TestStructuredLogging:
         logger_provider = LoggerProvider(resource=resource)
         set_logger_provider(logger_provider)
 
-        handler = logging.StreamHandler()
+        logging.StreamHandler()
 
         tracer_provider = TracerProvider(resource=resource)
         tracer = tracer_provider.get_tracer("test")
@@ -201,7 +196,6 @@ class TestStructuredLogging:
 
     def test_json_formatter_output(self):
         """daemon JSONFormatter should produce valid JSON output."""
-        import time
 
         from llm_wiki.daemon.logging_config import JSONFormatter
 
@@ -239,9 +233,6 @@ class TestStructuredLogging:
         """Version header middleware should exist and set X-LLM-Wiki-Version."""
         from llm_wiki.api.app import app
 
-        middleware_funcs = [
-            m for m in app.user_middleware if "middleware" in str(type(m).__name__).lower()
-        ]
         # The version header is added as an http middleware
         # Verify it exists by checking the app's middleware stack
         assert any("version" in str(m).lower() for m in app.user_middleware)

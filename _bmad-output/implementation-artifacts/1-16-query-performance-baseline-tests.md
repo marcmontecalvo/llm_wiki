@@ -279,7 +279,7 @@ claude-sonnet-4-6
 - `pyproject.toml`: `performance` and `integration` markers registered; `addopts` excludes both from default run.
 - `.github/workflows/ci.yml`: `Run performance tests` step added (`uv run pytest -m performance`).
 - `README.md`: performance test section added with run instructions.
-- All 3 tests pass: `UV_CACHE_DIR=/private/tmp/uv-cache uv run pytest -m performance` → `3 passed, 1429 deselected in 16.44s`.
+- All 3 tests pass: `UV_CACHE_DIR=/private/tmp/uv-cache uv run pytest -m performance` → `3 passed, 1429 deselected in 16.61s`.
 - Default marker behavior confirms exclusion for the performance folder: `UV_CACHE_DIR=/private/tmp/uv-cache uv run pytest tests/performance` → `3 deselected / 0 selected` (pytest exits 5 when all selected-path tests are deselected).
 
 ### File List
@@ -306,10 +306,15 @@ Reviewer: Marc on 2026-05-21
 
 #### Validation
 
-- `UV_CACHE_DIR=/private/tmp/uv-cache uv run pytest -m performance` → `3 passed, 1429 deselected in 16.44s`
+- `UV_CACHE_DIR=/private/tmp/uv-cache uv run pytest -m performance` → `3 passed, 1429 deselected in 16.61s`
 - `UV_CACHE_DIR=/private/tmp/uv-cache uv run pytest tests/performance` → `3 deselected / 0 selected` (expected pytest exit 5 for all tests deselected)
 - `UV_CACHE_DIR=/private/tmp/uv-cache uv run ruff check tests/performance/conftest.py tests/performance/test_query_latency.py` → passed
 - `UV_CACHE_DIR=/private/tmp/uv-cache uv run ruff format --check tests/performance/conftest.py tests/performance/test_query_latency.py` → passed
+
+#### References
+
+- pytest custom marker docs confirm `-m` marker selection/deselection and marker registration behavior.
+- AnyIO testing docs confirm `pytest.mark.anyio` is provided by AnyIO's built-in pytest plugin.
 
 ## Change Log
 

@@ -60,14 +60,39 @@ def seeded_wiki_path(
 
     scope="session" is critical — rebuilding 100 pages per test blows every
     latency budget. The index is built once and reused across all performance tests.
+
+    Validates that the index actually contains documents after build — a silent
+    IndexRebuildJob failure would leave an empty index and make latency assertions
+    meaningless.
     """
     wiki_system = tmp_path_factory.mktemp("perf_wiki")
     WikiInitializer.initialize(wiki_system)
     _generate_pages(wiki_system)
 
+    # Verifys pages landed on disk before building the index — the crawl
+    # operates on real files, not in-memory structures.
+    page_files = list((wiki_system / "domains").rglob("*.md"))
+    assert len(page_files) == 100, (
+        f"Seeded wiki produced {len(page_files)} .md pages (expected 100); "
+        "index rebuild will operate on wrong set of files"
+    )
+
     from llm_wiki.daemon.jobs.index_rebuild import IndexRebuildJob
 
-    IndexRebuildJob(wiki_base=wiki_system).execute()
+    result = IndexRebuildJob(wiki_base=wiki_system).execute()
+    # Verify the rebuild actually ingested pages — a silent failure would
+    # leave zero documents and make all latency assertions meaningless.
+    metadata_count = result["metadata_pages"]
+    fulltext_count = result["fulltext_documents"]
+    assert metadata_count >= 100, (
+        f"Index rebuild ingested {metadata_count} metadata pages (expected 100); "
+        "index rebuild may have silently failed"
+    )
+    assert fulltext_count >= 100, (
+        f"Index rebuilt {fulltext_count} fulltext documents (expected 100); "
+        "index rebuild may have silently failed"
+    )
+
     return wiki_system
 
 
@@ -98,16 +123,13 @@ def seeded_wiki_client(
     scope="session" keeps the lifespan (and its loaded indexes) alive for the
     entire test run — avoids paying startup cost on every test.
 
-    A warm-up request is issued before yielding so startup/runtime caches are
-    populated before any latency assertions are made.
+    No warmup is performed so the first timed query includes cold-start cost,
+    which is what the latency budget is actually measuring.
     """
     from llm_wiki.api.app import create_app
 
     app = create_app()
     with TestClient(app) as client:
-        # Warm up runtime caches so the first timed query doesn't include
-        # one-time setup overhead.
-        client.post("/v1/query", json={"query": "warmup", "depth": "quick"})
         yield client
 
 

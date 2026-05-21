@@ -10,10 +10,10 @@ from __future__ import annotations
 import logging
 import os
 
-from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
@@ -60,10 +60,10 @@ def initialize() -> None:
     # Configure global trace SDK — FastAPIInstrumentor and manual tracers
     # look up the global TracerProvider by default.
     from opentelemetry import trace as trace_api
-
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
         OTLPSpanExporter as GRPCTraceExporter,
     )
+
     proc = BatchSpanProcessor(GRPCTraceExporter())
     _trace_provider = TracerProvider(resource=_resource)
     _trace_provider.add_span_processor(proc)
@@ -72,10 +72,10 @@ def initialize() -> None:
     # Configure global metrics SDK — module-level
     # metrics_api.get_meter() resolves via the global MeterProvider.
     from opentelemetry import metrics as metrics_api
-
     from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
         OTLPMetricExporter as GRPCCMetricExporter,
     )
+
     reader = PeriodicExportingMetricReader(GRPCCMetricExporter())
     _meter_provider = MeterProvider(resource=_resource, metric_readers=[reader])
     metrics_api.set_meter_provider(_meter_provider)
@@ -102,7 +102,9 @@ def shutdown() -> None:
     logger.debug("OpenTelemetry SDK shut down")
 
 
-def get_tracer() -> "opentelemetry.trace.Tracer  # type: ignore[name-defined]":  # noqa: F821
+def get_tracer() -> (
+    opentelemetry.trace.Tracer  # type: ignore[name-defined]  # noqa: F821
+):
     """Return the configured tracer, or a no-op tracer if SDK is not initialized."""
     if _trace_provider is not None:
         return _trace_provider.get_tracer("llm-wiki")

@@ -33,11 +33,11 @@ class TestQueryLogStore:
     """Tests for QueryLogStore."""
 
     def test_creates_db_on_first_write(self, temp_dir: Path):
-        store = QueryLogStore(temp_dir / "query_log.db")
+        QueryLogStore(temp_dir / "query_log.db")
         assert (temp_dir / "query_log.db").exists()
 
     def test_creates_schema(self, temp_dir: Path):
-        store = QueryLogStore(temp_dir / "query_log.db")
+        QueryLogStore(temp_dir / "query_log.db")
         with sqlite3.connect(temp_dir / "query_log.db") as conn:
             tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         table_names = {t[0] for t in tables}

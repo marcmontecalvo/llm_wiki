@@ -9,5 +9,5 @@ services:
     environment:
       WIKI_ROOT: /wiki
       WIKI_CONFIG_DIR: /wiki/config
-      WIKI_PORT: "${WIKI_PORT:-3050}"
+      WIKI_PORT: ${WIKI_PORT:-3050}
     restart: unless-stopped

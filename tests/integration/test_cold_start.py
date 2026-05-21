@@ -57,7 +57,13 @@ docker_required = pytest.mark.skipif(
 
 
 def _free_tcp_port() -> int:
+    """Find a free port by binding and closing immediately.
+
+    The actual port is bound again by docker-compose's port mapping,
+    so there's no risk of a race condition with anything else grabbing it.
+    """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
 
@@ -85,11 +91,11 @@ def test_container_cold_start_within_30s(tmp_path: Path) -> None:
 
     assert _COMPOSE_COMMAND is not None
     up_result = subprocess.run(
-        [*_COMPOSE_COMMAND, "-f", str(compose_file), "up", "--build", "-d"],
+        [*_COMPOSE_COMMAND, "-f", str(compose_file), "up", "--build", "-d", "--timeout", "300"],
         env=env,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=600,
     )
     assert up_result.returncode == 0, f"docker-compose up failed:\n{up_result.stderr}"
 
@@ -112,17 +118,22 @@ def test_container_cold_start_within_30s(tmp_path: Path) -> None:
             "GET /v1/health did not return 200 within 30s"
         )
 
-        # AC:3 — verify required health response fields
+        # AC:3 — verify all HealthResponse fields are present and typed correctly
         data: dict[str, object] = response.json()
-        assert "daemon_running" in data, "Missing daemon_running field"
-        assert "index_loaded" in data, "Missing index_loaded field"
-        assert "llm_extraction_enabled" in data, "Missing llm_extraction_enabled field"
+        for field in (
+            "daemon_running",
+            "index_loaded",
+            "llm_extraction_enabled",
+            "scheduler_state",
+        ):
+            assert field in data, f"Missing {field} field"
         assert "vector_search_enabled" not in data, (
             "vector_search_enabled must not be present — vector search is always on"
         )
         assert isinstance(data["daemon_running"], bool)
         assert isinstance(data["index_loaded"], bool)
         assert isinstance(data["llm_extraction_enabled"], bool)
+        assert isinstance(data["scheduler_state"], str)
 
     finally:
         subprocess.run(

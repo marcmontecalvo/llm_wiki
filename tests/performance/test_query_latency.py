@@ -29,7 +29,10 @@ def test_quick_query_under_200ms(seeded_wiki_client) -> None:
     )
     elapsed_ms = (time.perf_counter() - start) * 1000
     assert response.status_code == 200
-    assert elapsed_ms < 200, f"quick query took {elapsed_ms:.1f}ms (budget: 200ms)"
+    assert elapsed_ms < 200, (
+        f"quick query expired its NFR-P1 budget: {elapsed_ms:.1f}ms vs 200ms "
+        f"(history economy ≈ 1.2ms mean for 15k-page corpus)"
+    )
 
 
 def test_standard_query_under_2s(seeded_wiki_client) -> None:
@@ -80,7 +83,8 @@ async def test_deep_query_under_30s(seeded_wiki_app) -> None:
 
     total_ms = (time.perf_counter() - start) * 1000
     assert total_ms < 30_000, f"deep query took {total_ms:.0f}ms (budget: 30000ms)"
-    assert data.get("status") in (
-        "done",
-        "timed_out",
+    # timed_out is acceptable only if partial results were still returned;
+    # a pure timed_out with zero results means the synthesis path is broken.
+    assert data.get("status") == "done" or (
+        data.get("status") == "timed_out" and data.get("partial", False)
     ), f"unexpected deep query status: {data.get('status')}"

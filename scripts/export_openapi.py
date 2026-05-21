@@ -37,8 +37,7 @@ def main() -> int:
     if args.check:
         if not OUTPUT_PATH.exists():
             print(
-                f"ERROR: {OUTPUT_PATH} not found. "
-                "Run scripts/export_openapi.py to generate it.",
+                f"ERROR: {OUTPUT_PATH} not found. Run scripts/export_openapi.py to generate it.",
                 file=sys.stderr,
             )
             return 1

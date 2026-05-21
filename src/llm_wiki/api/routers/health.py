@@ -30,7 +30,8 @@ router = APIRouter(prefix="/v1", tags=["health"])
 
 @router.get("/health", response_model=HealthResponse)
 async def health(
-    request: Request, wiki: WikiQuery = Depends(get_wiki),
+    request: Request,
+    wiki: WikiQuery = Depends(get_wiki),
 ) -> HealthResponse:
     """Return service health summary."""
     wiki_base = wiki.wiki_base

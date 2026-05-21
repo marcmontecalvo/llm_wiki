@@ -249,8 +249,8 @@ None.
 
 - Created `tests/integration/test_cold_start.py` with `@pytest.mark.integration`, Docker skip guard, `docker-compose up --build -d` cold start, 1s-poll / 30s-timeout health check, AC:3 field assertions, and `docker-compose down -v` teardown in `finally`.
 - Updated `docker-compose.yml` to use `${WIKI_VOLUME:-./wiki_data}:/wiki` so tests can inject a fresh temp volume without affecting production defaults.
-- Added "Run integration tests" step to `.github/workflows/ci.yml` (main-push only, `uv run pytest -m integration --timeout=120`). "Run performance tests" step already existed from Story 1.16.
-- Review fix: cold-start test now uses a unique `COMPOSE_PROJECT_NAME`, a free host/container `WIKI_PORT`, and monotonic timing so it does not collide with or tear down a developer's normal compose stack.
+- Added "Run integration tests" step to `.github/workflows/ci.yml` (main-push only, Python-wrapped `pytest -m integration` with a 120s timeout). "Run performance tests" step already existed from Story 1.16.
+- Review fix: cold-start test now supports both `docker-compose` and `docker compose`, uses a unique `COMPOSE_PROJECT_NAME`, a free host/container `WIKI_PORT`, and monotonic timing so it does not collide with or tear down a developer's normal compose stack.
 - Review fix: `docker-compose.yml` now applies `${WIKI_PORT:-3050}` consistently to the host mapping, container port, and service environment.
 - Review fix: CI integration-test timeout now uses a Python subprocess timeout instead of the unavailable `pytest --timeout` option.
 - `pyproject.toml`: `integration` mark and `addopts` exclusion were already in place from Story 1.16 — no changes needed.
@@ -274,16 +274,17 @@ Findings fixed:
 - HIGH: `.github/workflows/ci.yml` used `pytest --timeout=120`, but `pytest-timeout` is not declared and local collection rejected the option. Replaced it with a Python subprocess timeout around `python -m pytest -m integration`.
 - HIGH: `docker-compose.yml` mapped `3050:${WIKI_PORT:-3050}` while setting container `WIKI_PORT` to `"3050"`, so any `WIKI_PORT` override broke the health endpoint mapping. Updated the mapping and service environment to use `${WIKI_PORT:-3050}` consistently.
 - MEDIUM: `tests/integration/test_cold_start.py` used the default compose project and port, so a review run could collide with or tear down a developer's normal `llm-wiki` compose stack. The test now sets a unique `COMPOSE_PROJECT_NAME` and allocates a free port.
+- MEDIUM: `tests/integration/test_cold_start.py` only invoked the legacy `docker-compose` binary. It now resolves either `docker-compose` or Docker Compose v2 (`docker compose`) and skips if neither is available.
 - LOW: The health polling budget used wall-clock time. Switched to `time.monotonic()` for timeout accounting.
 
 Validation:
 
 - `UV_CACHE_DIR=.uv-cache uv run pytest tests/integration/test_cold_start.py -m integration -q` -> skipped because Docker is unavailable in this environment.
 - `UV_CACHE_DIR=.uv-cache uv run ruff check tests/integration/test_cold_start.py` -> passed.
-- `UV_CACHE_DIR=.uv-cache uv run python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml')); yaml.safe_load(open('docker-compose.yml')); print('yaml ok')"` -> passed.
+- `UV_CACHE_DIR=.uv-cache uv run python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml')); yaml.safe_load(open('docker-compose.yml')); yaml.safe_load(open('_bmad-output/implementation-artifacts/sprint-status.yaml')); print('yaml ok')"` -> passed.
 - Portable CI timeout snippet verified locally against `tests/integration/test_cold_start.py`.
 
 ## Change Log
 
 - 2026-05-21: Implemented Story 1.17 — Docker cold start integration test, WIKI_VOLUME env override in docker-compose.yml, CI integration step (claude-sonnet-4-6)
-- 2026-05-21: Review fixes applied — isolated compose project/port in cold-start test, consistent WIKI_PORT compose mapping, portable CI timeout wrapper; story marked done (Codex)
+- 2026-05-21: Review fixes applied — isolated compose project/port in cold-start test, Docker Compose v1/v2 support, consistent WIKI_PORT compose mapping, portable CI timeout wrapper; story marked done (Codex)

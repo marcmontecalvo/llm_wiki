@@ -63,7 +63,7 @@ development_status:
   1-14-list-pages-time-filter: done  # updated_since filter in service+REST+MCP; tz-normalization fix in review; last_updated: 2026-05-20
   1-15-governance-cli-commands: done  # govern status/run/report + inbox/staging/ routing-failed; review: AC:9 domain injection fix + lock msg + _governance_lock refactor; last_updated: 2026-05-21
   1-16-query-performance-baseline-tests: done  # review: vector model isolation + config isolation; last_updated: 2026-05-21
-  1-17-container-cold-start-test: done  # review fixes: isolated compose project/port, consistent WIKI_PORT mapping, portable CI timeout; last_updated: 2026-05-21
+  1-17-container-cold-start-test: done  # review fixes: isolated compose project/port, Compose v1/v2 support, consistent WIKI_PORT mapping, portable CI timeout; last_updated: 2026-05-21
   epic-1-retrospective: optional
 
   # ─── Epic 2: Trust & Verification ────────────────────────────────────────
