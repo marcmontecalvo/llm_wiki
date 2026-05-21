@@ -60,6 +60,23 @@ class DomainRouter:
         """
         return domain in self.valid_domains
 
+    def route_or_none(self, metadata: dict[str, Any]) -> str | None:
+        """Like route() but returns None when no rule matches and no explicit domain.
+
+        Used to detect routing failures — callers decide what to do with None.
+        """
+        if "domain" in metadata:
+            domain = cast(str, metadata["domain"])
+            if domain in self.valid_domains:
+                return domain
+
+        source_path = metadata.get("source_path", "")
+        for rule in self.routing.source_rules:
+            if rule.match in source_path:
+                return rule.default_domain
+
+        return None
+
     def get_domain_for_source_path(self, source_path: str) -> str:
         """Get domain based on source path matching.
 

@@ -1,7 +1,9 @@
 """Inbox watcher for file ingestion."""
 
+import json
 import logging
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +13,7 @@ from llm_wiki.adapters.markdown import MarkdownAdapter
 from llm_wiki.adapters.obsidian import ObsidianVaultAdapter
 from llm_wiki.adapters.text import TextAdapter
 from llm_wiki.ingest.failed import FailedIngestionsTracker, FailureReason
-from llm_wiki.ingest.normalizer import NormalizationPipeline
+from llm_wiki.ingest.normalizer import NormalizationPipeline, RoutingError
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +39,16 @@ class InboxWatcher:
         self.processing_dir = self.inbox_dir / "processing"
         self.done_dir = self.inbox_dir / "done"
         self.failed_dir = self.inbox_dir / "failed"
+        self.staging_dir = self.inbox_dir / "staging"
 
         # Ensure directories exist
-        for directory in [self.new_dir, self.processing_dir, self.done_dir, self.failed_dir]:
+        for directory in [
+            self.new_dir,
+            self.processing_dir,
+            self.done_dir,
+            self.failed_dir,
+            self.staging_dir,
+        ]:
             directory.mkdir(parents=True, exist_ok=True)
 
         # Set up failed ingestion tracker
@@ -127,10 +136,43 @@ class InboxWatcher:
             shutil.move(str(processing_path), str(done_path))
             logger.info(f"Moved to done: {processing_path.name}")
 
+        except RoutingError:
+            # No domain matched — move to staging for operator review (FR53)
+            self._move_to_staging(processing_path)
         except Exception as e:
             # Move back to new/ on failure so it can be retried
             shutil.move(str(processing_path), str(filepath))
             raise e
+
+    def _move_to_staging(self, filepath: Path) -> None:
+        """Move an unroutable file to inbox/staging/ and log a routing-failed entry.
+
+        Args:
+            filepath: Path to file currently in processing/
+        """
+        staging_path = self.staging_dir / filepath.name
+        if staging_path.exists():
+            counter = 1
+            while (self.staging_dir / f"{filepath.stem}_{counter}{filepath.suffix}").exists():
+                counter += 1
+            staging_path = self.staging_dir / f"{filepath.stem}_{counter}{filepath.suffix}"
+
+        shutil.move(str(filepath), str(staging_path))
+        logger.info(f"Routing failed — moved to staging: {staging_path.name}")
+
+        # Write a routing-failed JSONL entry for governance reporting
+        wiki_base = self.inbox_dir.parent
+        reports_dir = wiki_base / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "status": "routing-failed",
+            "source_path": str(staging_path),
+            "source_name": staging_path.name,
+            "arrived_at": datetime.now(UTC).isoformat(),
+        }
+        routing_log = reports_dir / "routing-failed.jsonl"
+        with routing_log.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry) + "\n")
 
     def _move_to_failed(self, filepath: Path, error: str) -> None:
         """Move file to failed/ directory.

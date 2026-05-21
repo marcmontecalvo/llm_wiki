@@ -10,6 +10,10 @@ from llm_wiki.utils.frontmatter import write_frontmatter
 from llm_wiki.utils.id_gen import generate_page_id
 
 
+class RoutingError(Exception):
+    """Raised when a file cannot be routed to any configured domain."""
+
+
 class NormalizationPipeline:
     """Pipeline for normalizing source files to wiki pages."""
 
@@ -36,8 +40,15 @@ class NormalizationPipeline:
 
         Returns:
             Domain ID to route content to
+
+        Raises:
+            RoutingError: When no rule matches and no explicit domain is set
         """
-        return self.router.route(metadata)
+        domain = self.router.route_or_none(metadata)
+        if domain is None:
+            source = metadata.get("source_path", "<unknown>")
+            raise RoutingError(f"No routing rule matched for: {source}")
+        return domain
 
     def process_file(self, filepath: Path) -> Path:
         """Process a source file through normalization pipeline.

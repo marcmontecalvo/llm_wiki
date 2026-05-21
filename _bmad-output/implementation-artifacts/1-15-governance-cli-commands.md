@@ -1,6 +1,6 @@
 # Story 1.15: Governance CLI Commands
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -32,31 +32,31 @@ So that I can inspect daemon health, review what was flagged, and run governance
 
 ## Tasks / Subtasks
 
-- [ ] Add `govern status [--json]` command to `src/llm_wiki/cli.py` (AC: 1, 5)
-  - [ ] Read `state/jobs.json` and display per-job last-run info
-  - [ ] Output: last timestamp, outcome, warning count for lint/contradictions/staleness/routing
-  - [ ] `--json` flag: emit raw dict as JSON
-- [ ] Add `govern run [lint|contradictions|staleness|all] [--json]` command (AC: 2, 4, 5)
-  - [ ] `lint`: run `MetadataLinter` synchronously
-  - [ ] `contradictions`: run `ContradictionDetector` synchronously
-  - [ ] `staleness`: run `StalenessDetector` synchronously
-  - [ ] `all`: run all three in sequence
-  - [ ] Use a cross-platform lock file (`state/governance.lock`) via `O_CREAT | O_EXCL` to detect concurrent daemon run (AC: 4)
-  - [ ] Print structured report; `--json` emits JSON
-- [ ] Add `govern report [--domain <name>] [--json]` command (AC: 3, 5)
-  - [ ] Read latest report file from `reports/` directory (sort by timestamp, take newest)
-  - [ ] `--domain` filter: only show items for the specified domain
-  - [ ] Include routing-failed items from `inbox/staging/` in the report (AC: 8)
-- [ ] Implement `inbox/staging/` routing-failed area (AC: 7, 8, 9)
-  - [ ] In `InboxWatcher._process_file()` or routing logic: when no domain matched **→** move to `inbox/staging/` instead of `inbox/failed/`
-  - [ ] Write a governance report entry `{status: "routing-failed", source_path: ..., arrived_at: ...}` to `reports/routing-failed.jsonl`
-  - [ ] `inbox/staging/` already created by Story 1.10 init — no mkdir needed
-- [ ] Wire `llm-wiki ingest <path> --domain <name>` to handle staging-area files (AC: 9)
-  - [ ] If `<path>` resolves to a file in `inbox/staging/`, move it to `inbox/new/` before processing
-  - [ ] The `ingest` command already exists — add staging-area detection
-- [ ] Verify `GET /v1/daemon/status` includes governance results (AC: 6)
-  - [ ] Read Story 1.6 implementation — verify governance job state is included in daemon status response
-  - [ ] No new REST endpoints needed — governance data comes from `state/jobs.json`
+- [x] Add `govern status [--json]` command to `src/llm_wiki/cli.py` (AC: 1, 5)
+  - [x] Read `state/jobs.json` and display per-job last-run info
+  - [x] Output: last timestamp, outcome, warning count for lint/contradictions/staleness/routing
+  - [x] `--json` flag: emit raw dict as JSON
+- [x] Add `govern run [lint|contradictions|staleness|all] [--json]` command (AC: 2, 4, 5)
+  - [x] `lint`: run `MetadataLinter` synchronously
+  - [x] `contradictions`: run `ContradictionDetector` synchronously
+  - [x] `staleness`: run `StalenessDetector` synchronously
+  - [x] `all`: run all three in sequence
+  - [x] Use a cross-platform lock file (`state/governance.lock`) via `O_CREAT | O_EXCL` to detect concurrent daemon run (AC: 4)
+  - [x] Print structured report; `--json` emits JSON
+- [x] Add `govern report [--domain <name>] [--json]` command (AC: 3, 5)
+  - [x] Read latest report file from `reports/` directory (sort by timestamp, take newest)
+  - [x] `--domain` filter: only show items for the specified domain
+  - [x] Include routing-failed items from `inbox/staging/` in the report (AC: 8)
+- [x] Implement `inbox/staging/` routing-failed area (AC: 7, 8, 9)
+  - [x] In `InboxWatcher._process_file()` or routing logic: when no domain matched **→** move to `inbox/staging/` instead of `inbox/failed/`
+  - [x] Write a governance report entry `{status: "routing-failed", source_path: ..., arrived_at: ...}` to `reports/routing-failed.jsonl`
+  - [x] `inbox/staging/` already created by Story 1.10 init — no mkdir needed
+- [x] Wire `llm-wiki ingest <path> --domain <name>` to handle staging-area files (AC: 9)
+  - [x] If `<path>` resolves to a file in `inbox/staging/`, move it to `inbox/new/` before processing
+  - [x] The `ingest` command already exists — add staging-area detection
+- [x] Verify `GET /v1/daemon/status` includes governance results (AC: 6)
+  - [x] Read Story 1.6 implementation — verify governance job state is included in daemon status response
+  - [x] No new REST endpoints needed — governance data comes from `state/jobs.json`
 
 ## Dev Notes
 
@@ -322,6 +322,50 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+No blocking issues encountered.
+
 ### Completion Notes List
 
+- Added `govern status`, `govern run [lint|staleness|contradictions|all]`, and `govern report` commands to `cli.py`. Each supports `--json` flag for machine-parseable output.
+- `govern run` uses `O_CREAT|O_EXCL` lock at `state/governance.lock` to prevent concurrent daemon runs.
+- `govern run` writes per-job stats to `state/jobs.json` and a timestamped JSON report to `reports/governance_TIMESTAMP.json`.
+- `govern report` reads latest `reports/governance_*.json` and appends live `inbox/staging/` routing-failed items.
+- Added `RoutingError` to `ingest/normalizer.py`; `_determine_domain()` now raises it when `route_or_none()` finds no matching rule and no explicit domain.
+- `InboxWatcher._process_file()` catches `RoutingError` and redirects to `_move_to_staging()` which writes a JSONL entry to `reports/routing-failed.jsonl`.
+- `ingest file` command detects staging files and moves them to `inbox/new/` instead of copying.
+- `GET /v1/daemon/status` already includes `governance_check` job results via `JobExecutionStore` — no new REST endpoint needed (AC: 6 verified).
+- Updated `test_normalizer.py` and `test_watcher.py`: existing tests that assumed fallback routing now use explicit `domain: general` or `session-` filename prefix to match routing rules.
+- 21 new tests in `tests/unit/test_governance_cli.py`; 1268 total unit tests pass (excluding 1 pre-existing MCP test failure unrelated to this story).
+
 ### File List
+
+- `src/llm_wiki/cli.py` — added `_governance_lock()`, `_update_jobs_json()`, `_write_governance_json_report()`, `govern_status`, `govern_run`, `govern_report` commands; modified `ingest_file` for staging passthrough
+- `src/llm_wiki/ingest/normalizer.py` — added `RoutingError` class; updated `_determine_domain()` to use `route_or_none()`
+- `src/llm_wiki/ingest/router.py` — added `route_or_none()` method
+- `src/llm_wiki/ingest/watcher.py` — added `staging_dir`; added `_move_to_staging()` method; updated `_process_file()` to catch `RoutingError`
+- `src/llm_wiki/cli.py` (review fix) — injected `--domain` into staging-file frontmatter in `ingest_file`; simplified `_governance_lock` to acquire lock before entering contextmanager; improved lock error message to include lock file path
+- `tests/unit/test_governance_cli.py` — new test file (22 tests; added `test_ingest_file_staging_injects_domain` for AC:9 domain injection)
+- `tests/unit/test_normalizer.py` — updated 8 tests for new routing behavior
+- `tests/unit/test_watcher.py` — updated 5 tests for new routing behavior
+
+## Senior Developer Review (AI)
+
+Reviewed 2026-05-21 by claude-sonnet-4-6.
+
+**Outcome: Approved with fixes applied**
+
+### Findings Fixed
+
+| Severity | Issue | Fixed |
+|---|---|---|
+| HIGH | `ingest file` staging passthrough ignored `--domain` flag — file would loop back to staging indefinitely (AC:9 gap). Fixed: inject `domain` into frontmatter before moving to `inbox/new/`. | ✅ `cli.py:504-519` |
+| HIGH | No test coverage for domain injection in staging passthrough. Fixed: added `test_ingest_file_staging_injects_domain`. | ✅ `test_governance_cli.py` |
+| MEDIUM | Lock error message omitted lock file path, making stale-lock recovery opaque. Fixed: message now includes the path. | ✅ `cli.py:1397` |
+| MEDIUM | `_governance_lock` re-executed `import os` / `import contextmanager` on every call via nested function. Fixed: lock acquisition moved outside inner contextmanager, imports remain lazy. | ✅ `cli.py:1386-1406` |
+
+All ACs verified as implemented. 50/50 story tests pass; 1 pre-existing unrelated MCP failure unchanged.
+
+## Change Log
+
+- 2026-05-20: Implemented Story 1.15 — govern status/run/report commands, inbox/staging/ routing-failed area, ingest file staging passthrough. RoutingError now raised when no rule matches, moving unroutable files to staging. 21 new tests; 1268 unit tests pass.
+- 2026-05-21: Review fixes — AC:9 domain injection in staging passthrough, lock error message improved, _governance_lock refactored, added domain injection test. 50 story tests pass.

@@ -30,11 +30,13 @@ class TestNormalizationPipeline:
 
     def test_process_markdown_file(self, pipeline: NormalizationPipeline, temp_dir: Path):
         """Test processing markdown file through pipeline."""
-        # Create test markdown file
+        # Create test markdown file with explicit domain (required since routing rules
+        # must match for files without an explicit domain — see Story 1.15)
         test_file = temp_dir / "test-doc.md"
         test_file.write_text(
             """---
 title: Test Document
+domain: general
 ---
 
 # Hello
@@ -65,8 +67,8 @@ This is content.
 
     def test_process_text_file(self, pipeline: NormalizationPipeline, temp_dir: Path):
         """Test processing text file through pipeline."""
-        # Create test text file
-        test_file = temp_dir / "my-notes.txt"
+        # Use a filename matching the "session-" routing rule so it reaches the pipeline
+        test_file = temp_dir / "session-my-notes.txt"
         test_file.write_text(
             """My Notes
 These are my notes.
@@ -123,21 +125,22 @@ Test content.
         # Should match "proxmox" rule → homelab domain
         assert "domain: homelab" in content
 
-    def test_determine_domain_fallback(self, pipeline: NormalizationPipeline, temp_dir: Path):
-        """Test domain determination falls back to default."""
+    def test_determine_domain_no_rule_raises(self, pipeline: NormalizationPipeline, temp_dir: Path):
+        """Files with no matching routing rule and no explicit domain raise RoutingError."""
+        from llm_wiki.ingest.normalizer import RoutingError
+
         test_file = temp_dir / "random-file.md"
         test_file.write_text("# Random Content\n\nNo specific domain.")
 
-        output_path = pipeline.process_file(test_file)
-        content = output_path.read_text()
-
-        # Should fall back to "general" domain
-        assert "domain: general" in content
+        with pytest.raises(RoutingError):
+            pipeline.process_file(test_file)
 
     def test_determine_domain_invalid_explicit(
         self, pipeline: NormalizationPipeline, temp_dir: Path
     ):
-        """Test invalid explicit domain falls back to routing."""
+        """Invalid explicit domain (not in valid_domains) raises RoutingError."""
+        from llm_wiki.ingest.normalizer import RoutingError
+
         test_file = temp_dir / "test.md"
         test_file.write_text(
             """---
@@ -148,11 +151,8 @@ Test content.
 """
         )
 
-        output_path = pipeline.process_file(test_file)
-        content = output_path.read_text()
-
-        # Should fall back to general (since no routing rule matches)
-        assert "domain: general" in content
+        with pytest.raises(RoutingError):
+            pipeline.process_file(test_file)
 
     def test_page_id_generation(self, pipeline: NormalizationPipeline, temp_dir: Path):
         """Test page ID is generated correctly."""
@@ -160,6 +160,7 @@ Test content.
         test_file.write_text(
             """---
 title: My Test Page
+domain: general
 ---
 
 Content.
@@ -176,7 +177,15 @@ Content.
     def test_queue_directory_created(self, pipeline: NormalizationPipeline, temp_dir: Path):
         """Test queue directory is created if it doesn't exist."""
         test_file = temp_dir / "test.md"
-        test_file.write_text("# Test\n\nContent.")
+        test_file.write_text(
+            """---
+domain: general
+---
+
+# Test
+
+Content."""
+        )
 
         # Ensure queue doesn't exist yet
         queue_dir = Path("wiki_system/domains/general/queue")
@@ -197,6 +206,7 @@ Content.
         test_file.write_text(
             """---
 title: Test
+domain: general
 author: John Doe
 tags:
   - test
@@ -227,7 +237,15 @@ Content.
     def test_status_field_added(self, pipeline: NormalizationPipeline, temp_dir: Path):
         """Test status field is added to frontmatter."""
         test_file = temp_dir / "test.md"
-        test_file.write_text("# Test\n\nContent.")
+        test_file.write_text(
+            """---
+domain: general
+---
+
+# Test
+
+Content."""
+        )
 
         output_path = pipeline.process_file(test_file)
         content = output_path.read_text()

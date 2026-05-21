@@ -498,6 +498,33 @@ def ingest_file(file_path: Path, domain: str | None, wiki_base: Path):
     """Ingest a file into the wiki inbox."""
     import shutil
 
+    staging_dir = wiki_base / "inbox" / "staging"
+    new_dir = wiki_base / "inbox" / "new"
+
+    # If the file lives in inbox/staging/, move it to inbox/new/ for reprocessing
+    if staging_dir.exists() and file_path.resolve().parent == staging_dir.resolve():
+        new_dir.mkdir(parents=True, exist_ok=True)
+        dest = new_dir / file_path.name
+        if domain:
+            # Inject the operator-specified domain into frontmatter so the daemon
+            # routes it correctly — without this the file would hit RoutingError
+            # again and loop back to staging indefinitely.
+            try:
+                from llm_wiki.utils.frontmatter import parse_frontmatter
+                from llm_wiki.utils.frontmatter import write_frontmatter as _wfm
+
+                raw = file_path.read_text(encoding="utf-8")
+                meta, body = parse_frontmatter(raw)
+                meta["domain"] = domain
+                file_path.write_text(_wfm(meta, body), encoding="utf-8")
+            except Exception:
+                pass  # best-effort; move the file regardless
+        shutil.move(str(file_path), str(dest))
+        click.echo(f"✓ File moved from staging to inbox/new/: {dest}")
+        click.echo(f"  Domain: {domain if domain else 'auto-detect'}")
+        click.echo("\nThe daemon will process this file automatically.")
+        return
+
     inbox = wiki_base / "inbox"
     inbox.mkdir(parents=True, exist_ok=True)
 
@@ -1351,6 +1378,282 @@ def govern_clean_broken_links(wiki_base: Path, dry_run: bool):
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         raise click.Abort() from e
+
+
+def _governance_lock(wiki_base: Path):
+    """Context manager: exclusive lock via O_CREAT|O_EXCL to prevent concurrent governance runs."""
+    import os
+    from contextlib import contextmanager
+
+    lock_path = wiki_base / "state" / "governance.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+    @contextmanager
+    def _lock(fd: int):
+        try:
+            yield
+        finally:
+            os.close(fd)
+            lock_path.unlink(missing_ok=True)
+
+    try:
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        raise click.ClickException(
+            f"Governance sweep is already running (daemon or another CLI instance). "
+            f"Remove {lock_path} if the previous run crashed."
+        )
+    return _lock(fd)
+
+
+def _update_jobs_json(wiki_base: Path, job_name: str, job_stats: dict) -> None:
+    """Merge job_stats into state/jobs.json under job_name key."""
+    import json as _json
+
+    state_dir = wiki_base / "state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    jobs_path = state_dir / "jobs.json"
+
+    data: dict = {}
+    if jobs_path.exists():
+        try:
+            data = _json.loads(jobs_path.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+
+    data[job_name] = job_stats
+    jobs_path.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _write_governance_json_report(wiki_base: Path, report_data: dict) -> Path:
+    """Write a JSON governance report to reports/ and return the path."""
+    import json as _json
+
+    reports_dir = wiki_base / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    report_path = reports_dir / f"governance_{timestamp}.json"
+    report_path.write_text(_json.dumps(report_data, indent=2), encoding="utf-8")
+    return report_path
+
+
+@govern.command("status")
+@click.option("--json", "output_json", is_flag=True, help="Emit machine-parseable JSON")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def govern_status(output_json: bool, wiki_base: Path):
+    """Show last-run results for each governance job."""
+    import json as _json
+
+    jobs_path = wiki_base / "state" / "jobs.json"
+    if not jobs_path.exists():
+        data: dict = {}
+    else:
+        data = _json.loads(jobs_path.read_text(encoding="utf-8"))
+
+    governance_jobs = {
+        k: v for k, v in data.items() if k in ("lint", "contradictions", "staleness", "routing")
+    }
+
+    if output_json:
+        click.echo(_json.dumps(governance_jobs, indent=2))
+        return
+
+    if not governance_jobs:
+        click.echo("No governance job results found. Run 'govern run' to populate.")
+        return
+
+    for job_name, info in governance_jobs.items():
+        last_run = info.get("last_run", "never")
+        outcome = info.get("outcome", "unknown")
+        warnings = info.get("warning_count", 0)
+        click.echo(f"{job_name:20} last={last_run}  outcome={outcome}  warnings={warnings}")
+
+
+@govern.command("run")
+@click.argument("job", type=click.Choice(["lint", "contradictions", "staleness", "all"]))
+@click.option("--json", "output_json", is_flag=True, help="Emit machine-parseable JSON")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def govern_run(job: str, output_json: bool, wiki_base: Path):
+    """Run governance job(s) synchronously and print structured results."""
+    import json as _json
+
+    from llm_wiki.governance.linter import LintSeverity, MetadataLinter
+    from llm_wiki.governance.staleness import StalenessDetector
+    from llm_wiki.index.metadata import MetadataIndex
+
+    jobs_to_run = ["lint", "staleness", "contradictions"] if job == "all" else [job]
+    report_data: dict = {
+        "generated": datetime.now(UTC).isoformat(),
+        "jobs_run": jobs_to_run,
+    }
+
+    with _governance_lock(wiki_base):
+        for job_name in jobs_to_run:
+            now_iso = datetime.now(UTC).isoformat()
+
+            if job_name == "lint":
+                index_dir = wiki_base / "index"
+                metadata_index = MetadataIndex(index_dir=index_dir)
+                metadata_index.load()
+                linter = MetadataLinter(metadata_index=metadata_index)
+                issues = linter.lint_all(wiki_base)
+                errors = sum(1 for i in issues if i.severity == LintSeverity.ERROR)
+                warnings = sum(1 for i in issues if i.severity == LintSeverity.WARNING)
+                outcome = "pass" if not issues else ("errors" if errors else "warnings")
+                stats = {
+                    "last_run": now_iso,
+                    "outcome": outcome,
+                    "warning_count": warnings,
+                    "error_count": errors,
+                }
+
+            elif job_name == "staleness":
+                detector = StalenessDetector()
+                reports = detector.analyze_all(wiki_base, min_score=0.3)
+                outcome = "pass" if not reports else "warnings"
+                stats = {
+                    "last_run": now_iso,
+                    "outcome": outcome,
+                    "warning_count": len(reports),
+                    "error_count": 0,
+                }
+
+            elif job_name == "contradictions":
+                try:
+                    from llm_wiki.governance.contradictions import ContradictionDetector
+                    from llm_wiki.models.client import create_model_client
+                    from llm_wiki.models.config import ModelProviderConfig
+
+                    cfg = ModelProviderConfig(provider="ollama", model="llama3.2:3b")
+                    client = create_model_client(cfg)
+                    contradiction_detector = ContradictionDetector(
+                        client=client, min_confidence=0.6
+                    )
+                    c_report = contradiction_detector.analyze_all_pages(wiki_base)
+                    total = c_report.total_contradictions
+                    outcome = "pass" if total == 0 else "warnings"
+                    stats = {
+                        "last_run": now_iso,
+                        "outcome": outcome,
+                        "warning_count": total,
+                        "error_count": 0,
+                    }
+                except Exception as e:
+                    if job == "all":
+                        click.echo(f"Warning: contradictions check skipped: {e}", err=True)
+                        continue
+                    raise click.ClickException(f"Contradictions check failed: {e}") from e
+
+            else:  # pragma: no cover
+                continue
+
+            _update_jobs_json(wiki_base, job_name, stats)
+            report_data[job_name] = stats
+
+    report_path = _write_governance_json_report(wiki_base, report_data)
+
+    if output_json:
+        click.echo(_json.dumps(report_data, indent=2))
+    else:
+        for job_name in jobs_to_run:
+            if job_name not in report_data:
+                continue
+            s = report_data[job_name]
+            click.echo(
+                f"{job_name:20} outcome={s['outcome']}  "
+                f"warnings={s['warning_count']}  errors={s['error_count']}"
+            )
+        click.echo(f"\n✓ Report: {report_path}")
+
+
+@govern.command("report")
+@click.option("--domain", "domain_filter", default=None, help="Filter by domain name")
+@click.option("--json", "output_json", is_flag=True, help="Emit machine-parseable JSON")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def govern_report(domain_filter: str | None, output_json: bool, wiki_base: Path):
+    """Print latest governance report, including routing-failed staging items."""
+    import json as _json
+
+    reports_dir = wiki_base / "reports"
+    staging_dir = wiki_base / "inbox" / "staging"
+
+    # Find latest JSON report
+    report_data: dict = {}
+    if reports_dir.exists():
+        report_files = sorted(reports_dir.glob("governance_*.json"), reverse=True)
+        if report_files:
+            try:
+                report_data = _json.loads(report_files[0].read_text(encoding="utf-8"))
+            except Exception:
+                report_data = {}
+
+    # Append routing-failed items from staging
+    if staging_dir.exists():
+        staging_items = []
+        for f in staging_dir.iterdir():
+            if f.is_file():
+                staging_items.append(
+                    {
+                        "status": "routing-failed",
+                        "source_path": str(f),
+                        "source_name": f.name,
+                        "arrived_at": datetime.fromtimestamp(f.stat().st_mtime, tz=UTC).isoformat(),
+                    }
+                )
+        if staging_items:
+            report_data["routing_failed"] = staging_items
+
+    # Apply domain filter
+    if domain_filter:
+        routing_failed = report_data.get("routing_failed", [])
+        filtered_failed = [
+            item for item in routing_failed if domain_filter in item.get("source_path", "")
+        ]
+        report_data = {k: v for k, v in report_data.items() if k != "routing_failed"}
+        if filtered_failed:
+            report_data["routing_failed"] = filtered_failed
+
+    if output_json:
+        click.echo(_json.dumps(report_data, indent=2))
+        return
+
+    if not report_data:
+        click.echo("No governance report found. Run 'govern run' to generate one.")
+        return
+
+    # Human-readable output
+    generated = report_data.get("generated", "unknown")
+    click.echo(f"Governance Report — generated: {generated}")
+    click.echo("=" * 60)
+
+    for job_name in ("lint", "staleness", "contradictions"):
+        if job_name in report_data:
+            s = report_data[job_name]
+            click.echo(
+                f"  {job_name:20} outcome={s.get('outcome', '?')}  "
+                f"warnings={s.get('warning_count', 0)}"
+            )
+
+    routing_failed = report_data.get("routing_failed", [])
+    if routing_failed:
+        click.echo(f"\nRouting-Failed Items ({len(routing_failed)} file(s) in inbox/staging/):")
+        for item in routing_failed:
+            click.echo(f"  {item['source_name']}  arrived={item['arrived_at']}")
 
 
 @main.group()

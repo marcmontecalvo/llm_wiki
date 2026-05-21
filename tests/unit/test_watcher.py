@@ -40,11 +40,13 @@ class TestInboxWatcher:
 
     def test_scan_processes_markdown_file(self, watcher: InboxWatcher):
         """Test scanning and processing markdown file."""
-        # Create test file in new/
+        # Create test file in new/ with explicit domain (routing rule required since
+        # files without a matching rule go to inbox/staging/ — Story 1.15)
         test_file = watcher.new_dir / "test-doc.md"
         test_file.write_text(
             """---
 title: Test Document
+domain: general
 ---
 
 # Hello
@@ -69,19 +71,20 @@ Content here.
 
     def test_scan_processes_text_file(self, watcher: InboxWatcher):
         """Test scanning and processing text file."""
-        test_file = watcher.new_dir / "notes.txt"
+        # Use a "session-" prefix so the routing rule routes it to general domain
+        test_file = watcher.new_dir / "session-notes.txt"
         test_file.write_text("My Notes\n\nContent here.")
 
         stats = watcher.scan()
 
         assert stats["processed"] == 1
-        assert (watcher.done_dir / "notes.txt").exists()
+        assert (watcher.done_dir / "session-notes.txt").exists()
 
     def test_scan_processes_multiple_files(self, watcher: InboxWatcher):
         """Test scanning and processing multiple files."""
-        # Create multiple test files
+        # Use "session-" prefix so routing rule routes all to general domain
         for i in range(3):
-            test_file = watcher.new_dir / f"doc{i}.md"
+            test_file = watcher.new_dir / f"session-doc{i}.md"
             test_file.write_text(f"# Document {i}\n\nContent.")
 
         stats = watcher.scan()
@@ -113,7 +116,15 @@ Content here.
     def test_process_file_moves_through_stages(self, watcher: InboxWatcher):
         """Test file moves through processing stages."""
         test_file = watcher.new_dir / "test.md"
-        test_file.write_text("# Test\n\nContent.")
+        test_file.write_text(
+            """---
+domain: general
+---
+
+# Test
+
+Content."""
+        )
 
         # Initially in new/
         assert test_file.exists()
@@ -165,6 +176,7 @@ Content here.
         test_file.write_text(
             """---
 title: My Title
+domain: general
 author: John Doe
 tags:
   - test
