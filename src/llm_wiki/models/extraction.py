@@ -1,8 +1,11 @@
 """Extraction schemas for model-generated structured data."""
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+TrustTag = Literal["extracted", "inferred", "ambiguous"]
 
 
 @dataclass
@@ -16,6 +19,7 @@ class Claim:
     source_ref: str  # Where in content this came from (e.g., "section 2, paragraph 1")
     confidence: float  # 0.0-1.0 confidence score
     page_id: str  # Which page this claim is on
+    trust_tag: TrustTag = "extracted"  # Epistemological provenance tag
     evidence: str | None = None  # Supporting evidence/context
     temporal_context: str | None = None  # When this claim is/was true
     qualifiers: list[str] = field(default_factory=list)  # Conditions on the claim
@@ -31,6 +35,7 @@ class Claim:
             "source_ref": self.source_ref,
             "confidence": self.confidence,
             "page_id": self.page_id,
+            "trust_tag": self.trust_tag,
             "evidence": self.evidence,
             "temporal_context": self.temporal_context,
             "qualifiers": self.qualifiers,
@@ -51,6 +56,7 @@ class Claim:
             source_ref=data["source_ref"],
             confidence=data["confidence"],
             page_id=data["page_id"],
+            trust_tag=data.get("trust_tag", "extracted"),
             evidence=data.get("evidence"),
             temporal_context=data.get("temporal_context"),
             qualifiers=data.get("qualifiers", []),
@@ -100,6 +106,7 @@ class ClaimExtraction(BaseModel):
         default=1.0, ge=0.0, le=1.0, description="Extraction confidence (0-1)"
     )
     source_reference: str = Field(..., description="Reference to source (required for claims)")
+    trust_tag: TrustTag = Field(default="extracted", description="Epistemological provenance tag")
     temporal_context: str | None = Field(default=None, description="When this claim is/was true")
     qualifiers: list[str] = Field(
         default_factory=list, description="Qualifiers or conditions on the claim"

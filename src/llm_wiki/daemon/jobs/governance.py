@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 class GovernanceJob:
     """Daemon job for running governance checks."""
 
+    LOW_QUALITY_THRESHOLD = 0.6
+
     def __init__(self, wiki_base: Path | None = None, client: ModelClient | None = None):
         """Initialize governance job.
 
@@ -69,7 +71,32 @@ class GovernanceJob:
             # Run all checkers
             lint_issues = self.linter.lint_all(self.wiki_base)
             staleness_reports = self.staleness_detector.analyze_all(self.wiki_base, min_score=0.3)
-            quality_reports = self.quality_scorer.score_all(self.wiki_base, max_score=0.6)
+            # Score pages with backlink-aware quality scoring.
+            # score_all() internally calls score_page() which never sees
+            # backlink counts — so we iterate manually and use
+            # score_with_backlinks() when backlinks are available.
+            self.backlink_index.load()
+            backlink_counts: dict[str, int] = {}
+            for pid in self.backlink_index.index:
+                backlink_counts[pid] = len(self.backlink_index.index[pid].get("backlinks", []))
+
+            quality_reports: list = []
+            domains_dir = self.wiki_base / "domains"
+            if domains_dir.exists():
+                for domain_dir in domains_dir.iterdir():
+                    if not domain_dir.is_dir():
+                        continue
+                    pages_dir = domain_dir / "pages"
+                    if not pages_dir.exists():
+                        continue
+                    for pf in pages_dir.glob("*.md"):
+                        pid = pf.stem
+                        report = self.quality_scorer.score_with_backlinks(
+                            pf,
+                            backlink_count=backlink_counts.get(pid, 0),
+                        )
+                        if report.score <= self.LOW_QUALITY_THRESHOLD:
+                            quality_reports.append(report)
 
             # Count issues by severity
             lint_errors = sum(1 for i in lint_issues if i.severity == LintSeverity.ERROR)
@@ -96,7 +123,7 @@ class GovernanceJob:
 
             # Run link health checks
             logger.info("Running link health checks")
-            self.backlink_index.load()
+            # backlink_index was already loaded above for quality scoring
             broken_link_stats = self.backlink_index.update_broken_links(all_page_ids)
             orphan_pages = self.backlink_index.get_orphan_pages(all_page_ids)
 

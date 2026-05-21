@@ -1,0 +1,8 @@
+{
+  "stories": [
+    {"storyId":"2.1","title":"Claim Trust Tagging at Ingest","complexity":{"level":"Medium","score":5,"reasons":["Infrastructure changes","Uncertain/research-heavy scope","High AC count (18)"]}},
+    {"storyId":"2.2","title":"Citation Enforcement and Confidence Gating","complexity":{"level":"Low","score":2,"reasons":["High AC count (18)"]}},
+    {"storyId":"2.3","title":"Confidence Scores in All Query and Search Results","complexity":{"level":"Low","score":3,"reasons":["Infrastructure changes","Simple CRUD operations","High AC count (18)"]}},
+    {"storyId":"2.4","title":"Vector Search Integration","complexity":{"level":"Low","score":3,"reasons":["Search/indexing","Simple/isolated bug fix","High AC count (19)"]}}
+  ]
+}

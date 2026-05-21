@@ -16,6 +16,13 @@ daemon:
   log_level: INFO
   review_queue_enabled: true
 
+  confidence_weights:
+    citation_presence: 0.4
+    trust_tag: 0.2
+    source_count: 0.2
+    backlink_count: 0.1
+    recency: 0.1
+
   features:
     llm_extraction: false
     synthesis_cache: false

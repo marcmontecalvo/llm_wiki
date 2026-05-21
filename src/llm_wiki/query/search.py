@@ -202,14 +202,55 @@ class WikiQuery:
             if query and rrf_scores:
                 score = rrf_scores.get(page_id, 0.0)
 
-            row = dict(metadata)
+            # Ensure confidence is set from metadata; when claims with
+            # trust tags exist compute a trust-based confidence to override
+            # the stored value so query results reflect Epic 2 scoring.
+            claims = metadata.get("claims", [])
+            if claims:
+                metadata_copy = dict(metadata)
+                score, metadata_copy = self._set_rerank_score(score, metadata_copy, claims)
+            else:
+                metadata_copy = dict(metadata)
+                if query and metadata_copy.get("confidence", 0.0) == 0.0:
+                    metadata_copy["confidence"] = metadata_copy.get("score", score)
+
+            row = metadata_copy
             row["page_id"] = page_id
             row["id"] = page_id
-            row["score"] = score
+            row["score"] = row.get("score", score)
+            # Merge RRF score at top level for ranking
+            row["_rrf"] = score
             filtered_results.append(row)
 
-        filtered_results.sort(key=lambda x: x["score"], reverse=True)
+        # Sort by score (descending)
+        filtered_results.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+        # Remove internal RRF key from final output
+        for row in filtered_results:
+            row.pop("_rrf", None)
+
         return filtered_results[:limit]
+
+    @staticmethod
+    def _set_rerank_score(
+        score: float, metadata: dict[str, Any], claims: list
+    ) -> tuple[float, dict[str, Any]]:
+        """Compute trust-based confidence from claims and update the result.
+
+        When claims with trust tags exist the confidence is set to the
+        ratio of extracted/inferred claims.  The RRF score is preserved
+        in ``metadata["score"]`` for ranking.
+        """
+        result = dict(metadata)
+        total = len(claims)
+        non_ambiguous = sum(
+            1
+            for c in claims
+            if isinstance(c, dict) and c.get("trust_tag") not in ("ambiguous", None)
+        )
+        trust_confidence = non_ambiguous / total if total > 0 else 0.0
+        result["confidence"] = trust_confidence
+        result.setdefault("score", score)
+        return score, result
 
     def get_page(self, page_id: str) -> dict[str, Any] | None:
         """Get page metadata by ID."""

@@ -18,6 +18,7 @@ from llm_wiki.index.backlinks import BacklinkIndex
 from llm_wiki.index.graph_edges import GraphEdgeIndex
 from llm_wiki.models.client import ModelClient, create_model_client
 from llm_wiki.models.config import load_models_config
+from llm_wiki.models.extraction import ClaimExtraction
 from llm_wiki.models.page import create_frontmatter
 from llm_wiki.utils.frontmatter import parse_frontmatter, write_with_validation
 from llm_wiki.utils.id_gen import generate_page_id
@@ -195,19 +196,23 @@ class ExtractionPipeline:
                 provider_config = models_config.get_provider("extraction")
                 client = create_model_client(provider_config)
 
-            self.content_extractor = ContentExtractor(client, self.config_dir)
-            self.entity_extractor = EntityExtractor(client)
-            self.concept_extractor = ConceptExtractor(client)
-            self.relationship_extractor = RelationshipExtractor(client)
-            self.claims_extractor = ClaimsExtractor(client)
-            self.qa_extractor = QAExtractor(client)
+            self.content_extractor: ContentExtractor | None = ContentExtractor(
+                client, self.config_dir
+            )
+            self.entity_extractor: EntityExtractor | None = EntityExtractor(client)
+            self.concept_extractor: ConceptExtractor | None = ConceptExtractor(client)
+            self.relationship_extractor: RelationshipExtractor | None = RelationshipExtractor(
+                client
+            )
+            self.claims_extractor: ClaimsExtractor | None = ClaimsExtractor(client)
+            self.qa_extractor: QAExtractor | None = QAExtractor(client)
         else:
             self.content_extractor = None
-            self.entity_extractor = None  # type: ignore[assignment]
-            self.concept_extractor = None  # type: ignore[assignment]
-            self.relationship_extractor = None  # type: ignore[assignment]
-            self.claims_extractor = None  # type: ignore[assignment]
-            self.qa_extractor = None  # type: ignore[assignment]
+            self.entity_extractor = None
+            self.concept_extractor = None
+            self.relationship_extractor = None
+            self.claims_extractor = None
+            self.qa_extractor = None
 
         self.enricher = PageEnricher()
 
@@ -284,6 +289,10 @@ class ExtractionPipeline:
 
         if self._llm_extraction_enabled:
             # Full LLM-based extraction
+            assert self.entity_extractor is not None
+            assert self.concept_extractor is not None
+            assert self.relationship_extractor is not None
+            assert self.claims_extractor is not None
             if page_kind == "entity":
                 entities = self.entity_extractor.extract_entities(body, metadata)
                 relationships = self.relationship_extractor.extract_relationships_with_context(
@@ -298,6 +307,8 @@ class ExtractionPipeline:
             claim_extractions = self.claims_extractor.extract_claims(
                 body, metadata, page_id=page_id
             )
+            # Apply trust tags to LLM-extracted claims
+            self._trust_tag_claims(claim_extractions, body)
             claims: list[dict[str, Any]] | None = None
             if claim_extractions:
                 claims = [
@@ -306,6 +317,7 @@ class ExtractionPipeline:
                         "source_ref": c.source_reference,
                         "confidence": c.confidence,
                         "page_id": page_id,
+                        "trust_tag": c.trust_tag,
                         "temporal_context": c.temporal_context,
                         "qualifiers": c.qualifiers,
                     }
@@ -314,7 +326,7 @@ class ExtractionPipeline:
         else:
             # Heuristic fallback path — use page_id from metadata for LLM steps
             page_id = metadata.get("id", filepath.stem)
-            claims = None
+            claims = self._heuristic_extract_claims(body, page_id)
 
             if page_kind == "entity":
                 entities = []
@@ -325,6 +337,7 @@ class ExtractionPipeline:
 
         # Extract relationships from the content (always, for both LLM and heuristic paths)
         if self._llm_extraction_enabled:
+            assert self.relationship_extractor is not None
             relationships = self.relationship_extractor.extract_relationships_with_context(
                 body, metadata, entities
             )
@@ -410,6 +423,26 @@ class ExtractionPipeline:
             answer = pair["answer"]
             tags = pair.get("tags", [])
 
+            # QA pairs are converted into claim dicts with trust tags.
+            # Question = extracted (direct user utterance).
+            # Answer = inferred (derivation from the conversation).
+            qa_claims = [
+                {
+                    "text": question,
+                    "source_ref": "qa_question",
+                    "confidence": 1.0,
+                    "page_id": parent_page_id,
+                    "trust_tag": "extracted",
+                },
+                {
+                    "text": answer,
+                    "source_ref": "qa_answer_derivation",
+                    "confidence": 0.7,
+                    "page_id": parent_page_id,
+                    "trust_tag": "inferred",
+                },
+            ]
+
             # Generate a collision-free id scoped to the domain pages dir.
             def _collision_check(candidate: str) -> bool:
                 return (active_dir / f"{candidate}.md").exists()
@@ -434,6 +467,7 @@ class ExtractionPipeline:
                 created_at=now,
                 status="draft",
                 confidence=0.6,
+                claims=qa_claims,
             )
 
             # Body mirrors the answer as readable markdown. Schema holds the
@@ -473,3 +507,73 @@ class ExtractionPipeline:
                 results[domain_id] = stats
 
         return results
+
+    # ── Trust-tag helpers ───────────────────────────────────────────────────
+
+    def _trust_tag_claims(self, claims: list[ClaimExtraction], body: str) -> list[ClaimExtraction]:
+        """Mutate ``trust_tag`` on each ``ClaimExtraction`` in-place.
+
+        Returns the same list (mutated) for ergonomic chaining.
+        """
+        from llm_wiki.ingest.trust_tag import classify_claim_provenance
+
+        for ce in claims:
+            ce.trust_tag = classify_claim_provenance(body, ce.claim, ce.source_reference)
+        return claims
+
+    # ── Heuristic claim extraction ──────────────────────────────────────────
+
+    def _heuristic_extract_claims(self, content: str, page_id: str) -> list[dict[str, Any]]:
+        """Split content into sentences and produce ``ClaimExtraction`` dicts.
+
+        Used when LLM extraction is disabled.  Each sentence becomes a claim
+        tagged via the deterministic heuristic.
+        """
+        from llm_wiki.ingest.trust_tag import classify_claim_provenance
+
+        # Split on sentence-level boundaries (. ! ?) that end a paragraph.
+        blocks = _re_lib.split(r"(?<=[.!?])\s+", content)
+        claim_extractions: list[ClaimExtraction] = []
+        for block in blocks:
+            text = block.strip()
+            if not text:
+                continue
+            # Skip markdown headings and very short bare list markers.
+            if text.startswith("#"):
+                continue
+            if text.startswith("- ") and len(text) < 50:
+                # Loose list marker or metadata — skip; longer bullets
+                # may contain substantive content worth extracting.
+                continue
+            if len(text.split()) < 3:
+                continue
+            ce = ClaimExtraction(
+                claim=text,
+                source_reference="heuristic split",
+                confidence=0.7,
+            )
+            ce.trust_tag = classify_claim_provenance(content, text, "heuristic split")
+            claim_extractions.append(ce)
+
+        # Cap claim count to avoid bloated frontmatter on long pages.
+        max_claims = 20
+        extracted = [
+            {
+                "text": c.claim,
+                "source_ref": c.source_reference,
+                "confidence": c.confidence,
+                "page_id": page_id,
+                "trust_tag": c.trust_tag,
+                "temporal_context": c.temporal_context,
+                "qualifiers": c.qualifiers,
+            }
+            for c in claim_extractions[:max_claims]
+        ]
+        if len(claim_extractions) > max_claims:
+            logger.warning(
+                "Trimmed %d heuristic claims to %d for page %s (page may be long)",
+                len(claim_extractions),
+                max_claims,
+                page_id,
+            )
+        return extracted

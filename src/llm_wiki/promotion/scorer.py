@@ -52,7 +52,10 @@ class PromotionScorer:
             title = metadata.get("title", page_id)
 
             # Get quality score
-            quality_report = self.quality_scorer.score_page(page_path)
+            quality_report = self.quality_scorer.score_page(
+                page_path,
+                llm_extraction_enabled=self.config.llm_extraction_enabled,
+            )
             quality_score = quality_report.score
 
             # Skip if below minimum quality
@@ -159,7 +162,12 @@ class PromotionScorer:
                 if self._is_shared_page(page_id):
                     continue
 
-                candidate = self.score_page(page_id, page_file, domain_id)
+                try:
+                    candidate = self.score_page(page_id, page_file, domain_id)
+                except Exception as e:
+                    logger.warning("Failed to score %s: %s", page_id, e)
+                    continue
+
                 if candidate:
                     candidates.append(candidate)
 

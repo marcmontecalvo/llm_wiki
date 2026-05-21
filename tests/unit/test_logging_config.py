@@ -19,13 +19,12 @@ def daemon_config() -> DaemonConfig:
 def reset_logging():
     """Reset logging configuration after each test to avoid interference."""
     yield
-    # Clean up after test
+    # Clean up after test — close file handles to avoid ResourceWarning
     root_logger = logging.getLogger()
-    # Remove all non-pytest handlers
     for handler in root_logger.handlers[:]:
         if handler.__class__.__name__ != "LogCaptureHandler":
+            handler.close()
             root_logger.removeHandler(handler)
-    # Reset level
     root_logger.setLevel(logging.WARNING)
 
 

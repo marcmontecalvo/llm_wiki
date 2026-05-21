@@ -10,7 +10,7 @@ import json
 import logging
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ class QueryLogEntry:
     domains: list[str]
     result_count: int
     confidence_avg: float | None = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def query_hash(self) -> str:
@@ -123,7 +123,7 @@ class QueryLogStore:
 
     def prune(self, retention_days: int = 90) -> int:
         """Delete rows older than retention_days. Returns number deleted."""
-        cutoff = (datetime.utcnow() - timedelta(days=retention_days)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=retention_days)).isoformat()
         try:
             with sqlite3.connect(self.db_path, check_same_thread=False) as conn:
                 cursor = conn.execute("DELETE FROM queries WHERE timestamp < ?", (cutoff,))

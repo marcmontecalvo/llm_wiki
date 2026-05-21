@@ -16,7 +16,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request
@@ -36,13 +36,13 @@ class DeepQueryJob:
     """In-memory deep query job tracker."""
 
     status: Literal["running", "complete", "failed"]
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     result: QueryResponse | None = None
 
     @property
     def is_expired(self) -> bool:
         """Return True if the job has exceeded its 5-minute TTL."""
-        return (datetime.utcnow() - self.created_at).total_seconds() > 300
+        return (datetime.now(UTC) - self.created_at).total_seconds() > 300
 
 
 def _page_to_result(page: dict[str, Any]) -> QueryResultItem:

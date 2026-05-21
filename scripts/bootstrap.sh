@@ -6,8 +6,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Use Python to parse domains from config/domains.yaml
-# Use uv run python to ensure dependencies are available
-DOMAINS=$(uv run python << 'EOF'
+# Use uv run python to ensure dependencies are available.
+# --project points uv to the pyproject.toml even when the
+# caller's cwd has no project file (e.g. pytest tmp_path).
+DOMAINS=$(uv run --project "$REPO_ROOT/pyproject.toml" python << 'EOF'
 import yaml
 from pathlib import Path
 

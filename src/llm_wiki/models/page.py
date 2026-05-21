@@ -25,6 +25,9 @@ class PageFrontmatter(BaseModel):
     relationships: list[dict[str, Any]] = Field(
         default_factory=list, description="Relationships to other pages/entities"
     )
+    claims: list[dict[str, Any]] = Field(
+        default_factory=list, description="Extracted claims with trust tags"
+    )
 
     @field_validator("id")
     @classmethod

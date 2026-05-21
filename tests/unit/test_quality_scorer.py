@@ -88,74 +88,64 @@ Short content.
         assert report.score == 0.0
         assert any("failed to parse" in i.lower() for i in report.issues)
 
-    def test_score_metadata_complete(self, scorer: QualityScorer):
-        """Test metadata scoring with complete metadata."""
+    def test_score_trust_tags_all_extracted(self, scorer: QualityScorer):
+        """Test trust tag scoring when all claims are extracted/inferred."""
         metadata: dict[str, Any] = {
-            "summary": "Test summary",
-            "tags": ["tag1", "tag2"],
-            "kind": "page",
-            "source": "https://example.com",
+            "claims": [
+                {"text": "Hello world", "trust_tag": "extracted"},
+                {"text": "Second claim", "trust_tag": "inferred"},
+            ]
         }
-        issues: list[str] = []
 
-        score = scorer._score_metadata(metadata, issues)
+        score = scorer._score_trust_tags(metadata)
 
-        assert score > 0.8
-        assert len(issues) == 0
+        assert score == 1.0
 
-    def test_score_metadata_incomplete(self, scorer: QualityScorer):
-        """Test metadata scoring with incomplete metadata."""
-        metadata: dict[str, Any] = {"title": "Test"}
-        issues: list[str] = []
+    def test_score_trust_tags_mixed(self, scorer: QualityScorer):
+        """Test trust tag scoring with mixed claim provenance."""
+        metadata: dict[str, Any] = {
+            "claims": [
+                {"text": "Hello world", "trust_tag": "extracted"},
+                {"text": "Ambiguous one", "trust_tag": "ambiguous"},
+                {"text": "Clear fact", "trust_tag": "extracted"},
+            ]
+        }
 
-        score = scorer._score_metadata(metadata, issues)
+        score = scorer._score_trust_tags(metadata)
 
-        assert score < 0.7
-        assert len(issues) > 0
+        assert abs(score - 2 / 3) < 0.01
 
-    def test_score_content_good(self, scorer: QualityScorer):
-        """Test content scoring with good content."""
-        content = (
-            """
-# Heading
+    def test_score_trust_tags_no_claims(self, scorer: QualityScorer):
+        """Test trust tag scoring returns 0.5 with no claims."""
+        metadata: dict[str, Any] = {}
 
-This is a well-structured page with good length.
+        score = scorer._score_trust_tags(metadata)
 
-- Bullet point 1
-- Bullet point 2
+        assert score == 0.5
 
-## Another Heading
+    def test_score_source_count_no_sources(self, scorer: QualityScorer):
+        """Test source count scoring with no sources."""
+        metadata: dict[str, Any] = {}
 
-More content to reach the minimum length threshold.
-"""
-            * 3
-        )
-        issues: list[str] = []
+        score = scorer._score_source_count(metadata)
 
-        score = scorer._score_content(content, issues)
+        assert score == 0.0
 
-        assert score > 0.7
-        assert len(issues) == 0
+    def test_score_source_count_single_source(self, scorer: QualityScorer):
+        """Test source count scoring with one source."""
+        metadata: dict[str, Any] = {"sources": ["http://example.com"]}
 
-    def test_score_content_short(self, scorer: QualityScorer):
-        """Test content scoring with short content."""
-        content = "Short"
-        issues: list[str] = []
+        score = scorer._score_source_count(metadata)
 
-        score = scorer._score_content(content, issues)
+        assert score == 0.5
 
-        assert score < 0.5
-        assert any("short" in i.lower() for i in issues)
+    def test_score_source_count_multiple_sources(self, scorer: QualityScorer):
+        """Test source count scoring with two+ sources."""
+        metadata: dict[str, Any] = {"sources": ["http://a.com", "http://b.com"]}
 
-    def test_score_content_no_structure(self, scorer: QualityScorer):
-        """Test content scoring with no structure."""
-        content = "Plain text without any headings or lists." * 20
-        issues: list[str] = []
+        score = scorer._score_source_count(metadata)
 
-        scorer._score_content(content, issues)
-
-        assert any("heading" in i.lower() for i in issues)
-        assert any("list" in i.lower() for i in issues)
+        assert score == 1.0
 
     def test_score_recency_updated(self, scorer: QualityScorer):
         """Test recency scoring for updated page."""

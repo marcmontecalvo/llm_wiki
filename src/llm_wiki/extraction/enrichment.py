@@ -108,16 +108,16 @@ class PageEnricher:
         if relationships:
             existing_rels = merged.get("relationships", [])
             # Deduplicate by source/target/relationship_type
-            seen = set()
+            seen: set[tuple[str, str, str]] = set()
             all_rels = list(existing_rels)
             for rel in relationships:
-                key = (
-                    rel.get("source_entity", ""),
-                    rel.get("relationship_type", ""),
-                    rel.get("target_entity", ""),
+                rel_key: tuple[str, str, str] = (
+                    str(rel.get("source_entity", "")),
+                    str(rel.get("relationship_type", "")),
+                    str(rel.get("target_entity", "")),
                 )
-                if key not in seen:
-                    seen.add(key)
+                if rel_key not in seen:
+                    seen.add(rel_key)
                     all_rels.append(rel)
             merged["relationships"] = all_rels[:15]  # Max 15 relationships
 

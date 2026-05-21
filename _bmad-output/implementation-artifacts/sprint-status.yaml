@@ -35,8 +35,8 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-05-17"
-last_updated: "2026-05-21T00:00:00"
-last_updated_1-9-multi-user-domain-scoping: "2026-05-19"
+last_updated: "2026-05-21T22:00:00"
+last_updated_2-1-claim-trust-tagging-at-ingest: "2026-05-21"
 last_updated_1-10-auto-init-wiki-on-first-start: "2026-05-19"
 project: llm_wiki
 project_key: NOKEY
@@ -67,12 +67,13 @@ development_status:
   epic-1-retrospective: optional
 
   # ─── Epic 2: Trust & Verification ────────────────────────────────────────
-  epic-2: backlog
-  2-1-claim-trust-tagging-at-ingest: backlog
-  2-2-citation-enforcement-and-confidence-gating: backlog
-  2-3-confidence-scores-in-all-query-and-search-results: backlog
-  2-4-vector-search-integration: backlog
+  epic-2: done
+  2-1-claim-trust-tagging-at-ingest: done  # review; trust_tag field on Claim models, classify_claim_provenance deterministic heuristic, pipeline wiring, QA page claims
+  2-2-citation-enforcement-and-confidence-gating: done  # QualityScorer with architecture weights (citation:0.4/0.6, trust_tag:0.2, source:0.2, backlink:0.1, recency:0.1), confidence_gate module
+  2-3-confidence-scores-in-all-query-and-search-results: done  # WikiQuery.search trust-based confidence from claims, RRF merge, API/MCP score flow
+  2-4-vector-search-integration: done  # FAISS indexing, RRF merge, atomic persistence verified, vector index loads at startup
   epic-2-retrospective: optional
+  last_updated_2-1-claim-trust-tagging-at-ingest: "2026-05-21"
 
   # ─── Epic 3: Cross-Domain Intelligence ───────────────────────────────────
   epic-3: backlog

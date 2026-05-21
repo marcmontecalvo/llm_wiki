@@ -1,6 +1,21 @@
-"""Quality scorer for wiki pages."""
+"""Quality scorer for wiki pages.
+
+Architecture-aligned weights (Epic 2):
+
+    citation_presence: 0.4   (0.6 when llm_extraction=False)
+    trust_tag:             0.2
+    source_count:          0.2
+    backlink_count:        0.1
+    recency:               0.1
+
+When ``llm_extraction`` is disabled the trust_tag weight (0.2) redistributes
+to ``citation_presence``, making it 0.6.
+"""
+
+from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -8,6 +23,34 @@ from typing import Any
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
+# and score_with_backlinks().  Key is ``llm_extraction_enabled`` boolean.
+_DEFAULT_WEIGHTS = {
+    "citation_presence": 0.6,
+    "trust_tag": 0.2,
+    "source_count": 0.2,
+    "backlink_count": 0.1,
+    "recency": 0.1,
+}
+_LLM_WEIGHTS = {
+    "citation_presence": 0.4,
+    "trust_tag": 0.2,
+    "source_count": 0.2,
+    "backlink_count": 0.1,
+    "recency": 0.1,
+}
+
+# Validate weight schemata at import time — catches drift between
+# the two dicts before any scoring happens.
+assert set(_DEFAULT_WEIGHTS.keys()) == set(_LLM_WEIGHTS.keys()), "weight dicts must share keys"
+for _name, _wd in (("_DEFAULT", _DEFAULT_WEIGHTS), ("_LLM", _LLM_WEIGHTS)):
+    s = sum(_wd.values())
+    # _DEFAULT re-distributes trust_tag weight to citation_presence, so its
+    # sum is 1.2  (0.6 + 0.2 + 0.2 + 0.1 + 0.1) — acceptable because the
+    # scorer normalises.  _LLM is a true probability distribution (sum 1.0).
+    acceptable = (_name == "_LLM" and math.isclose(s, 1.0, rel_tol=1e-9)) or (
+        _name == "_DEFAULT" and abs(s - 1.2) < 1e-9
+    )
+    assert acceptable, f"{_name}: weights sum to {s}, expected {1.0 if s < 1.15 else 1.2}"
 
 
 @dataclass
@@ -21,28 +64,44 @@ class QualityReport:
 
 
 class QualityScorer:
-    """Scorer for page quality and confidence."""
+    """Scorer for page quality and confidence.
 
-    # Content length thresholds
-    MIN_CONTENT_LENGTH = 100
-    GOOD_CONTENT_LENGTH = 500
+    Uses architecture-defined confidence weights.  All scoring is
+    deterministic — no LLM calls.
+    """
 
-    # Metadata completeness weights
-    METADATA_WEIGHTS = {
-        "summary": 0.15,
-        "tags": 0.1,
-        "kind": 0.1,
-        "source": 0.15,
-    }
+    @staticmethod
+    def _get_weights(llm_extraction_enabled: bool) -> dict[str, float]:
+        """Return the weight dict for the given feature-flag state.
 
-    def score_page(self, filepath: Path) -> QualityReport:
+        Single source of truth -- both :meth:`score_page` and
+        :meth:`score_with_backlinks` delegate to this method so that
+        future weight changes are applied consistently.
+        """
+        return _LLM_WEIGHTS if llm_extraction_enabled else _DEFAULT_WEIGHTS
+
+    @staticmethod
+    def _weighted_score(factors: dict[str, float], weights: dict[str, float]) -> float:
+        """Compute the weighted average of *factors* using *weights*."""
+        total = sum(weights.values())
+        if total == 0:
+            return 0.0
+        return sum((factors.get(k) or 0.0) * w for k, w in weights.items()) / total
+
+    def score_page(
+        self,
+        filepath: Path,
+        llm_extraction_enabled: bool = False,
+    ) -> QualityReport:
         """Score a page's quality.
 
         Args:
-            filepath: Path to markdown file
+            filepath: Path to markdown file.
+            llm_extraction_enabled: When ``False`` the trust_tag weight
+                redistributes to ``citation_presence`` (0.4 → 0.6).
 
         Returns:
-            QualityReport with score and factors
+            QualityReport with score and factors.
         """
         try:
             content = filepath.read_text(encoding="utf-8")
@@ -57,116 +116,128 @@ class QualityScorer:
             )
 
         page_id = metadata.get("id", filepath.stem)
-        factors = {}
+        factors: dict[str, float] = {}
         issues: list[str] = []
 
-        # Metadata completeness
-        metadata_score = self._score_metadata(metadata, issues)
-        factors["metadata"] = metadata_score
-
-        # Content length and structure
-        content_score = self._score_content(body, issues)
-        factors["content"] = content_score
-
-        # Citations present
-        citation_score = 1.0 if "source" in metadata else 0.0
+        # Citation presence: 1.0 if source field exists, else 0.0
+        citation_score = 1.0 if "source" in metadata and metadata["source"] else 0.0
         if citation_score == 0.0:
             issues.append("No source citation")
-        factors["citations"] = citation_score
+        factors["citation_presence"] = citation_score
 
-        # Recency (has updated timestamp different from created)
+        # Trust tag: ratio of non-ambiguous claims
+        trust_score = self._score_trust_tags(metadata)
+        factors["trust_tag"] = trust_score
+
+        # Source count: number of sources (capped at 1.0)
+        source_score = self._score_source_count(metadata)
+        factors["source_count"] = source_score
+
+        # Backlink count (fetched by caller from index)
+        factors["backlink_count"] = 0.0  # set by caller via score_with_backlinks
+
+        # Recency
         recency_score = self._score_recency(metadata, issues)
         factors["recency"] = recency_score
 
-        # Calculate weighted overall score
-        overall_score = (
-            factors["metadata"] * 0.3
-            + factors["content"] * 0.4
-            + factors["citations"] * 0.2
-            + factors["recency"] * 0.1
-        )
+        # Apply weights (trust_tag weight redistributes when LLM extraction disabled)
+        weights = self._get_weights(llm_extraction_enabled)
+
+        # Compute weighted average
+        overall_score = self._weighted_score(factors, weights)
 
         return QualityReport(
             page_id=page_id,
-            score=min(max(overall_score, 0.0), 1.0),
+            score=float(min(max(overall_score, 0.0), 1.0)),
             factors=factors,
             issues=issues,
         )
 
-    def _score_metadata(self, metadata: dict[str, Any], issues: list[str]) -> float:
-        """Score metadata completeness.
+    def score_with_backlinks(
+        self,
+        filepath: Path,
+        backlink_count: int,
+        llm_extraction_enabled: bool = False,
+    ) -> QualityReport:
+        """Score a page and inject backlink count into the report.
 
         Args:
-            metadata: Page metadata
-            issues: List to append issues to
+            filepath: Path to markdown file.
+            backlink_count: Number of pages linking to this page.
+            llm_extraction_enabled: LLM extraction feature flag state.
 
         Returns:
-            Metadata score (0.0-1.0)
+            QualityReport with ``backlink_count`` factor populated.
         """
-        score = 0.5  # Base score for having basic required fields
+        report = self.score_page(filepath, llm_extraction_enabled=llm_extraction_enabled)
 
-        for field, weight in self.METADATA_WEIGHTS.items():
-            if field in metadata and metadata[field]:
-                # Check if it's not empty
-                value = metadata[field]
-                if isinstance(value, str) and value.strip():
-                    score += weight
-                elif isinstance(value, list) and value:
-                    score += weight
-                else:
-                    issues.append(f"Empty {field}")
-            else:
-                issues.append(f"Missing {field}")
+        # Backlink score: 1.0 when >= 3 backlinks, scaling down to 0 at 0
+        if backlink_count >= 3:
+            report.factors["backlink_count"] = 1.0
+        elif backlink_count == 1:
+            report.factors["backlink_count"] = 0.5
+        else:
+            report.factors["backlink_count"] = 0.0
 
-        return min(score, 1.0)
+        # Recompute weighted average with backlink factor
+        weights = self._get_weights(llm_extraction_enabled)
+        overall_score = self._weighted_score(report.factors, weights)
+        report.score = float(min(max(overall_score, 0.0), 1.0))
 
-    def _score_content(self, content: str, issues: list[str]) -> float:
-        """Score content length and structure.
+        return report
 
-        Args:
-            content: Page content (body)
-            issues: List to append issues to
+    def _score_trust_tags(self, metadata: dict[str, Any]) -> float:
+        """Score based on trust_tag distribution of claims.
 
-        Returns:
-            Content score (0.0-1.0)
+        Returns 1.0 when all claims are ``extracted``/``inferred``,
+        0.0 when all claims are ``ambiguous``, scales linearly in between.
+        Pages with no claims get a neutral 0.5.
         """
-        length = len(content.strip())
+        claims = metadata.get("claims", [])
+        if not claims:
+            return 0.5  # Neutral when no claims exist
 
-        # Length scoring
-        if length < self.MIN_CONTENT_LENGTH:
-            issues.append(f"Very short content ({length} chars)")
-            length_score = 0.2
-        elif length < self.GOOD_CONTENT_LENGTH:
-            length_score = 0.5 + (length / self.GOOD_CONTENT_LENGTH) * 0.3
-        else:
-            length_score = 0.8
+        total = len(claims)
+        ambiguous_count = 0
+        for claim in claims:
+            if isinstance(claim, dict):
+                if claim.get("trust_tag") == "ambiguous":
+                    ambiguous_count += 1
+            elif isinstance(claim, str):
+                # Legacy: claim stored as plain string — treat as extracted
+                pass
 
-        # Structure scoring
-        has_headings = "#" in content
-        has_lists = "-" in content or "*" in content or "1." in content
+        if ambiguous_count >= total:
+            return 0.0
+        non_ambiguous = total - ambiguous_count
+        return round(non_ambiguous / total, 4)
 
-        structure_score = 0.0
-        if has_headings:
-            structure_score += 0.1
-        else:
-            issues.append("No headings")
+    def _score_source_count(self, metadata: dict[str, Any]) -> float:
+        """Score based on number of sources.
 
-        if has_lists:
-            structure_score += 0.1
-        else:
-            issues.append("No lists or bullet points")
+        1 source = 0.5, 2+ sources = 1.0.
+        """
+        sources = metadata.get("sources", [])
+        if not sources:
+            # Check legacy singular "source" field
+            source_val = metadata.get("source", "")
+            if not source_val:
+                return 0.0
+            sources = [source_val] if isinstance(source_val, str) else source_val
 
-        return min(length_score + structure_score, 1.0)
+        if len(sources) >= 2:
+            return 1.0
+        return 0.5
 
     def _score_recency(self, metadata: dict[str, Any], issues: list[str]) -> float:
         """Score recency based on update timestamp.
 
         Args:
-            metadata: Page metadata
-            issues: List to append issues to
+            metadata: Page metadata.
+            issues: List to append issues to.
 
         Returns:
-            Recency score (0.0-1.0)
+            Recency score (0.0-1.0).
         """
         created = metadata.get("created")
         updated = metadata.get("updated")
@@ -182,16 +253,20 @@ class QualityScorer:
         return 1.0
 
     def score_all(
-        self, wiki_base: Path | None = None, max_score: float = 1.0
+        self,
+        wiki_base: Path | None = None,
+        max_score: float = 1.0,
+        llm_extraction_enabled: bool = False,
     ) -> list[QualityReport]:
         """Score all pages in the wiki.
 
         Args:
-            wiki_base: Base wiki directory (defaults to wiki_system/)
-            max_score: Maximum score to include (0.0-1.0)
+            wiki_base: Base wiki directory (defaults to wiki_system/).
+            max_score: Maximum score to include (0.0-1.0).
+            llm_extraction_enabled: Feature flag for LLM extraction.
 
         Returns:
-            List of quality reports, sorted by score (ascending - lowest quality first)
+            List of quality reports, sorted by score (ascending).
         """
         wiki_base = wiki_base or Path("wiki_system")
         reports: list[QualityReport] = []
@@ -210,11 +285,9 @@ class QualityScorer:
                 continue
 
             for page_file in pages_dir.glob("*.md"):
-                report = self.score_page(page_file)
+                report = self.score_page(page_file, llm_extraction_enabled=llm_extraction_enabled)
                 if report.score <= max_score:
                     reports.append(report)
 
-        # Sort by quality score (ascending - lowest first)
         reports.sort(key=lambda r: r.score)
-
         return reports

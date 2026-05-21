@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from starlette.status import HTTP_404_NOT_FOUND, HTTP_422_UNPROCESSABLE_ENTITY
+from starlette.status import HTTP_404_NOT_FOUND, HTTP_422_UNPROCESSABLE_CONTENT
 
 from llm_wiki.api.models import IngestRequest, IngestStatusResponse
 from llm_wiki.api.user_jobs import UserJobStore
@@ -62,7 +62,7 @@ async def submit_ingest(
 
     if not req.content and not source_path:
         raise HTTPException(
-            status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "error_code": "INVALID_REQUEST",
                 "message": "Either content or source_path must be provided",

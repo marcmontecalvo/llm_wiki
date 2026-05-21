@@ -21,6 +21,10 @@ class PromotionConfig(BaseModel):
     require_approval: bool = Field(
         default=True, description="Whether promotion requires manual approval via review queue"
     )
+    llm_extraction_enabled: bool = Field(
+        default=False,
+        description="Whether LLM claim extraction is enabled (affects weight redistribution)",
+    )
 
     # Scoring weights
     cross_domain_ref_weight: float = Field(

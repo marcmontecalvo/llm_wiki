@@ -112,6 +112,7 @@ def setup_logging(
     for handler in root_logger.handlers[:]:
         # Preserve pytest's LogCaptureHandler
         if handler.__class__.__name__ != "LogCaptureHandler":
+            handler.close()
             root_logger.removeHandler(handler)
 
     # Add our handlers
