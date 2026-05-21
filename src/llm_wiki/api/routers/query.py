@@ -187,6 +187,7 @@ async def _run_deep_query(
             timed_out=result.timed_out,
             partial=result.partial,
             was_heuristic=result.was_heuristic,
+            status="timed_out" if result.timed_out else "done",
         )
 
         job = state.deep_jobs.get(job_id)  # type: ignore[attr-defined]

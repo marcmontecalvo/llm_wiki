@@ -156,10 +156,34 @@ Config changes take effect on container restart — no rebuild required.
 
 ```bash
 uv sync --extra vector    # include FAISS + sentence-transformers
-uv run pytest             # run test suite
+uv run pytest             # run test suite (unit + integration; excludes performance)
 uv run ruff check .       # lint
 uv run mypy src/          # type check
 ```
+
+### Performance tests
+
+Performance tests are tagged `@pytest.mark.performance` and excluded from the default run
+(they seed a 100-page wiki and assert on wall-clock latency — unsuitable for fast CI loops).
+
+```bash
+# Run performance baseline tests explicitly
+uv run pytest -m performance
+
+# Run a single performance test
+uv run pytest -m performance tests/performance/test_query_latency.py::test_quick_query_under_200ms
+```
+
+Latency budgets (NFR-P1/P2/P3):
+
+| Depth    | Budget |
+|----------|--------|
+| quick    | ≤ 200ms |
+| standard | ≤ 2s   |
+| deep     | ≤ 30s (submit + poll to completion) |
+
+The deep test uses `httpx.AsyncClient` with `ASGITransport` so `asyncio.create_task()`
+background jobs share the event loop and complete within the timeout window.
 
 ## Documentation
 

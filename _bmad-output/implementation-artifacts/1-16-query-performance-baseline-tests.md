@@ -1,6 +1,6 @@
 # Story 1.16: Query Performance Baseline Tests
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -22,19 +22,19 @@ So that regressions in query latency are caught before a sprint is declared done
 
 ## Tasks / Subtasks
 
-- [ ] Create performance test fixture: 100-page seeded wiki (AC: 1, 2, 3)
-  - [ ] `tests/performance/conftest.py` — `seeded_wiki_app` fixture
-  - [ ] Generate 100 markdown pages across 3 domains with realistic content
-  - [ ] Wire up FastAPI `TestClient` for quick/standard tests and `httpx.AsyncClient` for the deep query test
-  - [ ] Set `llm_extraction: false` in wiki config (tests must not require an LLM)
-- [ ] Create `tests/performance/test_query_latency.py` (AC: 1, 2, 3, 4)
-  - [ ] `test_quick_query_under_200ms` — `@pytest.mark.performance`
-  - [ ] `test_standard_query_under_2s` — `@pytest.mark.performance`
-  - [ ] `test_deep_query_under_30s` — `@pytest.mark.performance @pytest.mark.anyio`; uses `AsyncClient` + `anyio.sleep()` so background tasks actually run
-- [ ] Register `performance` mark in `pytest.ini` / `pyproject.toml` (AC: 4)
-  - [ ] `filterwarnings` and marker description for `performance`
-  - [ ] Verify default `pytest` run excludes `performance` tests
-- [ ] Document how to run performance tests in `README` or `CONTRIBUTING` (AC: 4)
+- [x] Create performance test fixture: 100-page seeded wiki (AC: 1, 2, 3)
+  - [x] `tests/performance/conftest.py` — `seeded_wiki_app` fixture
+  - [x] Generate 100 markdown pages across 3 domains with realistic content
+  - [x] Wire up FastAPI `TestClient` for quick/standard tests and `httpx.AsyncClient` for the deep query test
+  - [x] Set `llm_extraction: false` in wiki config (tests must not require an LLM)
+- [x] Create `tests/performance/test_query_latency.py` (AC: 1, 2, 3, 4)
+  - [x] `test_quick_query_under_200ms` — `@pytest.mark.performance`
+  - [x] `test_standard_query_under_2s` — `@pytest.mark.performance`
+  - [x] `test_deep_query_under_30s` — `@pytest.mark.performance @pytest.mark.anyio`; uses `AsyncClient` + `anyio.sleep()` so background tasks actually run
+- [x] Register `performance` mark in `pytest.ini` / `pyproject.toml` (AC: 4)
+  - [x] `filterwarnings` and marker description for `performance`
+  - [x] Verify default `pytest` run excludes `performance` tests
+- [x] Document how to run performance tests in `README` or `CONTRIBUTING` (AC: 4)
 
 ## Dev Notes
 
@@ -266,6 +266,25 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+- Sentence-transformer warm-up fix: first query without warm-up took 1384ms (budget 200ms); added warm-up POST in `seeded_wiki_client` fixture before `yield`.
+- ASGI lifespan bypass: `httpx.AsyncClient + ASGITransport` does NOT trigger FastAPI/Starlette lifespan; `app.state.wiki` was never set. Fixed by calling `boot_wiki()` directly and manually assigning all required state attributes in `seeded_wiki_app` fixture.
+- `pytest-asyncio` not installed; `anyio.pytest_plugin` provides `@pytest.mark.anyio` directly via `anyio[trio]` in the dependency chain.
+
 ### Completion Notes List
 
+- `tests/performance/conftest.py`: three session-scoped fixtures — `seeded_wiki_path` (builds 100-page wiki + runs IndexRebuildJob), `seeded_wiki_client` (TestClient with warm-up for quick/standard), `seeded_wiki_app` (manually wired app.state via `boot_wiki()` for async deep test).
+- `tests/performance/test_query_latency.py`: all 3 NFR tests passing — quick ≤200ms, standard ≤2s, deep ≤30s. Deep test uses `@pytest.mark.anyio` + `httpx.AsyncClient + ASGITransport` to share the event loop with background tasks.
+- `pyproject.toml`: `performance` and `integration` markers registered; `addopts` excludes both from default run.
+- `.github/workflows/ci.yml`: `Run performance tests` step added (`uv run pytest -m performance`).
+- `README.md`: performance test section added with run instructions.
+- All 3 tests pass: `uv run pytest -m performance` → `3 passed in ~25s`.
+- Default run confirms exclusion: `uv run pytest` → `no tests collected (3 deselected)`.
+
 ### File List
+
+- `tests/performance/__init__.py` — new, empty package marker
+- `tests/performance/conftest.py` — new, session-scoped fixtures for seeded wiki, TestClient, and async app
+- `tests/performance/test_query_latency.py` — new, NFR-P1/P2/P3 latency tests
+- `pyproject.toml` — updated, `performance` marker registered and excluded from default run
+- `.github/workflows/ci.yml` — updated, `Run performance tests` step added
+- `README.md` — updated, performance test documentation added

@@ -97,8 +97,13 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "performance: marks tests as performance tests (deselect with '-m not performance')",
+    "integration: marks tests requiring external services (Docker, etc.)",
+]
 addopts = [
     "--strict-markers",
+    "-m", "not performance and not integration",
 ]
 
 [tool.coverage.run]

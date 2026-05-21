@@ -55,6 +55,16 @@ jobs:
       run: |
         uv run pytest --cov=src/llm_wiki --cov-report=xml --cov-report=term
 
+    - name: Run integration tests
+      # Integration tests start a real Docker container to verify NFR-O1 (cold start < 30s).
+      # Only runs on main pushes; PRs skip to avoid slow Docker builds on every commit.
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: uv run pytest -m integration --timeout=120
+
+    - name: Run performance tests
+      # Story 1.16: Query latency baselines — NFR-P1 (≤200ms quick), NFR-P2 (≤2s standard), NFR-P3 (≤30s deep)
+      run: uv run pytest -m performance
+
     - name: Check OpenAPI spec
       # Validates that docs/openapi.json matches the current app routes.
       # Fails CI if exported spec has drifted from the committed version.

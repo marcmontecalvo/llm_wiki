@@ -62,8 +62,8 @@ development_status:
   1-13-claude-code-hooks: done  # atomic write fix + test_hooks_install.py; review: empty-hooks cleanup + stderr + test fix; last_updated: 2026-05-20
   1-14-list-pages-time-filter: done  # updated_since filter in service+REST+MCP; tz-normalization fix in review; last_updated: 2026-05-20
   1-15-governance-cli-commands: done  # govern status/run/report + inbox/staging/ routing-failed; review: AC:9 domain injection fix + lock msg + _governance_lock refactor; last_updated: 2026-05-21
-  1-16-query-performance-baseline-tests: ready-for-dev
-  1-17-container-cold-start-test: ready-for-dev
+  1-16-query-performance-baseline-tests: review  # last_updated: 2026-05-21
+  1-17-container-cold-start-test: review  # tests/integration/test_cold_start.py; docker-compose WIKI_VOLUME env var; CI integration step; last_updated: 2026-05-21
   epic-1-retrospective: optional
 
   # ─── Epic 2: Trust & Verification ────────────────────────────────────────
