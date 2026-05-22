@@ -63,6 +63,7 @@ async def search(
                 domains=[domain] if domain else [],
                 result_count=len(results),
                 confidence_avg=confidence_avg,
+                synthesis_hit=False,
             )
             asyncio.create_task(asyncio.to_thread(store.log, entry))
         except Exception:

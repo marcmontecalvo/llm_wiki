@@ -180,6 +180,16 @@ def create_app() -> FastAPI:
     app.include_router(_pages.router)
     app.include_router(_export.router)
 
+    # Mount routers added in Story 3.4 (Synthesis Cache)
+    from llm_wiki.api.routers import synthesis as _synthesis  # noqa: E303
+
+    app.include_router(_synthesis.router)
+
+    # Mount routers added in Story 3.5 (Per-Domain Dashboards)
+    from llm_wiki.api.routers import dashboard as _dashboard  # noqa: E303
+
+    app.include_router(_dashboard.router)
+
     # Legacy inline health check endpoint (story 1.6 routes at /v1/health are primary)
 
     @app.get("/v1/health-legacy")

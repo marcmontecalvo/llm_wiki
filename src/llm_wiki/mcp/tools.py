@@ -21,6 +21,7 @@ from pathlib import Path
 from mcp.server.fastmcp.exceptions import ToolError
 
 from llm_wiki.api.errors import ERROR_MAP
+from llm_wiki.api.services.dashboard import get_domain_dashboard
 from llm_wiki.api.user_jobs import UserJobStore
 from llm_wiki.exceptions import (
     ExportNotReadyError,
@@ -477,5 +478,25 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
                 "media_type": media_type,
                 "last_modified": last_modified,
             }
+        except WikiError as e:
+            raise _handle_wiki_error(e) from e
+
+    @server.tool()
+    async def domain_dashboard(
+        domain: str,
+    ) -> dict:
+        """Get a per-domain health dashboard.
+
+        Returns page count, confidence distribution histogram,
+        recent changes, low confidence count, stale count,
+        and last governance run status.
+
+        Args:
+            domain: Domain identifier (e.g. 'general', 'nlp').
+        """
+        try:
+            wiki_root = wiki.wiki_base
+            result = get_domain_dashboard(domain, wiki_root)
+            return result.model_dump()
         except WikiError as e:
             raise _handle_wiki_error(e) from e

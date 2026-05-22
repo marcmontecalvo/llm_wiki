@@ -136,8 +136,15 @@ class WikiDaemon:
 
         # Register synthesis cache job (Sprint 3 — gated by feature flag)
         if self.config.daemon.daemon.features.synthesis_cache:
-            # SynthesisCacheJob will be implemented in Sprint 3
-            logger.info("synthesis_cache job is enabled but not yet implemented")
+            from llm_wiki.daemon.jobs.synthesis_cache import run_synthesis_cache_job
+
+            self.scheduler.add_job(
+                func=run_synthesis_cache_job,
+                job_name="synthesis_cache",
+                interval_seconds=6 * 3600,  # 6-hour interval
+                wiki_base=wiki_base,
+            )
+            logger.info("Registered synthesis_cache job (every 6h)")
 
         # Register retry failed ingests job
         from llm_wiki.daemon.jobs.retry_failed_ingests import run_retry_failed_ingests

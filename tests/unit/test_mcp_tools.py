@@ -2,7 +2,7 @@
 
 Tools are registered with a mock WikiQuery and UserJobStore.
 Tests verify:
-  - All 7 tools are registered
+  - All 8 tools are registered
   - Tool parameters match expected names
   - WikiError translation to MCP ToolError
   - Tool call behavior with mocked wiki
@@ -60,8 +60,8 @@ def _make_mock_wiki(**overrides: object) -> MagicMock:
 # ── tools-list tests ──────────────────────────────────────────────
 
 
-def test_tools_list_has_seven_tools(temp_dir: Path) -> None:
-    """AC1: tools/list returns all 7 tools."""
+def test_tools_list_has_eight_tools(temp_dir: Path) -> None:
+    """AC1: tools/list returns all 8 tools."""
     wiki = _make_mock_wiki()
     server = FastMCP("test")
     register_tools(server, wiki)
@@ -76,6 +76,16 @@ def test_tools_list_has_seven_tools(temp_dir: Path) -> None:
         "read_page",
         "list_pages",
         "export",
+    }
+    expected = {
+        "query",
+        "ingest",
+        "ingest_status",
+        "search",
+        "read_page",
+        "list_pages",
+        "export",
+        "domain_dashboard",
     }
     assert names == expected
 

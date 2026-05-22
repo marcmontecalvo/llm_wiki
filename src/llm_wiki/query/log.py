@@ -50,6 +50,7 @@ class QueryLogEntry:
     result_count: int
     confidence_avg: float | None = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    synthesis_hit: bool = False
 
     @property
     def query_hash(self) -> str:
@@ -99,24 +100,44 @@ class QueryLogStore:
             except Exception:
                 pass  # Never let metrics failures propagate
 
-    def stats(self) -> dict:
-        """Return row count, oldest entry, top 10 repeated queries."""
+    def stats(self, since: str | None = None) -> dict:
+        """Return row count, oldest entry, top 10 repeated queries.
+
+        Args:
+            since: Optional ISO8601 timestamp to filter rows. Only entries
+                   at or after this time are included.
+        """
         try:
             with sqlite3.connect(self.db_path, check_same_thread=False) as conn:
                 count = conn.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
                 oldest = conn.execute("SELECT MIN(timestamp) FROM queries").fetchone()[0]
-                top_queries = conn.execute(
-                    """SELECT query_text, COUNT(*) as hits
-                       FROM queries
-                       GROUP BY query_hash
-                       ORDER BY hits DESC
-                       LIMIT 10"""
-                ).fetchall()
-            return {
+
+                if since:
+                    top_queries = conn.execute(
+                        """SELECT query_text, COUNT(*) as hits, MAX(timestamp) as last_seen
+                           FROM queries
+                           WHERE timestamp >= ?
+                           GROUP BY query_hash
+                           ORDER BY hits DESC
+                           LIMIT 10""",
+                        (since,),
+                    ).fetchall()
+                else:
+                    top_queries = conn.execute(
+                        """SELECT query_text, COUNT(*) as hits, MAX(timestamp) as last_seen
+                           FROM queries
+                           GROUP BY query_hash
+                           ORDER BY hits DESC
+                           LIMIT 10"""
+                    ).fetchall()
+            result: dict = {
                 "total_rows": count,
                 "oldest_entry": oldest,
-                "top_queries": [{"query": q, "hits": h} for q, h in top_queries],
+                "top_queries": [
+                    {"query": q, "hits": h, "last_seen": ls} for q, h, ls in top_queries
+                ],
             }
+            return result
         except Exception as e:
             logger.error("Failed to get query log stats: %s", e)
             return {"error": str(e)}

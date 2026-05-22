@@ -70,6 +70,7 @@ async def _log_query(
     result_count: int,
     confidence_avg: float | None,
     domain: str | None = None,
+    synthesis_hit: bool = False,
 ) -> None:
     """Log a query to the query log (Story 1.12).
 
@@ -87,6 +88,7 @@ async def _log_query(
         domains=[domain] if domain else [],
         result_count=result_count,
         confidence_avg=confidence_avg,
+        synthesis_hit=synthesis_hit,
     )
     await asyncio.to_thread(store.log, entry)
 

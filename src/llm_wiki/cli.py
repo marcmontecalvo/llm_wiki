@@ -1656,6 +1656,137 @@ def govern_report(domain_filter: str | None, output_json: bool, wiki_base: Path)
             click.echo(f"  {item['source_name']}  arrived={item['arrived_at']}")
 
 
+@govern.command("dashboard")
+@click.option("--domain", default=None, help="Domain to show dashboard for (default: all)")
+@click.option("--json", "output_json", is_flag=True, help="Emit machine-parseable JSON")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def govern_dashboard(domain: str | None, output_json: bool, wiki_base: Path):
+    """Show per-domain health dashboard."""
+    import json as _json
+
+    from llm_wiki.api.errors import ERROR_MAP
+    from llm_wiki.api.services.dashboard import (
+        DomainUnknownError,
+        _load_domains_config,
+        get_domain_dashboard,
+    )
+    from llm_wiki.exceptions import WikiError
+
+    domains_config = _load_domains_config(wiki_base)
+
+    data: dict = {}  # type: ignore[assignment]
+
+    if domain:
+        # Single dashboard
+        try:
+            response = get_domain_dashboard(domain, wiki_base)
+            data = {"domain": domain, "dashboard": response.model_dump()}
+        except DomainUnknownError:
+            click.echo(f"Error: Unknown domain: {domain}", err=True)
+            click.exit(1)
+        except WikiError as e:
+            _, http_code = ERROR_MAP.get(type(e), (500, "INTERNAL_ERROR"))
+            click.echo(f"Error: {http_code}: {e}", err=True)
+            click.exit(1)
+    else:
+        # All domains
+        domains_list = []
+        errors = []
+        for domain_id in sorted(domains_config.keys()):
+            try:
+                resp = get_domain_dashboard(domain_id, wiki_base)
+                domains_list.append({"domain": domain_id, "dashboard": resp.model_dump()})
+            except DomainUnknownError:
+                errors.append(domain_id)
+            except WikiError as e:
+                errors.append(f"{domain_id}: {e}")
+        data = {"domains": domains_list, "errors": errors}
+
+    if output_json:
+        if domain:
+            # Wrap single domain in same structure for consistency
+            output = {"domains": [data], "errors": []}
+        else:
+            output = data
+        click.echo(_json.dumps(output, indent=2))
+        return
+
+    if domain:
+        # Single domain print
+        cid = data["domain"]
+        dash = data["dashboard"]
+        if dash is None:
+            click.echo("No configuration for this domain.")
+            return
+
+        click.echo(f"\n=== Dashboard: {cid} ===")
+        click.echo(f"  Pages:              {dash['page_count']}")
+        cd = dash["confidence_distribution"]
+        click.echo(f"  Confidence dist:    low={cd['low']}  med={cd['medium']}  high={cd['high']}")
+        click.echo(f"  Low confidence (<0.3): {dash['low_confidence_count']}")
+        click.echo(f"  Stale pages:        {dash['stale_count']}")
+
+        gr = dash.get("last_governance_run")
+        if gr:
+            last_run = gr.get("last_run", "never")
+            outcome = gr.get("outcome", "unknown")
+            warnings = gr.get("warnings", 0)
+            click.echo(
+                f"  Last governance:    last={last_run}  outcome={outcome}  warnings={warnings}"
+            )
+
+        changes = dash.get("recent_changes", [])
+        if changes:
+            click.echo(f"  Recent changes ({len(changes)}):")
+            for c in changes[:5]:
+                click.echo(f"    [{c['change_type']:10}] {c['page_id']:40} {c['timestamp'][:10]}")
+        else:
+            click.echo("  Recent changes:     none")
+        return
+
+    else:
+        # All domains print
+        if not data["domains"]:
+            click.echo("No domains configured for dashboard.")
+            return
+        for item in data["domains"]:
+            cid = item["domain"]
+            dash = item["dashboard"]
+
+            click.echo(f"\n=== Dashboard: {cid} ===")
+            click.echo(f"  Pages:              {dash['page_count']}")
+            cd = dash["confidence_distribution"]
+            click.echo(
+                f"  Confidence dist:    low={cd['low']}  med={cd['medium']}  high={cd['high']}"
+            )
+            click.echo(f"  Low confidence (<0.3): {dash['low_confidence_count']}")
+            click.echo(f"  Stale pages:        {dash['stale_count']}")
+
+            gr = dash.get("last_governance_run")
+            if gr:
+                last_run = gr.get("last_run", "never")
+                outcome = gr.get("outcome", "unknown")
+                warnings = gr.get("warnings", 0)
+                click.echo(
+                    f"  Last governance:    last={last_run}  outcome={outcome}  warnings={warnings}"
+                )
+
+            changes = dash.get("recent_changes", [])
+            if changes:
+                click.echo(f"  Recent changes ({len(changes)}):")
+                for c in changes[:5]:
+                    click.echo(
+                        f"    [{c['change_type']:10}] {c['page_id']:40} {c['timestamp'][:10]}"
+                    )
+            else:
+                click.echo("  Recent changes:     none")
+
+
 @main.group()
 def claims():
     """Extract and query factual claims from wiki pages."""
