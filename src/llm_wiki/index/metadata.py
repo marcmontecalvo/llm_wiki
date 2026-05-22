@@ -271,13 +271,27 @@ class MetadataIndex:
         self.by_domain.clear()
         self.claims.clear()
 
+        # Index shared directory first (cross-domain entities)
+        shared_dir = wiki_base / "shared"
+        count = 0
+        if shared_dir.exists():
+            for page_file in shared_dir.glob("*.md"):
+                try:
+                    content = page_file.read_text(encoding="utf-8")
+                    metadata, _ = parse_frontmatter(content)
+                    page_id = metadata.get("id", page_file.stem)
+                    metadata.setdefault("domain", "shared")
+                    self.add_page(page_id, metadata)
+                    count += 1
+                except Exception as e:
+                    logger.error(f"Failed to index {page_file}: {e}")
+
         # Scan all domains
         domains_dir = wiki_base / "domains"
         if not domains_dir.exists():
             logger.warning(f"Domains directory not found: {domains_dir}")
-            return 0
+            return count
 
-        count = 0
         for domain_dir in domains_dir.iterdir():
             if not domain_dir.is_dir():
                 continue

@@ -122,6 +122,18 @@ class WikiDaemon:
                 config=self.config.daemon.daemon.promotion,
             )
 
+        # Register cross-domain summary generation job (Sprint 3 — gated by feature flag)
+        if self.config.daemon.daemon.features.cross_domain_summary:
+            from llm_wiki.daemon.jobs.summary import run_cross_domain_summary
+
+            self.scheduler.add_job(
+                func=run_cross_domain_summary,
+                job_name="cross_domain_summary",
+                interval_seconds=self.config.daemon.daemon.promotion_every_hours * 3600,
+                wiki_base=wiki_base,
+            )
+            logger.info("Registered cross_domain_summary job")
+
         # Register synthesis cache job (Sprint 3 — gated by feature flag)
         if self.config.daemon.daemon.features.synthesis_cache:
             # SynthesisCacheJob will be implemented in Sprint 3

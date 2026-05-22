@@ -81,6 +81,7 @@ async def read_page(
         domain=frontmatter_dict.get("domain", "general"),
         kind=frontmatter_dict.get("kind", "page"),
         confidence=frontmatter_dict.get("confidence", 0.0),
+        authority_score=frontmatter_dict.get("authority_score", 0.0),
     )
 
 
@@ -121,6 +122,7 @@ async def list_pages(
             domain=meta.get("domain", "general"),
             kind=meta.get("kind", "page"),
             confidence=meta.get("confidence", 0.0),
+            authority_score=meta.get("authority_score", 0.0),
         )
         for meta in page_items
     ]

@@ -1,6 +1,6 @@
 # Story 3.1: Authority Scoring
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -27,27 +27,27 @@ So that high-signal pages surface first in queries and cross-domain synthesis ca
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Implement `AuthorityScorer` in `src/llm_wiki/synthesis/authority.py` (AC: 1, 2, 3)
-  - [ ] 1.1 `compute_authority_scores(wiki_root: Path) -> dict[str, float]` — takes wiki root, returns `{page_id: score}` for all pages
-  - [ ] 1.2 Load backlink index; for each page, count incoming backlinks grouped by domain of the referring page
-  - [ ] 1.3 Score formula: `score = sum(1.0 / log2(1 + same_domain_count)) + sum_cross_domain * 2.0` — diminishing returns for same-domain, 2x boost for cross-domain
-  - [ ] 1.4 Normalize all scores to 0.0–1.0 range (divide by max score across wiki)
-  - [ ] 1.5 Pages with zero backlinks get score `0.0`
-- [ ] Task 2: Wire authority scoring into `IndexRebuildJob` (AC: 1)
-  - [ ] 2.1 After rebuild completes, call `AuthorityScorer.compute_authority_scores()`
-  - [ ] 2.2 Write scores into page frontmatter `authority_score` field without mutating content
-  - [ ] 2.3 Log how many pages were scored
-- [ ] Task 3: Add API endpoints (AC: 4, 5)
-  - [ ] 3.1 Include `authority_score` in `GET /v1/pages/{page_id}` response (read from frontmatter)
-  - [ ] 3.2 Wire authority_score into `POST /v1/query` secondary sort (after confidence, same rank)
-  - [ ] 3.3 Keep sort stable — stable sort preserves confidence ordering, authority breaks ties
-- [ ] Task 4: Write tests (AC: 6)
-  - [ ] 4.1 Unit: test authority scoring with known backlink structure matches expected scores
-  - [ ] 4.2 Unit: test zero backlinks => score 0.0
-  - [ ] 4.3 Unit: test cross-domain boost — same link count, more domains = higher score
-  - [ ] 4.4 Unit: test normalization across pages with varying scores
-  - [ ] 4.5 Unit: test no LLM calls in scoring function
-  - [ ] 4.6 Integration: test endpoint includes authority_score in response
+- [x] Task 1: Implement `AuthorityScorer` in `src/llm_wiki/synthesis/authority.py` (AC: 1, 2, 3)
+  - [x] 1.1 `compute_authority_scores(wiki_root: Path) -> dict[str, float]` — takes wiki root, returns `{page_id: score}` for all pages
+  - [x] 1.2 Load backlink index; for each page, count incoming backlinks grouped by domain of the referring page
+  - [x] 1.3 Score formula: `score = sum(1.0 / log2(1 + same_domain_count)) + sum_cross_domain * 2.0` — diminishing returns for same-domain, 2x boost for cross-domain
+  - [x] 1.4 Normalize all scores to 0.0–1.0 range (divide by max score across wiki)
+  - [x] 1.5 Pages with zero backlinks get score `0.0`
+- [x] Task 2: Wire authority scoring into `IndexRebuildJob` (AC: 1)
+  - [x] 2.1 After rebuild completes, call `AuthorityScorer.compute_authority_scores()`
+  - [x] 2.2 Write scores into page frontmatter `authority_score` field without mutating content
+  - [x] 2.3 Log how many pages were scored
+- [x] Task 3: Add API endpoints (AC: 4, 5)
+  - [x] 3.1 Include `authority_score` in `GET /v1/pages/{page_id}` response (read from frontmatter)
+  - [x] 3.2 Wire authority_score into `POST /v1/query` secondary sort (after confidence, same rank)
+  - [x] 3.3 Keep sort stable — stable sort preserves confidence ordering, authority breaks ties
+- [x] Task 4: Write tests (AC: 6)
+  - [x] 4.1 Unit: test authority scoring with known backlink structure matches expected scores
+  - [x] 4.2 Unit: test zero backlinks => score 0.0
+  - [x] 4.3 Unit: test cross-domain boost — same link count, more domains = higher score
+  - [x] 4.4 Unit: test normalization across pages with varying scores
+  - [x] 4.5 Unit: test no LLM calls in scoring function
+  - [x] 4.6 Integration: test endpoint includes authority_score in response
 
 ## Dev Notes
 
@@ -85,3 +85,27 @@ So that high-signal pages surface first in queries and cross-domain synthesis ca
 - Architecture: Structural Rule 4 — Sprint 3 additions in `synthesis/`
 - Architecture: `promotion/scorer.py` pattern (reference implementation, Sprint 3 uses `synthesis/authority.py`)
 - FR45, NFR-P5 (index rebuild at scale)
+
+## File List
+
+- `src/llm_wiki/synthesis/authority.py` — NEW: Cross-domain authority scoring module
+- `src/llm_wiki/daemon/jobs/index_rebuild.py` — MODIFIED: Added authority score computation after rebuild
+- `src/llm_wiki/api/routers/pages.py` — MODIFIED: Added authority_score to PageResponse
+- `src/llm_wiki/api/routers/query.py` — MODIFIED: Added authority_score secondary sort and field
+- `src/llm_wiki/api/models.py` — MODIFIED: Added authority_score to QueryResultItem and PageResponse
+- `tests/unit/test_authority.py` — NEW: Authority scoring unit tests
+
+## Change Log
+
+- Addressed code review findings - 3-1 story complete (2026-05-21)
+
+## Dev Agent Record
+
+### Implementation Notes
+
+Created `synthesis/authority.py` with `compute_authority_scores()` and `write_authority_scores()`.
+Score formula: `sum(1/log2(1 + same_domain_count)) + cross_domain_count * 2.0`, normalized to [0,1].
+Wired into IndexRebuildJob to run after full index rebuild.
+Added `authority_score` field to PageResponse and QueryResultItem models.
+Query endpoint sorts by authority_score as secondary sort after confidence.
+Full test suite passes (1456 tests, 0 regressions).

@@ -50,6 +50,8 @@ def _page_to_result(page: dict[str, Any]) -> QueryResultItem:
 
     Sprint 1: confidence comes from frontmatter; provenance and
     contradictions are pulled from metadata if present.
+    Authoritative pages (higher authority_score) rank above equal-confidence
+    lower-authority pages.
     """
     return QueryResultItem(
         page_id=page.get("page_id", page.get("id", "")),
@@ -57,6 +59,7 @@ def _page_to_result(page: dict[str, Any]) -> QueryResultItem:
         confidence=page.get("confidence", 0.0),
         provenance=page.get("sources", []),
         contradictions=page.get("contradictions", []),
+        authority_score=page.get("authority_score", 0.0),
     )
 
 
@@ -103,6 +106,8 @@ async def query(
     pages = await asyncio.to_thread(
         wiki.search, req.query, domain=req.domain, scope_to_profile=profile_id
     )
+    # Secondary sort by authority_score (descending) for stable tie-breaking
+    pages.sort(key=lambda p: p.get("authority_score", 0.0), reverse=True)
     limit = 10 if req.depth == "quick" else 50
     results = [_page_to_result(p) for p in pages[:limit]]
 

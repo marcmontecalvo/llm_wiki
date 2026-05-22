@@ -64,12 +64,28 @@ class IndexRebuildJob:
                 f"{backlink_count} backlinks, {graph_edge_count} graph edge pages"
             )
 
+            # Compute and write authority scores after indexes are rebuilt
+            from llm_wiki.synthesis.authority import (  # noqa: PLC0415
+                compute_authority_scores,
+                write_authority_scores,
+            )
+
+            raw_scores = compute_authority_scores(self.wiki_base)
+            scored = write_authority_scores(self.wiki_base, raw_scores)
+            logger.info(
+                "Authority scoring complete: computed %d scores, wrote %d pages",
+                len(raw_scores),
+                scored,
+            )
+
             return {
                 "metadata_pages": metadata_count,
                 "fulltext_documents": fulltext_count,
                 "vector_documents": vector_count,
                 "backlink_count": backlink_count,
                 "graph_edge_count": graph_edge_count,
+                "authority_scores_computed": len(raw_scores),
+                "pages_updated": scored,
                 "status": "success",
             }
 

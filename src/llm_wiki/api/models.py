@@ -112,6 +112,9 @@ class QueryResultItem(BaseModel):
     confidence: float = 0.0
     provenance: list[str] = Field(default_factory=list)
     contradictions: list[str] = Field(default_factory=list)
+    authority_score: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Authority score from backlink analysis"
+    )
 
 
 class QueryResponse(BaseModel):
@@ -155,6 +158,9 @@ class PageResponse(BaseModel):
     domain: str = ""
     kind: str = ""
     confidence: float = 0.0
+    authority_score: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Authority score from backlink analysis"
+    )
 
 
 class PageListResponse(BaseModel):

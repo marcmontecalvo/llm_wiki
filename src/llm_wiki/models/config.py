@@ -80,8 +80,11 @@ class PromotionConfig(BaseModel):
     min_quality_score: float = Field(
         default=0.6, ge=0.0, le=1.0, description="Minimum quality score for promotion eligibility"
     )
-    min_cross_domain_refs: int = Field(
-        default=2, ge=1, description="Minimum cross-domain references for promotion consideration"
+    min_domains: int = Field(
+        default=2, ge=1, description="Minimum distinct domains for cross-domain promotion"
+    )
+    min_confidence: float = Field(
+        default=0.6, ge=0.0, le=1.0, description="Minimum confidence for promotion eligibility"
     )
     require_approval: bool = Field(
         default=True, description="Whether promotion requires manual approval via review queue"
@@ -125,7 +128,15 @@ class FeaturesConfig(BaseModel):
     llm_extraction: bool = False
     synthesis_cache: bool = False
     cross_domain_promotion: bool = False
+    cross_domain_summary: bool = False
     # vector_search is NOT a flag — FAISS is a required dependency, always enabled
+
+
+class SummaryConfig(BaseModel):
+    """Configuration for cross-domain summary generation."""
+
+    enabled: bool = Field(default=True, description="Enable summary generation job")
+    top_n: int = Field(default=10, ge=1, description="Maximum claims to include in summary digest")
 
 
 class DaemonConfig(BaseModel):
@@ -182,6 +193,9 @@ class DaemonConfig(BaseModel):
     )
     synthesis_cache_log_retention_days: int = Field(
         default=90, ge=1, description="Days to retain query log entries"
+    )
+    summary: SummaryConfig = Field(
+        default_factory=SummaryConfig, description="Cross-domain summary generation config"
     )
     features: FeaturesConfig = Field(default_factory=FeaturesConfig, description="Feature flags")
 
