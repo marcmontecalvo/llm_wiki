@@ -95,14 +95,13 @@ async def list_pages(
     ),
     cursor: str | None = Query(default=None, description="Pagination cursor"),
     limit: int = Query(default=50, ge=1, le=200, description="Page size"),
+    include_archived: bool = Query(default=False, description="Include archived pages in results"),
     wiki: WikiQuery = Depends(get_wiki),
 ) -> PageListResponse:
     """List pages with cursor-based pagination and optional filters.
 
-    Reads from the MetadataIndex. The updated_since filter is applied in
-    the service layer (WikiQuery.list_pages) so REST and MCP share identical
-    semantics. FastAPI validates the datetime format and returns 422 automatically
-    for invalid strings.
+    Archived pages are excluded by default.  Set ``include_archived=true``
+    to include stale content in results.
     """
     page_items, next_cursor = await asyncio.to_thread(
         wiki.list_pages,
@@ -111,6 +110,7 @@ async def list_pages(
         updated_since=updated_since,
         cursor=cursor,
         limit=limit,
+        include_archived=include_archived,
     )
 
     results = [

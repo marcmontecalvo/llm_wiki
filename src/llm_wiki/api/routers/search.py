@@ -26,12 +26,14 @@ async def search(
     q: str = Query(..., description="Search query text"),
     domain: str | None = Query(default=None, description="Optional domain filter"),
     limit: int = Query(default=10, ge=1, le=100, description="Max results"),
+    include_archived: bool = Query(default=False, description="Include archived pages in results"),
     wiki: WikiQuery = Depends(get_wiki),
     profile_id: str | None = Depends(get_profile_id),
 ) -> SearchResponse:
     """Search the wiki — merged full-text + vector results.
 
-    Vector search is always active; there is no feature flag.
+    Archived pages are excluded by default.  Set ``include_archived=true``
+    to include stale content in results.
     """
     # Search runs synchronously inside the indexing libs -> offload to thread.
     pages = await asyncio.to_thread(
@@ -40,6 +42,7 @@ async def search(
         domain=domain,
         limit=limit,
         scope_to_profile=profile_id,
+        include_archived=include_archived,
     )
 
     results = [

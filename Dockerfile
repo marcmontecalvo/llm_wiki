@@ -16,7 +16,7 @@ COPY --from=builder /app/.venv /app/.venv
 COPY . /app/
 COPY supervisord.conf /app/supervisord.conf
 COPY entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh && mkdir -p /var/log/llm-wiki /app/wiki_system/logs /var/run /app/config && chown -R llmwiki:llmwiki /var/log/llm-wiki /app/wiki_system /var/run /app/config
+RUN chmod +x /docker-entrypoint.sh && mkdir -p /var/log/llm-wiki /wiki/logs /var/run /app/config && chown -R llmwiki:llmwiki /var/log/llm-wiki /wiki /var/run /app/config
 ENV PATH="/app/.venv/bin:$PATH"
 ENV WIKI_ROOT=/wiki
 ENV WIKI_PORT=3050

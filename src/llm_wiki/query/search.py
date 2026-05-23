@@ -134,12 +134,25 @@ class WikiQuery:
         domain: str | None = None,
         limit: int = 10,
         scope_to_profile: str | None = None,
+        include_archived: bool = False,
     ) -> list[dict[str, Any]]:
         """Search for wiki pages.
 
         Combines metadata, fulltext, and vector (semantic) search. If query
         is provided, merges fulltext and vector results via Reciprocal Rank
         Fusion, then applies metadata filters.
+
+        Args:
+            query: Search query text
+            tags: Filter by tags
+            kind: Filter by page kind
+            domain: Filter by domain
+            limit: Max results
+            scope_to_profile: Scope to a user profile's domains
+            include_archived: When False (default), exclude archived pages
+
+        Returns:
+            List of page result dicts
         """
         allowed_domains: set[str] | None = None
         resolved = self._resolve_search_domains(domain, scope_to_profile)
@@ -183,6 +196,9 @@ class WikiQuery:
         for page_id in candidate_ids:
             metadata = self.metadata_index.get_page(page_id)
             if not metadata:
+                continue
+            # Exclude archived pages unless explicitly included
+            if not include_archived and metadata.get("archived"):
                 continue
             page_domain = metadata.get("domain", "general")
 
@@ -228,7 +244,69 @@ class WikiQuery:
         for row in filtered_results:
             row.pop("_rrf", None)
 
+        # When include_archived=True, also scan archive/ directories for
+        # pages that are not in the index (moved to archive/).
+        if include_archived:
+            archived_pages = self._scan_archived_pages(allowed_domains)
+            existing_ids = {r["page_id"] for r in filtered_results}
+            for ap in archived_pages:
+                if ap["page_id"] not in existing_ids:
+                    ap["score"] = 0.0
+                    filtered_results.append(ap)
+
+            filtered_results.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+
         return filtered_results[:limit]
+
+    def _scan_archived_pages(self, allowed_domains: set[str] | None) -> list[dict[str, Any]]:
+        """Scan archive/ directories for pages excluded from the index.
+
+        Args:
+            allowed_domains: Domain filter (same semantics as _resolve_search_domains)
+
+        Returns:
+            List of archived page dicts with metadata
+        """
+        results: list[dict[str, Any]] = []
+        domains_dir = self.wiki_base / "domains"
+        if not domains_dir.exists():
+            return results
+
+        for domain_dir in domains_dir.iterdir():
+            if not domain_dir.is_dir() or domain_dir.is_symlink():
+                continue
+            domain_name = domain_dir.name
+
+            # Apply domain scoping
+            if allowed_domains is not None and domain_name not in allowed_domains:
+                continue
+
+            archive_dir = domain_dir / "archive"
+            if not archive_dir.exists():
+                continue
+
+            for page_file in archive_dir.glob("*.md"):
+                try:
+                    content = page_file.read_text(encoding="utf-8")
+                    from llm_wiki.utils.frontmatter import (  # noqa: PLC0415
+                        parse_frontmatter,
+                    )
+
+                    metadata, _ = parse_frontmatter(content)
+                    page_id = metadata.get("id", page_file.stem)
+                    results.append(
+                        {
+                            **metadata,
+                            "page_id": page_id,
+                            "id": page_id,
+                            "archived": True,
+                            "score": 0.0,
+                        }
+                    )
+                except Exception:
+                    pass
+
+        return results
 
     @staticmethod
     def _set_rerank_score(
@@ -253,8 +331,39 @@ class WikiQuery:
         return score, result
 
     def get_page(self, page_id: str) -> dict[str, Any] | None:
-        """Get page metadata by ID."""
-        return self.metadata_index.get_page(page_id)
+        """Get page metadata by ID.
+
+        Searches both the metadata index and archived pages via direct file
+        scan so that archived pages remain retrievable by ID.
+        """
+        result = self.metadata_index.get_page(page_id)
+        if result is not None:
+            result["archived"] = False
+            return result
+
+        # Fallback: search archive/ directories for pages excluded from index
+        domains_dir = self.wiki_base / "domains"
+        if not domains_dir.exists():
+            return None
+
+        for domain_dir in domains_dir.iterdir():
+            if not domain_dir.is_dir() or domain_dir.is_symlink():
+                continue
+            archive_dir = domain_dir / "archive"
+            if not archive_dir.exists():
+                continue
+            for page_file in archive_dir.glob("*.md"):
+                try:
+                    content = page_file.read_text(encoding="utf-8")
+                    from llm_wiki.utils.frontmatter import parse_frontmatter  # noqa: PLC0415
+
+                    metadata, _ = parse_frontmatter(content)
+                    if metadata.get("id", page_file.stem) == page_id:
+                        return {**metadata, "page_id": page_id, "archived": True}
+                except Exception:
+                    pass
+
+        return None
 
     def list_pages(
         self,
@@ -263,8 +372,21 @@ class WikiQuery:
         updated_since: datetime | None = None,
         cursor: str | None = None,
         limit: int = 50,
+        include_archived: bool = False,
     ) -> tuple[list[dict[str, Any]], str | None]:
-        """List pages with optional filtering and cursor-based pagination."""
+        """List pages with optional filtering and cursor-based pagination.
+
+        Args:
+            domain: Filter by domain
+            kind: Filter by page kind
+            updated_since: Filter by updated_at after this timestamp
+            cursor: Pagination cursor
+            limit: Page size
+            include_archived: When False (default), exclude archived pages
+
+        Returns:
+            Tuple of (page list, next cursor or None)
+        """
         all_pages: list[dict[str, Any]] = []
 
         if domain or kind:
@@ -282,6 +404,22 @@ class WikiQuery:
                 all_pages.append(meta)
         else:
             all_pages = list(self.metadata_index.pages.values())
+
+        # When include_archived=True, append pages from archive/ directories
+        # that match the same domain scope as the indexed results.
+        if include_archived:
+            # Reconstruct allowed_domains so archive scan respects domain filter
+            if domain and kind:
+                allowed_domains_archived = {domain}
+            elif domain:
+                allowed_domains_archived = {domain}
+            else:
+                allowed_domains_archived = None
+            archived_pages = self._scan_archived_pages(allowed_domains_archived)
+            existing_ids = {p.get("page_id") or p.get("id") for p in all_pages}
+            for ap in archived_pages:
+                if ap["page_id"] not in existing_ids:
+                    all_pages.append(ap)
 
         if updated_since is not None:
             # Normalise to UTC-aware so comparisons never raise TypeError between

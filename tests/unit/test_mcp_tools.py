@@ -2,7 +2,7 @@
 
 Tools are registered with a mock WikiQuery and UserJobStore.
 Tests verify:
-  - All 8 tools are registered
+  - All 11 tools are registered (8 core + 3 archive tools)
   - Tool parameters match expected names
   - WikiError translation to MCP ToolError
   - Tool call behavior with mocked wiki
@@ -60,8 +60,8 @@ def _make_mock_wiki(**overrides: object) -> MagicMock:
 # ── tools-list tests ──────────────────────────────────────────────
 
 
-def test_tools_list_has_eight_tools(temp_dir: Path) -> None:
-    """AC1: tools/list returns all 8 tools."""
+def test_tools_list_has_eleven_tools(temp_dir: Path) -> None:
+    """All 11 tools are registered (8 core + 3 archive)."""
     wiki = _make_mock_wiki()
     server = FastMCP("test")
     register_tools(server, wiki)
@@ -76,16 +76,10 @@ def test_tools_list_has_eight_tools(temp_dir: Path) -> None:
         "read_page",
         "list_pages",
         "export",
-    }
-    expected = {
-        "query",
-        "ingest",
-        "ingest_status",
-        "search",
-        "read_page",
-        "list_pages",
-        "export",
         "domain_dashboard",
+        "list_archive",
+        "archive_page",
+        "unarchive_page",
     }
     assert names == expected
 
@@ -224,3 +218,127 @@ async def test_list_pages_with_cursor_pagination() -> None:
     # With 1 page and limit 1, next_cursor should be None
     assert data.get("next_cursor") is None
     assert data.get("total_hint") == 1
+
+
+# ── MCP archive tools ──────────────────────────────────────────────
+
+
+def _make_archive_wiki(tmp_path: Path) -> MagicMock:
+    """Create a WikiQuery mock with archive directories populated."""
+    # Use a real WikiQuery so archive scanning reads actual files.
+    return tmp_path
+
+
+@pytest.mark.anyio
+async def test_list_archive_empty_domain() -> None:
+    """list_archive returns empty pages when archive directory is empty."""
+    wiki = _make_mock_wiki()
+    server = FastMCP("test")
+    register_tools(server, wiki)
+
+    archive_dir = wiki.wiki_base / "domains" / "ml" / "archive"
+    archive_dir.mkdir(parents=True)
+
+    result_blocks = await server.call_tool("list_archive", {"domain": "ml"})
+    assert len(result_blocks) >= 1
+    text = result_blocks[0].text if hasattr(result_blocks[0], "text") else str(result_blocks[0])
+    data = json.loads(text)
+    assert data["domain"] == "ml"
+    assert data["total"] == 0
+    assert data["pages"] == []
+
+
+@pytest.mark.anyio
+async def test_list_archive_returns_archived_pages(tmp_path: Path) -> None:
+    """list_archive reads archived page frontmatter."""
+    # Create a real archive directory under the mock wiki's tmp_path.
+    wiki = _make_mock_wiki(wiki_base=tmp_path)
+    server = FastMCP("test")
+    register_tools(server, wiki)
+
+    archive_dir = tmp_path / "domains" / "ml" / "archive"
+    archive_dir.mkdir(parents=True)
+
+    fm_content = "---\nid: old-page\ntitle: Old Page\ndomain: ml\narchived_at: 2025-01-01T00:00:00\n---\ncontent\n"
+    (archive_dir / "old-page.md").write_text(fm_content)
+
+    result_blocks = await server.call_tool("list_archive", {"domain": "ml"})
+    data = json.loads(
+        result_blocks[0].text if hasattr(result_blocks[0], "text") else str(result_blocks[0])
+    )
+    assert data["total"] == 1
+    assert data["pages"][0]["page_id"] == "old-page"
+    assert data["pages"][0]["title"] == "Old Page"
+
+
+@pytest.mark.anyio
+async def test_archive_page_error_for_missing() -> None:
+    """archive_page raises ToolError for missing page."""
+    wiki = _make_mock_wiki()
+    server = FastMCP("test")
+    register_tools(server, wiki)
+
+    with pytest.raises(ToolError, match="archive_failed"):
+        await server.call_tool("archive_page", {"page_id": "nonexistent"})
+
+
+@pytest.mark.anyio
+async def test_unarchive_page_error_for_missing() -> None:
+    """unarchive_page raises ToolError for missing page."""
+    wiki = _make_mock_wiki()
+    server = FastMCP("test")
+    register_tools(server, wiki)
+
+    with pytest.raises(ToolError, match="archive_failed"):
+        await server.call_tool("unarchive_page", {"page_id": "nonexistent"})
+
+
+# ── include_archived on MCP tools ──────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_query_passes_include_archived() -> None:
+    """MCP query tool passes include_archived to wiki.search."""
+    wiki = _make_mock_wiki()
+    server = FastMCP("test")
+    register_tools(server, wiki)
+
+    await server.call_tool(
+        "query",
+        {"query_text": "x", "include_archived": True},
+    )
+    wiki.search.assert_called_once_with(
+        "x", domain=None, scope_to_profile=None, include_archived=True
+    )
+
+
+@pytest.mark.anyio
+async def test_search_passes_include_archived() -> None:
+    """MCP search tool passes include_archived to wiki.search."""
+    wiki = _make_mock_wiki()
+    server = FastMCP("test")
+    register_tools(server, wiki)
+
+    await server.call_tool("search", {"q": "x", "include_archived": True})
+    wiki.search.assert_called_once_with(
+        "x", domain=None, limit=10, scope_to_profile=None, include_archived=True
+    )
+
+
+@pytest.mark.anyio
+async def test_list_pages_passes_include_archived() -> None:
+    """MCP list_pages tool passes include_archived to wiki.list_pages."""
+    wiki = _make_mock_wiki()
+    server = FastMCP("test")
+    register_tools(server, wiki)
+
+    await server.call_tool("list_pages", {"include_archived": True})
+    wiki.list_pages.assert_called_once()
+    kwargs = wiki.list_pages.call_args.kwargs  # type: ignore[attr-defined]
+    assert kwargs["include_archived"] is True
+
+    # Default is False
+    wiki.reset_mock()
+    await server.call_tool("list_pages", {})
+    kwargs = wiki.list_pages.call_args.kwargs  # type: ignore[attr-defined]
+    assert kwargs["include_archived"] is False

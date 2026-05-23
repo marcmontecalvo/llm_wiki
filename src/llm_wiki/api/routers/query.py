@@ -106,7 +106,11 @@ async def query(
         return await _handle_deep_query(req, wiki, request, profile_id)
 
     pages = await asyncio.to_thread(
-        wiki.search, req.query, domain=req.domain, scope_to_profile=profile_id
+        wiki.search,
+        req.query,
+        domain=req.domain,
+        scope_to_profile=profile_id,
+        include_archived=False,
     )
     # Secondary sort by authority_score (descending) for stable tie-breaking
     pages.sort(key=lambda p: p.get("authority_score", 0.0), reverse=True)
@@ -165,7 +169,9 @@ async def _run_deep_query(
 ) -> None:
     """Background task that runs deep synthesis and stores the result."""
     try:
-        pages = await asyncio.to_thread(wiki.search, query, scope_to_profile=profile_id)
+        pages = await asyncio.to_thread(
+            wiki.search, query, scope_to_profile=profile_id, include_archived=False
+        )
         # Pull llm_extraction from feature flags if available
         llm_extraction = False
         try:

@@ -190,6 +190,11 @@ def create_app() -> FastAPI:
 
     app.include_router(_dashboard.router)
 
+    # Mount routers added in Story 3.6 (Topic Archive Lifecycle)
+    from llm_wiki.api.routers import archive as _archive  # noqa: E303
+
+    app.include_router(_archive.router)
+
     # Legacy inline health check endpoint (story 1.6 routes at /v1/health are primary)
 
     @app.get("/v1/health-legacy")

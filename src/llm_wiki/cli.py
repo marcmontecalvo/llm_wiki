@@ -3549,5 +3549,47 @@ def health(wiki_base: Path):
     click.secho("GREEN" if ok else "RED", fg="green" if ok else "red")
 
 
+@govern.command()
+@click.argument("page_id")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def archive(page_id: str, wiki_base: Path):
+    """Archive a page by ID — move to archive/ (idempotent)."""
+    from llm_wiki.api.services.archive import archive_page
+
+    result = archive_page(page_id, wiki_base)
+    status = result.get("status")
+    if status == "success":
+        click.echo(f"OK: {result.get('message', result.get('error', ''))}")
+    else:
+        click.echo(f"Error: {result.get('error', status)}", err=True)
+        raise SystemExit(1)
+
+
+@govern.command()
+@click.argument("page_id")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default="wiki_system",
+    help="Path to wiki base directory",
+)
+def unarchive(page_id: str, wiki_base: Path):
+    """Unarchive a page by ID — restore from archive/ to pages/."""
+    from llm_wiki.api.services.archive import unarchive_page
+
+    result = unarchive_page(page_id, wiki_base)
+    status = result.get("status")
+    if status == "success":
+        click.echo(f"OK: {result.get('message', '')}")
+    else:
+        click.echo(f"Error: {result.get('error', status)}", err=True)
+        raise SystemExit(1)
+
+
 if __name__ == "__main__":
     main()

@@ -82,14 +82,14 @@ development_status:
   3-3-cross-domain-summary-page-generation: done  # implementation-complete: CrossDomainSummaryJob, claim aggregation with dedup, LLM synthesis fallback, entity health lifecycle, summary boosting; 1476 tests pass
   3-4-synthesis-cache-high-value-query-pages: done  # implementation-complete: SynthesisCacheJob with query normalization, cache page generation, stale refresh, listing/query endpoints; 2512 tests pass
   3-5-per-domain-dashboards: done  # implementation-complete: REST endpoint, dashboard service, MCP tool, CLI command — all derived from index state, no persistence; 2512 tests pass
-  3-6-topic-archive-lifecycle: ready-for-dev  # Story created; no code dependencies
+  3-6-topic-archive-lifecycle: review  # Story created; no code dependencies
   epic-3-retrospective: optional
   last_updated_3-1-authority-scoring: "2026-05-21"
   last_updated_3-2-entity-promotion-to-cross-domain: "2026-05-21"
   last_updated_3-3-cross-domain-summary-page-generation: "2026-05-21"
   last_updated_3-4-synthesis-cache-high-value-query-pages: "2026-05-22"
   last_updated_3-5-per-domain-dashboards: "2026-05-22"
-  last_updated_3-6-topic-archive-lifecycle: "2026-05-21"
+  last_updated_3-6-topic-archive-lifecycle: "2026-05-22"
 
   # ─── Epic 4: Web UI & Operations (Placeholder) ───────────────────────────
   epic-4: backlog

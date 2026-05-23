@@ -21,6 +21,12 @@ from pathlib import Path
 from mcp.server.fastmcp.exceptions import ToolError
 
 from llm_wiki.api.errors import ERROR_MAP
+from llm_wiki.api.services.archive import (
+    archive_page as do_archive_page,
+)
+from llm_wiki.api.services.archive import (
+    unarchive_page as do_unarchive_page,
+)
 from llm_wiki.api.services.dashboard import get_domain_dashboard
 from llm_wiki.api.user_jobs import UserJobStore
 from llm_wiki.exceptions import (
@@ -206,6 +212,7 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
         depth: str = "quick",
         domain: str | None = None,
         profile_id: str | None = None,
+        include_archived: bool = False,
     ) -> dict:
         """Query the wiki for information.
 
@@ -215,10 +222,15 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
                    Deep queries block up to 30s for LLM synthesis.
             domain: Optional domain filter.
             profile_id: Optional profile ID for multi-user domain scoping.
+            include_archived: Include archived pages in results.
         """
         try:
             pages = await asyncio.to_thread(
-                wiki.search, query_text, domain=domain, scope_to_profile=profile_id
+                wiki.search,
+                query_text,
+                domain=domain,
+                scope_to_profile=profile_id,
+                include_archived=include_archived,
             )
         except WikiError as e:
             raise _handle_wiki_error(e) from e
@@ -328,6 +340,7 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
         domain: str | None = None,
         limit: int = 10,
         profile_id: str | None = None,
+        include_archived: bool = False,
     ) -> dict:
         """Search the wiki with merged full-text + vector results.
 
@@ -336,10 +349,16 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
             domain: Optional domain filter.
             limit: Max results (1-100).
             profile_id: Optional profile ID for multi-user domain scoping.
+            include_archived: Include archived pages in results.
         """
         try:
             pages = await asyncio.to_thread(
-                wiki.search, q, domain=domain, limit=limit, scope_to_profile=profile_id
+                wiki.search,
+                q,
+                domain=domain,
+                limit=limit,
+                scope_to_profile=profile_id,
+                include_archived=include_archived,
             )
             results = [_page_to_search_result(p) for p in pages]
             return {"results": results}
@@ -371,6 +390,14 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
                 shared_file = wiki_base / "shared" / f"{page_id}.md"
                 if shared_file.exists():
                     content = await asyncio.to_thread(shared_file.read_text, encoding="utf-8")
+            if not content:
+                for domain_dir in (wiki_base / "domains").iterdir():
+                    if not domain_dir.is_dir():
+                        continue
+                    archive_file = domain_dir / "archive" / f"{page_id}.md"
+                    if archive_file.exists():
+                        content = await asyncio.to_thread(archive_file.read_text, encoding="utf-8")
+                        break
 
             return _page_to_page_response(page, content)
         except WikiError as e:
@@ -383,6 +410,7 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
         updated_since: str | None = None,
         cursor: str | None = None,
         limit: int = 50,
+        include_archived: bool = False,
     ) -> dict:
         """List wiki pages with optional filtering and cursor-based pagination.
 
@@ -392,6 +420,7 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
             updated_since: ISO8601 datetime string — return only pages updated after this time.
             cursor: Pagination cursor (base64-encoded offset).
             limit: Page size (1-200).
+            include_archived: Include archived pages in results.
         """
         try:
             parsed_since: datetime.datetime | None = None
@@ -410,6 +439,7 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
                 updated_since=parsed_since,
                 cursor=cursor,
                 limit=limit,
+                include_archived=include_archived,
             )
 
             results = [
@@ -498,5 +528,72 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
             wiki_root = wiki.wiki_base
             result = get_domain_dashboard(domain, wiki_root)
             return result.model_dump()
+        except WikiError as e:
+            raise _handle_wiki_error(e) from e
+
+    @server.tool()
+    def list_archive(domain: str) -> dict:
+        """List archived pages for a domain.
+
+        Args:
+            domain: Domain identifier (e.g. 'general', 'nlp').
+        """
+        from llm_wiki.utils.frontmatter import parse_frontmatter  # noqa: PLC0415
+
+        wiki_base: Path = wiki.wiki_base
+        archive_dir = wiki_base / "domains" / domain / "archive"
+
+        pages: list[dict] = []
+        if archive_dir.exists():
+            for page_file in sorted(archive_dir.glob("*.md")):
+                try:
+                    content = page_file.read_text(encoding="utf-8")
+                    metadata, _ = parse_frontmatter(content)
+                    pages.append(
+                        {
+                            "page_id": metadata.get("id", page_file.stem),
+                            "title": metadata.get("title", page_file.stem),
+                            "archived_at": metadata.get("archived_at"),
+                            "updated_at": metadata.get("updated_at"),
+                        }
+                    )
+                except Exception as e:
+                    logger.warning("Failed to parse %s: %s", page_file, e)
+
+        return {"kind": "archive", "pages": pages, "domain": domain, "total": len(pages)}
+
+    @server.tool()
+    async def archive_page(page_id: str) -> dict:
+        """Archive a page by ID.
+
+        Moves the page from pages/ to archive/ and marks it as archived.
+        Idempotent — safe to call if the page is already archived.
+
+        Args:
+            page_id: The page identifier.
+        """
+        try:
+            result = await asyncio.to_thread(do_archive_page, page_id, wiki.wiki_base)
+            if result.get("status") == "success":
+                return result
+            raise ToolError(f"archive_failed: {result.get('error', 'unknown')}")
+        except WikiError as e:
+            raise _handle_wiki_error(e) from e
+
+    @server.tool()
+    async def unarchive_page(page_id: str) -> dict:
+        """Restore an archived page back to pages/.
+
+        Opposite of archive_page — restores the page and removes
+        the archived_at frontmatter field.
+
+        Args:
+            page_id: The page identifier.
+        """
+        try:
+            result = await asyncio.to_thread(do_unarchive_page, page_id, wiki.wiki_base)
+            if result.get("status") == "success":
+                return result
+            raise ToolError(f"archive_failed: {result.get('error', 'unknown')}")
         except WikiError as e:
             raise _handle_wiki_error(e) from e

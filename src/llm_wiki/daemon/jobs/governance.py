@@ -169,6 +169,10 @@ class GovernanceJob:
             if mn:
                 logger.info("Pruned %d old query log rows", mn)
 
+            # Archive pages that exceed staleness threshold
+            logger.info("Running archive of stale pages")
+            archive_result = self._archive_stale(self.wiki_base)
+
             # Generate report
             report_path = self._generate_report(
                 lint_issues,
@@ -195,6 +199,8 @@ class GovernanceJob:
                 else 0,
                 "broken_links": broken_link_stats["total_broken_links"],
                 "orphan_pages": len(orphan_pages),
+                "archived_pages": archive_result.get("archived", 0),
+                "archived_candidates": archive_result.get("total_candidates", 0),
                 "report_path": str(report_path),
             }
 
@@ -213,6 +219,25 @@ class GovernanceJob:
                 "duplicates": 0,
                 "contradictions": 0,
             }
+
+    def _archive_stale(self, wiki_base: Path) -> dict[str, Any]:
+        """Archive pages exceeding their domain's staleness threshold.
+
+        Args:
+            wiki_base: Base wiki directory
+
+        Returns:
+            Dict with archive results (archived count, candidates)
+        """
+        try:
+            from llm_wiki.api.services.archive import (  # noqa: PLC0415
+                archive_stale_pages as do_archive,
+            )
+
+            return do_archive(wiki_base=wiki_base)
+        except Exception as e:
+            logger.error("Archive of stale pages failed: %s", e, exc_info=True)
+            return {"status": "error", "error": str(e), "archived": 0, "total_candidates": 0}
 
     def _generate_report(
         self,
