@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 id="editor-title">{% if page_id %}Edit: {{ page_id }}{% else %}New Page{% endif %}</h2>
+<div id="editor-status" class="muted"></div>
+<form id="editor-form" style="max-width:900px;">
+  <!-- Top row: Title + Domain + Kind -->
+  <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div>
+      <label style="font-size:0.8rem;color:var(--muted);">Title</label>
+      <input type="text" id="e-title" required style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);" placeholder="Page title">
+    </div>
+    <div>
+      <label style="font-size:0.8rem;color:var(--muted);">Domain</label>
+      <select id="e-domain" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);">
+        <option value="general">general</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:0.8rem;color:var(--muted);">Kind</label>
+      <select id="e-kind" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);">
+        <option value="page">page</option>
+        <option value="entity">entity</option>
+        <option value="concept">concept</option>
+        <option value="source">source</option>
+        <option value="summary">summary</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Metadata row -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div>
+      <label style="font-size:0.8rem;color:var(--muted);">Tags (comma-sep)</label>
+      <input type="text" id="e-tags" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);" placeholder="ai, research">
+    </div>
+    <div>
+      <label style="font-size:0.8rem;color:var(--muted);">Sources (comma-sep)</label>
+      <input type="text" id="e-sources" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);" placeholder="source1, source2">
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div style="margin-bottom:12px;">
+    <label style="font-size:0.8rem;color:var(--muted);">Content (Markdown)</label>
+    <textarea id="e-content" rows="20" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);font-family:monospace;font-size:0.9rem;resize:vertical;line-height:1.6;" placeholder="Write page content in Markdown..."></textarea>
+  </div>
+
+  <!-- Actions -->
+  <div style="display:flex;gap:8px;">
+    <button type="submit" class="btn primary">Save Page</button>
+    <a href="/ui/browse" class="btn">Cancel</a>
+  </div>
+</form>
+
+<!-- Preview panel -->
+<div id="editor-preview" class="panel" style="margin-top:20px;display:none;">
+  <h3>Preview</h3>
+  <div id="preview-content"></div>
+</div>
+
+<script>
+(function() {
+  const _uiUser = "{{ ui_user }}";
+  const _uiPass = "{{ ui_password }}";
+  const pageId = "{{ page_id }}";
+
+  function auth() { return "Basic " + btoa(_uiUser + ":" + _uiPass); }
+  function esc(s) { return String(s ?? ""); }
+  function status(msg) { document.getElementById("editor-status").textContent = msg; }
+
+  // Load existing page data if editing
+  async function loadExisting() {
+    if (!pageId) return;
+    try {
+      const r = await fetch('/v1/pages/' + encodeURIComponent(pageId), {
+        headers: { 'Authorization': auth() }
+      });
+      if (!r.ok) return;
+      const p = await r.json();
+      document.getElementById("editor-title").textContent = "Edit: " + p.page_id;
+      document.getElementById("e-title").value = p.title || "";
+      document.getElementById("e-domain").value = p.domain || "general";
+      document.getElementById("e-kind").value = p.kind || "page";
+      document.getElementById("e-content").value = p.content || "";
+      if (p.frontmatter?.tags) {
+        document.getElementById("e-tags").value = p.frontmatter.tags.join(", ");
+      }
+      if (p.frontmatter?.sources) {
+        document.getElementById("e-sources").value = p.frontmatter.sources.join(", ");
+      }
+    } catch {}
+  }
+
+  // Load domains for dropdown
+  async function loadDomains() {
+    try {
+      const r = await fetch('/ui/api/domains-tree', { headers: { 'Authorization': auth() } });
+      if (!r.ok) return;
+      const data = await r.json();
+      const sel = document.getElementById("e-domain");
+      sel.innerHTML = '';
+      for (const d of (data.domains || [])) {
+        const opt = document.createElement("option");
+        opt.value = d.name;
+        opt.textContent = d.title ? d.name + ' (' + d.title + ')' : d.name;
+        sel.appendChild(opt);
+      }
+      // Keep "general" if not in list
+      if (!sel.querySelector('[value="general"]')) {
+        const opt = document.createElement("option");
+        opt.value = "general";
+        opt.textContent = "general";
+        sel.appendChild(opt);
+      }
+    } catch {}
+  }
+
+  // Save
+  document.getElementById("editor-form").addEventListener("submit", async function(e) {
+    e.preventDefault();
+    status("Saving...");
+
+    const title = document.getElementById("e-title").value.trim();
+    if (!title) { status("Title is required."); return; }
+
+    const body = {
+      title: title,
+      content: document.getElementById("e-content").value,
+      domain: document.getElementById("e-domain").value,
+      kind: document.getElementById("e-kind").value,
+      confidence: 0.5,
+      authority_score: 0.0,
+      tags: document.getElementById("e-tags").value.split(",").map(s => s.trim()).filter(Boolean),
+      sources: document.getElementById("e-sources").value.split(",").map(s => s.trim()).filter(Boolean),
+    };
+
+    let url, method;
+    if (pageId) {
+      url = '/v1/pages/' + encodeURIComponent(pageId);
+      method = 'PUT';
+    } else {
+      url = '/v1/pages';
+      method = 'POST';
+    }
+
+    try {
+      const r = await fetch(url, {
+        method: method,
+        headers: { 'Authorization': auth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.detail || r.status);
+      }
+      const saved = await r.json();
+      statusSaved(saved);
+    } catch (err) {
+      status("Error: " + err.message);
+    }
+  });
+
+  function statusSaved(pg) {
+    status('Saved as "' + esc(pg.page_id) + '".');
+    setTimeout(function() {
+      window.location.href = '/ui/page/' + encodeURIComponent(pg.page_id);
+    }, 800);
+  }
+
+  loadDomains();
+  loadExisting();
+})();
+</script>
+{% endblock %}

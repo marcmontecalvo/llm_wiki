@@ -9,17 +9,20 @@
     :root {
       --bg: #fff; --fg: #111; --accent: #0066cc; --muted: #6c757d; --border: #dee2e6;
       --sidebar-bg: #f8f9fa; --card-bg: #fff; --hover: #e9ecef;
+      --green: #22c55e; --yellow: #f59e0b; --red: #ef4444;
     }
     .dark {
       --bg: #1a1a2e; --fg: #e0e0e0; --accent: #5dade2; --muted: #888; --border: #444;
       --sidebar-bg: #16213e; --card-bg: #1f2937; --hover: #374151;
+      --green: #4ade80; --yellow: #fbbf24; --red: #f87171;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--fg); min-height: 100vh; display: flex; flex-direction: column; }
     .layout { display: flex; flex: 1; min-height: calc(100vh - 48px); }
 
-    /* Sidebar 280px */
-    .sidebar { width: 280px; min-width: 280px; background: var(--sidebar-bg); border-right: 1px solid var(--border); overflow-y: auto; }
+    /* Sidebar — top section for nav */
+    .sidebar { width: 280px; min-width: 280px; background: var(--sidebar-bg); border-right: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; }
+    .sidebar-nav { flex: 1; padding-bottom: 16px; }
     @media (max-width: 1024px) { .sidebar { width: 220px; min-width: 220px; } }
     @media (max-width: 640px) { .sidebar { display: none; } }
     .sidebar h3 { padding: 16px 16px 8px; font-size: 0.75rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; }
@@ -27,15 +30,27 @@
     .sidebar li a, .sidebar li button { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; color: var(--fg); text-decoration: none; font-size: 0.9rem; }
     .sidebar li a:hover, .sidebar li button:hover { background: var(--hover); }
     .sidebar li a.active { background: var(--hover); border-left: 3px solid var(--accent); }
+
+    /* Scope indicators */
+    .scope-bar { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-left: 8px; flex-shrink: 0; }
+    .scope-bar.shared { background: var(--accent); }
+    .scope-bar.personal { background: var(--muted); }
+
+    /* Badges */
     .badge { font-size: 0.7rem; padding: 1px 6px; border-radius: 8px; background: var(--border); color: var(--fg); }
     .badge.shared { background: var(--accent); color: #fff; }
     .badge.personal { background: var(--muted); color: #fff; }
+    .badge.danger { background: var(--red); color: #fff; }
+    .badge.warning { background: var(--yellow); color: #fff; }
+
+    /* Domain nav link */
+    .domain-link { display: flex; align-items: center; gap: 4px; }
 
     /* Header */
     .header { height: 48px; min-height: 48px; background: var(--sidebar-bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 12px; }
     .header h1 { font-size: 1rem; font-weight: 600; }
-    .header .health { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
-    .header .health.offline { background: #ef4444; }
+    .header .health { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+    .header .health.offline { background: var(--red); }
     .header .dark-toggle { background: none; border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; cursor: pointer; color: var(--fg); font-size: 0.8rem; margin-left: auto; }
 
     /* Main content */
@@ -48,6 +63,7 @@
     table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
     th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
     th { font-weight: 600; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; }
+    tr:hover { background: var(--hover); }
     code { font-family: "SF Mono", "Fira Code", Consolas, monospace; font-size: 0.85em; background: var(--hover); padding: 1px 4px; border-radius: 3px; }
     pre { background: var(--hover); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; }
 
@@ -60,19 +76,91 @@
     .panel h3 { font-size: 0.85rem; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
     .panels { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
 
+    /* Muted text */
+    .muted { color: var(--muted); }
+
+    /* Trust tags */
+    .trust-tag { display: inline-block; background: var(--accent); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; margin: 2px 2px; }
+
+    /* Confidence bar */
+    .conf-bar-wrap { display: inline-block; width: 60px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; vertical-align: middle; margin-left: 6px; }
+    .conf-bar-wrap .fill { height: 100%; border-radius: 3px; }
+    .conf-high .fill { background: var(--green); }
+    .conf-med .fill { background: var(--yellow); }
+    .conf-low .fill { background: var(--red); }
+
+    /* Muted trivia */
+    .mt-05rem { margin-top: 0.5rem; }
+    .mb-1rem { margin-bottom: 1rem; }
+
+    /* Action buttons */
+    .btn { display: inline-block; padding: 6px 16px; border-radius: 4px; border: 1px solid var(--border); background: var(--card-bg); color: var(--fg); cursor: pointer; font-size: 0.85rem; text-decoration: none; }
+    .btn:hover { background: var(--hover); }
+    .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn.primary:hover { opacity: 0.85; }
+
+    /* Section divider */
+    .section-title { font-size: 0.8rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; margin: 16px 0 8px; }
+
+    /* Auth form */
+    .auth-form { max-width: 400px; margin: 40px auto; }
+    .auth-form input { width: 100%; padding: 8px 12px; margin: 4px 0 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--card-bg); color: var(--fg); }
+    .auth-form button { padding: 8px 24px; border-radius: 4px; border: none; background: var(--accent); color: #fff; cursor: pointer; }
+
     /* Nav helper */
     .nav-link { cursor: pointer; border: none; background: transparent; color: var(--fg); text-decoration: none; font-size: inherit; padding: 0; display: flex; align-items: center; gap: 4px; }
     .nav-link:hover { text-decoration: underline; }
+
+    /* Loading */
+    .loading { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+    .loading::before { content: ""; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Filter bar */
+    .filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+    .filter-bar select, .filter-bar input { padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--card-bg); color: var(--fg); font-size: 0.85rem; }
+    .filter-bar .count { margin-left: auto; font-size: 0.85rem; color: var(--muted); }
+
+    /* Authority bar */
+    .auth-bar-wrap { display: inline-flex; align-items: center; gap: 6px; }
+    .auth-bar { display: inline-block; width: 48px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .auth-bar .fill { height: 100%; background: var(--accent); border-radius: 3px; }
   </style>
 </head>
 <body>
   <div class="layout">
     <nav class="sidebar">
-      <div hx-get="/ui/api/domains-tree" hx-target="#sidebar-content" hx-swap="innerHTML">
-        <h3>Domains</h3>
-        <ul id="sidebar-content"></ul>
+      <!-- Quick nav -->
+      <div class="sidebar-nav">
+        <h3>Nav</h3>
+        <ul>
+          <li><a id="nav-search" href="/ui/search">Search</a></li>
+          <li><a id="nav-browse" href="/ui/browse">Browse</a></li>
+          <li><a id="nav-dashboard" href="/ui/dashboard">Dashboard</a></li>
+          <li><a id="nav-issues" href="/ui/issues">Issues</a></li>
+          <li><a id="nav-editor" href="/ui/editor">Edit</a></li>
+        </ul>
+      </div>
+      <!-- Domain list -->
+      <div class="sidebar-nav">
+        <div hx-get="/ui/api/domains-tree" hx-target="#sidebar-domains" hx-swap="innerHTML">
+          <h3>Domains</h3>
+          <ul id="sidebar-domains"></ul>
+        </div>
       </div>
     </nav>
+    <script>
+      (function() {
+        var path = window.location.pathname;
+        var map = { '/ui/search': 'nav-search', '/ui/browse': 'nav-browse', '/ui/dashboard': 'nav-dashboard', '/ui/issues': 'nav-issues', '/ui/editor': 'nav-editor', '/ui/page/': 'nav-browse' };
+        for (var p in map) {
+          if (path === p || path.indexOf(p) === 0) {
+            document.getElementById(map[p]).className = 'active';
+            break;
+          }
+        }
+      })();
+    </script>
     <div style="display:flex;flex-direction:col;width:100%;min-width:0;">
       <header class="header">
         <h1>LLM Wiki</h1>

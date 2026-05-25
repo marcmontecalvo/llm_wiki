@@ -1,28 +1,170 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Operations Dashboard</h2>
-<div class="panels" hx-trigger="every 30s" hx-get="/ui/api/dashboard" hx-target="#dashboard-content" hx-swap="innerHTML">
-  <div id="dashboard-content">
-    <div class="panel" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;">
-      <h3>Daemon Health</h3>
-      <p class="muted">Loading…</p>
-    </div>
-    <div class="panel" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;">
-      <h3>Wiki Health</h3>
-      <p class="muted">Loading…</p>
-    </div>
-    <div class="panel" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;">
-      <h3>Ingestion Pipeline</h3>
-      <p class="muted">Loading…</p>
-    </div>
-    <div class="panel" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;">
-      <h3>Governance</h3>
-      <p class="muted">Loading…</p>
-    </div>
-    <div class="panel" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;">
-      <h3>Query Activity</h3>
-      <p class="muted">Loading…</p>
-    </div>
-  </div>
+<div id="dashboard-status" class="muted">Loading dashboard data…</div>
+<div class="panels" id="dashboard-panels">
+  <!-- Panels populated by JS -->
+  <div class="panel"><h3>Daemon Health</h3><p class="muted">Loading…</p></div>
+  <div class="panel"><h3>Wiki Overview</h3><p class="muted">Loading…</p></div>
+  <div class="panel"><h3>Ingestion Pipeline</h3><p class="muted">Loading…</p></div>
+  <div class="panel"><h3>Governance</h3><p class="muted">Loading…</p></div>
+  <div class="panel"><h3>Query Activity</h3><p class="muted">Loading…</p></div>
 </div>
+
+<script type="module">
+const _uiUser = "{{ ui_user }}";
+const _uiPass = "{{ ui_password }}";
+function _auth() { return "Basic " + btoa(_uiUser + ":" + _uiPass); }
+function esc(s) { return String(s ?? ""); }
+
+function statusDot(ok) {
+  return ok ? '<span style="color:#22c55e">&#9679;</span>' : '<span style="color:#ef4444">&#9679;</span>';
+}
+
+function ago(ts) {
+  if (!ts) return "---";
+  try {
+    const d = new Date(ts);
+    const diff = Date.now() - d.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + "m ago";
+    return Math.floor(mins / 60) + "h ago";
+  } catch { return esc(ts); }
+}
+
+async function loadDashboard() {
+  try {
+    const resp = await fetch("/ui/api/dashboard-data", { headers: { "Authorization": _auth() } });
+    if (!resp.ok) throw new Error(resp.status);
+    const d = await resp.json();
+    document.getElementById("dashboard-status").textContent = "Updated " + new Date().toLocaleTimeString();
+
+    // 1. Daemon Health
+    const health = d.health || {};
+    const sched = d.scheduler || {};
+    const panels = document.getElementById("dashboard-panels");
+    panels.innerHTML = "";
+
+    // Panel 1: Daemon Health
+    const p1 = document.createElement("div");
+    p1.className = "panel";
+    p1.innerHTML = '<h3>Daemon Health</h3>' +
+      '<table style="width:100%;font-size:0.85rem;">' +
+      '<tr><th style="width:100px">Status</th><td>' + statusDot(health.daemon_running) + (health.daemon_running ? " Running" : " Offline</td>") + '</tr>' +
+      '<tr><th>Index</th><td>' + statusDot(health.index_loaded) + (health.index_loaded ? " Loaded" : " Unloaded</td>") + '</tr>' +
+      '<tr><th>Scheduler</th><td>' + statusDot(sched.running) + (sched.running ? " Running (" + sched.job_count + " jobs)" : (sched.job_count > 0 ? " Has jobs (idle)" : " No jobs</td>") + '</tr>' +
+      '<tr><th>Uptime</th><td>' + (sched.uptime_seconds ? formatUptime(sched.uptime_seconds) : "---") + '</td></tr>' +
+      '<tr><th>Errors</th><td>' + (sched.recent_errors > 0 ? '<span style="color:#ef4444">' + sched.recent_errors + " failing</span>" : "<span style='color:#22c55e'>None</span>") + '</td></tr>' +
+      '</table>';
+    panels.appendChild(p1);
+
+    // Panel 2: Wiki Overview
+    const p2 = document.createElement("div");
+    p2.className = "panel";
+    p2.innerHTML = '<h3>Wiki Overview</h3>' +
+      '<table style="width:100%;font-size:0.85rem;">' +
+      '<tr><th style="width:100px">Total Pages</th><td style="font-size:1.2em">' + (d.total_pages || 0) + '</td></tr>' +
+      '<tr><th>Low Confidence</th><td><span style="color:#ef4444">' + (d.total_low_confidence || 0) + '</span></td></tr>' +
+      '<tr><th>Stale</th><td><span style="color:#f59e0b">' + (d.total_stale || 0) + '</span></td></tr>' +
+      '</table>' +
+      (d.domains && d.domains.length > 0 ?
+        '<h4 style="margin-top:12px;font-size:0.8rem;text-transform:uppercase;color:var(--muted)">Domains</h4>' +
+        '<table style="width:100%;font-size:0.8rem;margin-top:4px;">' +
+        '<tr><th>Domain</th><th>Pages</th><th>Last Updated</th></tr>' +
+        d.domains.map(dom => '<tr><td><code>' + esc(dom.name) + '</code></td><td>' + (dom.page_count || 0) + '</td><td>' + ago(dom.last_updated) + '</td></tr>').join('') +
+        '</table>' : '') +
+      '</div>';
+    panels.appendChild(p2);
+
+    // Panel 3: Ingestion Pipeline
+    const inbox = d.inbox || {};
+    const p3 = document.createElement("div");
+    p3.className = "panel";
+    p3.innerHTML = '<h3>Ingestion Pipeline</h3>' +
+      '<table style="width:100%;font-size:0.85rem;">' +
+      '<tr><th style="width:100px">New Files</th><td>' + (inbox.new || 0) + '</td></tr>' +
+      '<tr><th>Staging</th><td>' + (inbox.staging || 0) + '</td></tr>' +
+      '<tr><th>Processing</th><td>' + (inbox.processing || 0) + '</td></tr>' +
+      '<tr><th>Failed</th><td>' + (inbox.failed > 0 ? '<span style="color:#ef4444">' + (inbox.failed || 0) + '</span>' : '0') + '</td></tr>' +
+      '<tr><th>Done</th><td>' + (inbox.done || 0) + '</td></tr>' +
+      '</table>';
+    panels.appendChild(p3);
+
+    // Panel 4: Governance
+    const gov = d.governance || {};
+    const g = gov.result || {};
+    const p4 = document.createElement("div");
+    p4.className = "panel";
+    const govStatusText = {
+      success: '<span style="color:#22c55e">Success</span>',
+      error: '<span style="color:#ef4444">Error</span>',
+      running: '<span style="color:#3b82f6">Running</span>',
+    };
+    p4.innerHTML = '<h3>Governance</h3>' +
+      '<table style="width:100%;font-size:0.85rem;">' +
+      '<tr><th style="width:100px">Last Run</th><td>' + (gov.status === "ok" ? ago(gov.last_run) : (gov.status || ""Not run</td>") + '</tr>' +
+      '<tr><th>Detailed Status</th><td>' + (govStatusText[g.status] || esc(g.status)) + '</td></tr>' +
+      '<tr><th>Pages Checked</th><td>' + (g.total_pages || 0) + '</td></tr>' +
+      '<tr><th>Lint Issues</th><td>' + (g.lint_issues || 0) + '</td></tr>' +
+      '<tr><th>Low Quality</th><td><span style="color:#f59e0b">' + (g.low_quality_pages || 0) + '</span></td></tr>' +
+      '<tr><th>Orphans</th><td>' + (g.orphan_pages || 0) + '</td></tr>' +
+      '<tr><th>Broken Links</th><td>' + (g.broken_links || 0) + '</td></tr>' +
+      '<tr><th>Stale</th><td>' + (g.stale_pages || 0) + '</td></tr>' +
+      '<tr><th>Duplicates</th><td>' + (g.duplicates || 0) + '</td></tr>' +
+      '<tr><th>Contradictions</th><td>' + (g.contradictions || 0) + '</td></tr>' +
+      '</table>';
+    panels.appendChild(p4);
+
+    // Panel 5: Recent Jobs
+    const jobs = d.jobs || [];
+    const p5 = document.createElement("div");
+    p5.className = "panel";
+    p5.innerHTML = '<h3>Recent Daemon Jobs</h3>' +
+      (jobs.length > 0 ?
+        '<table style="width:100%;font-size:0.8rem;">' +
+        '<tr><th>Job</th><th>Status</th><th>Last Run</th></tr>' +
+        jobs.map(j => {
+          const stColor = j.status === "completed" ? "#22c55e" : (j.status === "failed" ? "#ef4444" : "#f59e0b");
+          return '<tr><td><code>' + esc(j.name) + '</code></td>' +
+            '<td><span style="color:' + stColor + '">&#9679;</span> ' + esc(j.status) + '</td>' +
+            '<td>' + ago(j.last_run) + '</td></tr>';
+        }).join('') +
+        '</table>' :
+        '<p class="muted">No jobs registered</p>');
+    panels.appendChild(p5);
+
+    // Panel 6: Query Activity
+    const qs = d.query_stats || {};
+    const p6 = document.createElement("div");
+    p6.className = "panel";
+    p6.innerHTML = '<h3>Query Activity</h3>' +
+      '<table style="width:100%;font-size:0.85rem;">' +
+      '<tr><th style="width:100px">Total Queries</th><td>' + (qs.total_queries || 0) + '</td></tr>' +
+      '</table>' +
+      (qs.top_queries && qs.top_queries.length > 0 ?
+        '<h4 style="margin-top:12px;font-size:0.8rem;text-transform:uppercase;color:var(--muted)">Top Queries</h4>' +
+        '<table style="width:100%;font-size:0.8rem;margin-top:4px;">' +
+        qs.top_queries.slice(0, 5).map(q =>
+          '<tr><td>' + esc(q.query) + '</td><td>' + q.hits + ' hits</td></tr>'
+        ).join('') +
+        '</table>' : '') +
+      '</div>';
+    panels.appendChild(p6);
+
+  } catch (e) {
+    document.getElementById("dashboard-status").textContent = "Error: " + e.message;
+  }
+}
+
+function formatUptime(seconds) {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (hrs === 0) return mins + "m";
+  return hrs + "h " + mins + "m";
+}
+
+loadDashboard();
+setInterval(loadDashboard, 30000);  // Auto-refresh 30s
+</script>
 {% endblock %}

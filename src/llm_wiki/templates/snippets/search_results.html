@@ -1,10 +1,10 @@
-<!-- HTMX search result rows -->
+<!-- HTMX search result rows — used by server-side HTMX rendering -->
 {% for r in results %}
-<tr>
-  <td><a class="nav-link" hx-get="/ui/api/page/{{ r.page_id }}" hx-target="#main-content" hx-swap="innerHTML" href="#">{{ r.title or r.page_id }}</a></td>
+<tr onclick="location.href='/ui/page/{{ r.page_id }}'" style="cursor:pointer;">
+  <td><a class="nav-link" href="/ui/page/{{ r.page_id }}">{{ r.title or r.page_id }}</a></td>
   <td><code>{{ r.domain or "general" }}</code></td>
-  <td>{{ "%.2f"|format(r.confidence or 0) }}</td>
-  <td>{{ "%.2f"|format(r.authority_score or 0) }}</td>
+  <td>{{ r.kind or "page" }}</td>
+  <td>{{ "%.2f"|format(r.score or (r.confidence or 0)) }}</td>
 </tr>
 {% else %}
 <tr><td colspan="4" class="muted">No results found.</td></tr>

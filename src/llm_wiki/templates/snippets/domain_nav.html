@@ -1,11 +1,13 @@
-<!-- Domain navigation snippet -->
+<!-- Domain navigation snippet — loaded into sidebar via HTMX -->
 {% for d in domains %}
 <li>
-  <a class="{% if d.name == current_domain %}active{% endif %}" href="#">
-    {{ d.name }}
+  <a class="domain-link" title="View: /ui/domain/{{ d.name }}" href="/ui/domain/{{ d.name }}">
+    {{ d.title or d.name }}
     <span class="badge">{{ d.page_count }}</span>
-    {% if d.scope == "shared" %}<span class="badge shared">shared</span>{% endif %}
-    {% if d.scope == "personal" %}<span class="badge personal">personal</span>{% endif %}
+    {% if d.scope == "shared" %}<span class="scope-bar shared" title="shared"></span>{% endif %}
+    {% if d.scope == "personal" %}<span class="scope-bar personal" title="personal"></span>{% endif %}
   </a>
 </li>
+{% else %}
+<li class="muted" style="padding:8px 16px;font-size:0.85rem;">No domains configured</li>
 {% endfor %}

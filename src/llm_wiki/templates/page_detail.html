@@ -1,18 +1,129 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Page: {{ page_id }}</h2>
-<div style="display:grid;grid-template-columns:1fr 320px;gap:24px;">
+<h2 id="page-title">Loading&hellip;</h2>
+<div style="display:grid;grid-template-columns:1fr 340px;gap:24px;">
+  <!-- Main: Content -->
   <div class="panel">
     <h3>Content</h3>
-    <pre class="muted">Page content not yet available — REST API proxy not implemented.</pre>
+    <div id="page-content" class="muted">Loading page content&hellip;</div>
   </div>
-  <div class="panel">
-    <h3>Front Matter</h3>
-    <pre class="muted">id: {{ page_id }}</pre>
-    <h3 style="margin-top:16px;">Connects To</h3>
-    <pre class="muted">Loading…</pre>
-    <h3 style="margin-top:16px;">Connected From</h3>
-    <pre class="muted">Loading…</pre>
+  <!-- Side: Metadata -->
+  <div>
+    <div class="panel">
+      <h3>Metadata</h3>
+      <div id="page-meta" class="muted">Loading&hellip;</div>
+    </div>
+    <div class="panel">
+      <h3>Connects To</h3>
+      <div id="page-connects-to" class="muted">Loading&hellip;</div>
+    </div>
+    <div class="panel">
+      <h3>Connected From</h3>
+      <div id="page-connected-from" class="muted">Loading&hellip;</div>
+    </div>
   </div>
 </div>
+
+<script>
+const _uiUser = "{{ ui_user }}";
+const _uiPass = "{{ ui_password }}";
+const pageId = "{{ page_id }}";
+function _auth() { return "Basic " + btoa(_uiUser + ":" + _uiPass); }
+function esc(s) { return String(s ?? ""); }
+
+async function loadPage() {
+  try {
+    var resp = await fetch("/ui/api/page/" + encodeURIComponent(pageId), {
+      headers: { "Authorization": _auth() }
+    });
+    if (!resp.ok) {
+      // Try REST API fallback
+      var resp2 = await fetch("/v1/pages/" + encodeURIComponent(pageId), {
+        headers: { "Authorization": _auth() }
+      });
+      if (!resp2.ok) {
+        document.getElementById("page-content").textContent = "Error " + resp2.status + ": page not found.";
+        return;
+      }
+      var p = await resp2.json();
+      p.connects_to = [];
+      p.connected_from = [];
+    } else {
+      var p = await resp.json();
+    }
+
+    // Title
+    document.getElementById("page-title").textContent = esc(p.title || p.page_id);
+
+    // Content
+    var contentEl = document.getElementById("page-content");
+    if (p.content) {
+      contentEl.innerHTML = "<pre style=\"white-space:pre-wrap;word-wrap:break-word;font-family:inherit;background:var(--hover);padding:12px;border-radius:6px;font-size:0.9rem;line-height:1.6;\">" + esc(p.content) + "</pre>";
+    } else {
+      contentEl.innerHTML = '<p class="muted">No content available.</p>';
+    }
+
+    // Metadata
+    var meta = document.getElementById("page-meta");
+    var conf = p.confidence ?? 0;
+    var auth = p.authority_score ?? 0;
+    var updatedAt = p.frontmatter?.updated_at || p.updated_at || "";
+    var timeStr = updatedAt ? new Date(updatedAt).toLocaleString() : "——";
+
+    meta.innerHTML =
+      "<table style=\"width:100%;font-size:0.8rem;\">" +
+      "<tr><th style=\"width:90px\">ID</th><td><code>" + esc(p.page_id) + "</code></td></tr>" +
+      "<tr><th>Domain</th><td><code>" + esc(p.domain) + "</code></td></tr>" +
+      "<tr><th>Kind</th><td>" + esc(p.kind || "page") + "</td></tr>" +
+      "<tr><th>Confidence</th><td>" + Number(conf).toFixed(2) + "</td></tr>" +
+      "<tr><th>Authority</th><td>" + Number(auth).toFixed(2) + "</td></tr>" +
+      "<tr><th>Updated</th><td>" + esc(timeStr) + "</td></tr>" +
+      "</table>";
+
+    // Trust tags
+    var trustTags = p.frontmatter?.trust_tags || [];
+    if (trustTags.length > 0) {
+      var tagHtml = trustTags.map(function(t) {
+        return '<span style="background:var(--accent);color:#fff;padding:2px 8px;border-radius:10px;font-size:0.75rem;">' + esc(t) + "</span>";
+      }).join("");
+      meta.innerHTML +=
+        "<h4 style=\"margin-top:12px;font-size:0.8rem;\">Trust Tags</h4>" +
+        "<div style=\"display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;\">" + tagHtml + "</div>";
+    }
+
+    // Sources
+    var sources = p.frontmatter?.sources || [];
+    if (sources.length > 0) {
+      meta.innerHTML +=
+        "<h4 style=\"margin-top:12px;font-size:0.8rem;\">Sources</h4>" +
+        "<ul style=\"font-size:0.8rem;padding-left:16px;\">";
+      sources.forEach(function(s) {
+        meta.innerHTML += "<li><code>" + esc(s) + "</code></li>";
+      });
+      meta.innerHTML += "</ul>";
+    }
+
+    // Connects To
+    var connectsTo = p.connects_to || [];
+    var ctEl = document.getElementById("page-connects-to");
+    ctEl.innerHTML = connectsTo.length > 0 ?
+      "<ul style=\"font-size:0.8rem;padding-left:16px;margin:0\">" +
+      connectsTo.map(function(l) { return "<li><code>" + esc(l.target || l.page_id || l) + "</code></li>"; }).join("") + "</ul>" :
+      '<p class="muted">No outgoing links</p>';
+
+    // Connected From
+    var connectedFrom = p.connected_from || [];
+    var cfEl = document.getElementById("page-connected-from");
+    cfEl.innerHTML = connectedFrom.length > 0 ?
+      "<ul style=\"font-size:0.8rem;padding-left:16px;margin:0\">" +
+      connectedFrom.map(function(l) { return "<li><code>" + esc(l) + "</code></li>"; }).join("") + "</ul>" :
+      '<p class="muted">No backlinks</p>';
+
+  } catch (e) {
+    document.getElementById("page-content").textContent = "Error: " + esc(e.message);
+  }
+}
+
+loadPage();
+</script>
 {% endblock %}

@@ -11,7 +11,10 @@
     <tbody id="search-tbody"></tbody>
   </table>
 </div>
-<div id="page-detail" style="margin-top:20px;"></div>
+
+<!-- Horizontal rules -->
+<div id="page-detail"></div>
+
 <script>
 const _uiUser = "{{ ui_user }}";
 const _uiPass = "{{ ui_password }}";
@@ -19,10 +22,12 @@ function _authHeader() {
   return "Basic " + btoa(_uiUser + ":" + _uiPass);
 }
 function escHtml(s) {
+  if (s == null) return "";
   const d = document.createElement('div');
-  d.textContent = s || '';
+  d.textContent = s;
   return d.innerHTML;
 }
+
 function renderTable(pages) {
   const tbody = document.getElementById('search-tbody');
   const table = document.getElementById('search-table');
@@ -33,71 +38,51 @@ function renderTable(pages) {
     return;
   }
   table.style.display = '';
-  status.textContent = pages.length + ' result(s) for "' + document.getElementById('search-q').value + '"';
+  status.textContent = pages.length + ' result(s)';
   let html = '';
   for (const r of pages) {
     const score = r.score != null ? Number(r.score).toFixed(2) : '0.00';
+    const confidence = r.confidence != null ? Number(r.confidence).toFixed(2) : '0.00';
     const title = r.title || r.page_id;
-    html += '<tr style="cursor:pointer;" onclick="showPageDetail(' + JSON.stringify(r.page_id) + ', ' + JSON.stringify(escHtml(r.domain)) + ', ' + JSON.stringify(escHtml(r.kind)) + ', \'' + score + '\')">'
-      + '<td><strong>' + escHtml(title) + '</strong></td>'
+    html += '<tr onclick="showPageDetail(\'' + encodeURIComponent(r.page_id) + '\')" style="cursor:pointer;">'
+      + '<td><a class="nav-link" href="/ui/page/' + encodeURIComponent(r.page_id) + '">' + escHtml(title) + '</a></td>'
       + '<td><code>' + escHtml(r.domain || 'general') + '</code></td>'
       + '<td>' + escHtml(r.kind || 'page') + '</td>'
-      + '<td>' + score + '</td>'
+      + '<td><span title="confidence: ' + confidence + '">' + score + '</span></td>'
       + '</tr>';
   }
   tbody.innerHTML = html;
 }
-async function showPageDetail(pageId, searchDomain, searchKind, searchScore) {
-  const detail = document.getElementById('page-detail');
-  detail.innerHTML = '<div class="card"><p class="muted">Loading...</p></div>';
-  try {
-    const resp = await fetch('/v1/pages/' + encodeURIComponent(pageId), {
-      headers: { 'Authorization': _authHeader() }
-    });
-    if (!resp.ok) { detail.innerHTML = '<div class="card"><p class="muted">Failed: ' + resp.status + '</p></div>'; return; }
-    const p = await resp.json();
-    let html = '<div class="panel"><h3>Metadata</h3>';
-    html += '<table style="width:100%;font-size:0.85rem;">';
-    html += '<tr><th style="width:120px;">ID</th><td><code>' + escHtml(p.page_id) + '</code></td></tr>';
-    html += '<tr><th>Title</th><td>' + escHtml(p.title) + '</td></tr>';
-    html += '<tr><th>Domain</th><td><code>' + escHtml(p.domain || searchDomain || 'general') + '</code></td></tr>';
-    html += '<tr><th>Kind</th><td>' + escHtml(p.kind || searchKind || 'page') + '</td></tr>';
-    html += '<tr><th>Confidence</th><td>' + (p.confidence ?? 0).toFixed(2) + '</td></tr>';
-    html += '<tr><th>Authority</th><td>' + (p.authority_score ?? 0).toFixed(2) + '</td></tr>';
-    if (searchScore) {
-      html += '<tr><th>Search Score</th><td>' + escHtml(searchScore) + '</td></tr>';
-    }
-    html += '</table></div>';
-    if (p.content) {
-      html += '<div class="panel"><h3>Content</h3><pre>' + escHtml(p.content) + '</pre></div>';
-    }
-    detail.innerHTML = html;
-    detail.scrollIntoView({ behavior: 'smooth' });
-  } catch(e) {
-    detail.innerHTML = '<div class="card"><p class="muted">Error: ' + e.message + '</p></div>';
-  }
-}
+
 let _searchTimeout;
-document.getElementById('search-form')?.addEventListener('submit', function(e) {
-  e.preventDefault();
-  const q = document.getElementById('search-q').value.trim();
-  if (!q) { renderTable([]); return; }
-  clearTimeout(_searchTimeout);
-  _searchTimeout = setTimeout(async () => {
-    try {
-      const resp = await fetch('/ui/api/search-json?q=' + encodeURIComponent(q), {
-        headers: { 'Authorization': _authHeader() }
-      });
-      if (!resp.ok) {
-        document.getElementById('search-status').textContent = 'Search failed: ' + resp.status;
-        return;
+document.addEventListener('DOMContentLoaded', function() {
+  const form = document.getElementById('search-form');
+  if (!form) return;
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const q = document.getElementById('search-q').value.trim();
+    if (!q) { renderTable([]); return; }
+    clearTimeout(_searchTimeout);
+    _searchTimeout = setTimeout(async () => {
+      try {
+        const resp = await fetch('/ui/api/search-json?q=' + encodeURIComponent(q), {
+          headers: { 'Authorization': _authHeader() }
+        });
+        if (!resp.ok) {
+          document.getElementById('search-status').textContent = 'Search failed: ' + resp.status;
+          return;
+        }
+        const data = await resp.json();
+        renderTable(data.results || []);
+      } catch(e) {
+        document.getElementById('search-status').textContent = 'Error: ' + e.message;
       }
-      const data = await resp.json();
-      renderTable(data.results || []);
-    } catch(e) {
-      document.getElementById('search-status').textContent = 'Error: ' + e.message;
-    }
-  }, 300);
+    }, 300);
+  });
 });
+
+function showPageDetail(pageId) {
+  window.location.href = '/ui/page/' + encodeURIComponent(pageId);
+}
 </script>
 {% endblock %}

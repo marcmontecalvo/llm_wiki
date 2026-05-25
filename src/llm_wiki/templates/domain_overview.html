@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 id="domain-title">Loading…</h2>
+<div id="domain-status" class="muted">Loading domain data…</div>
+
+<div class="panels" id="domain-panels">
+  <!-- Populated by JS -->
+</div>
+
+<div class="panel" id="domain-pages-panel" style="margin-top:20px;">
+  <h3>Pages in this domain</h3>
+  <div id="domain-pages-list" class="muted">Loading…</div>
+</div>
+
+<script>
+(function() {
+  const _uiUser = "{{ ui_user }}";
+  const _uiPass = "{{ ui_password }}";
+  const domain = "{{ domain_id }}";
+  document.getElementById("domain-title").textContent = domain;
+
+  function auth() { return "Basic " + btoa(_uiUser + ":" + _uiPass); }
+  function esc(s) { return String(s ?? ""); }
+
+  async function load() {
+    const status = document.getElementById("domain-status");
+    const panels = document.getElementById("domain-panels");
+    const pagesList = document.getElementById("domain-pages-list");
+
+    try {
+      // Load domain data from domains-tree for overview stats
+      const [dashR, pagesR] = await Promise.all([
+        fetch('/ui/api/dashboard-data', { headers: { 'Authorization': auth() } }),
+        fetch('/v1/pages?limit=200&domain=' + encodeURIComponent(domain), { headers: { 'Authorization': auth() } }),
+      ]);
+
+      if (!dashR.ok) throw new Error(dashR.status);
+      if (!pagesR.ok) throw new Error(pagesR.status);
+
+      const d = await dashR.json();
+      const pgData = await pagesR.json();
+
+      const pages = (pgData.pages || []);
+      status.textContent = domain + ' — ' + pages.length + ' pages';
+
+      // Find per-domain dashboard data
+      const foundDash = (d.domain_dashboards || []).find(function(dd) { return dd.domain === domain; });
+
+      // Panel 1: Quick stats
+      let html = '<div class="panel"><h3>Overview</h3><table style="width:100%;font-size:0.85rem;">';
+      html += '<tr><th style="width:120px;">Pages</th><td>' + (pages.length || 0) + '</td></tr>';
+
+      // Per-domain stats from dashboard
+      if (foundDash) {
+        html += '<tr><th>Low Confidence</th><td><span style="color:var(--red)">' + (foundDash.low_confidence_count || 0) + '</span></td></tr>';
+        html += '<tr><th>Stale</th><td><span style="color:var(--yellow)">' + (foundDash.stale_count || 0) + '</span></td></tr>';
+      } else {
+        // Compute from page list
+        let lowConf = 0, stale = 0;
+        for (const p of pages) {
+          const c = p.confidence ?? 0;
+          if (typeof c === 'boolean') c = c ? 1 : 0;
+          if (parseFloat(c) < 0.5) lowConf++;
+        }
+        html += '<tr><th>Low Confidence</th><td><span style="color:var(--red)">' + lowConf + '</span></td></tr>';
+        html += '<tr><th>Stale</th><td><span style="color:var(--yellow)">' + stale + '</span></td></tr>';
+      }
+
+      // Count by kind
+      const kindCount = {};
+      for (const p of pages) {
+        const k = p.kind || 'page';
+        kindCount[k] = (kindCount[k] || 0) + 1;
+      }
+      const kindsHtml = Object.entries(kindCount).map(function(e) { return '<code>' + esc(e[0]) + ':</code> ' + e[1]; }).join(' ');
+      html += '<tr><th>Kinds</th><td>' + (kindsHtml || '—') + '</td></tr>';
+      html += '</table></div>';
+      panels.innerHTML = html;
+
+      // Pages list
+      if (!pages.length) {
+        pagesList.innerHTML = '<p class="muted">No pages found in this domain.</p>';
+        return;
+      }
+
+      let phtml = '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Title</th><th>Kind</th><th>Confidence</th><th>Updated</th></tr></thead><tbody>';
+      for (const p of pages) {
+        const c = p.confidence ?? 0;
+        const confStr = typeof c === 'boolean' ? (c ? '1.0' : '0.0') : Number(c).toFixed(2);
+        const confColor = parseFloat(confStr) >= 0.7 ? 'var(--green)' : (parseFloat(confStr) >= 0.4 ? 'var(--yellow)' : 'var(--red)');
+        phtml += '<tr style="cursor:pointer;" onclick="location.href=\'/ui/page/' + encodeURIComponent(p.page_id) + '\'">'
+          + '<td><a class="nav-link" href="/ui/page/' + encodeURIComponent(p.page_id) + '">' + esc(p.title || p.page_id) + '</a></td>'
+          + '<td>' + esc(p.kind || 'page') + '</td>'
+          + '<td><span style="color:' + confColor + '">' + confStr + '</span></td>'
+          + '<td>' + esc(p.updated_at || '') + '</td>'
+          + '</tr>';
+      }
+      phtml += '</tbody></table>';
+      // Add edit link
+      phtml += '<div style="margin-top:8px;"><a class="btn primary" href="/ui/editor">+ New Page</a></div>';
+      pagesList.innerHTML = phtml;
+
+    } catch (e) {
+      status.textContent = 'Error: ' + esc(e.message);
+      pagesList.textContent = 'Failed to load domain data.';
+    }
+  }
+
+  load();
+})();
+</script>
+{% endblock %}

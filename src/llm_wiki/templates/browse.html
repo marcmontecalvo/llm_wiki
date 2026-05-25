@@ -1,11 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Browse Pages</h2>
-<div id="browse-controls" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-  <select id="browse-domain" style="padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);">
+<div id="browse-status" class="muted">Loading pages…</div>
+
+<!-- Filters -->
+<div class="filter-bar mb-1rem">
+  <select id="f-domain">
     <option value="">All domains</option>
   </select>
-  <select id="browse-kind" style="padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);">
+  <select id="f-kind">
     <option value="">All kinds</option>
     <option value="page">page</option>
     <option value="entity">entity</option>
@@ -14,129 +17,184 @@
     <option value="summary">summary</option>
     <option value="archive">archive</option>
   </select>
-  <button id="browse-filter" style="padding:6px 16px;border:1px solid var(--accent);border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;">Filter</button>
+  <input type="number" id="f-conf" min="0" max="1" step="0.1" placeholder="Confidence ≥" style="width:110px;">
+  <input type="text" id="f-tags" placeholder="Tags (comma-sep)" style="width:140px;">
+  <input type="text" id="f-search" placeholder="Quick search…" style="width:150px;">
+  <select id="f-sort" style="width:auto;">
+    <option value="title">Sort: Title</option>
+    <option value="conf-desc">Confidence ↓</option>
+    <option value="conf-asc">Confidence ↑</option>
+    <option value="updated">Updated ↓</option>
+  </select>
 </div>
+
+<!-- Table -->
 <div id="browse-results" style="overflow-x:auto;">
   <table>
-    <thead><tr><th>Title</th><th>Domain</th><th>Kind</th><th>Confidence</th><th>Updated</th></tr></thead>
+    <thead><tr><th style="cursor:pointer" onclick="setSort('title')">Title ↕</th><th>Domain</th><th>Kind</th><th>Confidence</th><th>Updated</th></tr></thead>
     <tbody id="browse-tbody"></tbody>
   </table>
 </div>
-<div id="page-detail" style="margin-top:20px;"></div>
 <script>
-const _uiUser = "{{ ui_user }}";
-const _uiPass = "{{ ui_password }}";
-function _authHeader() {
-  return "Basic " + btoa(_uiUser + ":" + _uiPass);
-}
-async function loadPageCountForSidebar() {
-  // Pre-populate domain page counts from the page data we'll fetch
-  window._domainCounts = {};
-}
-async function loadPages() {
-  const tbody = document.getElementById('browse-tbody');
-  tbody.innerHTML = '<tr><td colspan="5" class="muted">Loading...</td></tr>';
-  const domain = document.getElementById('browse-domain').value;
-  const kind = document.getElementById('browse-kind').value;
-  let url = '/v1/pages?limit=200';
-  if (domain) url += '&domain=' + encodeURIComponent(domain);
-  // Filter by kind in JS since list_pages doesn't support kind param directly
-  try {
-    const resp = await fetch(url, { headers: { 'Authorization': _authHeader() } });
-    if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="5" class="muted">Failed to load pages: ' + resp.status + '</td></tr>'; return; }
-    const data = await resp.json();
-    let pages = data.pages || [];
-    if (kind) pages = pages.filter(p => p.kind === kind);
-    renderTable(pages);
-  } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted">Error: ' + e.message + '</td></tr>';
-  }
-}
-function renderTable(pages) {
-  const tbody = document.getElementById('browse-tbody');
-  if (!pages.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted">No pages found.</td></tr>';
-    return;
-  }
-  function safeClick(pageId) {
-    return "onclick='showPageDetail(" + JSON.stringify(pageId) + ")'";
-  }
-  let html = '';
-  for (const p of pages) {
-    const oid = safeClick(p.page_id);
-    html += '<tr style="cursor:pointer;" ' + oid + '>'
-      + '<td><strong>' + escHtml(p.title || p.page_id) + '</strong></td>'
-      + '<td><code>' + escHtml(p.domain || 'general') + '</code></td>'
-      + '<td>' + escHtml(p.kind || 'page') + '</td>'
-      + '<td>' + ((p.confidence ?? 0).toFixed(2)) + '</td>'
-      + '<td>' + escHtml(p.updated_at || '') + '</td>'
-      + '</tr>';
-  }
-  tbody.innerHTML = html;
-}
-async function showPageDetail(pageId) {
-  const detail = document.getElementById('page-detail');
-  detail.innerHTML = '<div class="card"><p class="muted">Loading...</p></div>';
-  try {
-    const resp = await fetch('/v1/pages/' + encodeURIComponent(pageId), {
-      headers: { 'Authorization': _authHeader() }
-    });
-    if (!resp.ok) { detail.innerHTML = '<div class="card"><p class="muted">Failed to load page: ' + resp.status + '</p></div>'; return; }
-    const p = await resp.json();
-    let html = '<div class="panel"><h3>Metadata</h3>';
-    html += '<table style="width:100%;font-size:0.85rem;">';
-    html += '<tr><th style="width:120px;">ID</th><td><code>' + escHtml(p.page_id) + '</code></td></tr>';
-    html += '<tr><th>Title</th><td>' + escHtml(p.title) + '</td></tr>';
-    html += '<tr><th>Domain</th><td><code>' + escHtml(p.domain) + '</code></td></tr>';
-    html += '<tr><th>Kind</th><td>' + escHtml(p.kind) + '</td></tr>';
-    html += '<tr><th>Confidence</th><td>' + (p.confidence ?? 0).toFixed(2) + '</td></tr>';
-    html += '<tr><th>Authority</th><td>' + (p.authority_score ?? 0).toFixed(2) + '</td></tr>';
-    html += '</table></div>';
-    if (p.content) {
-      html += '<div class="panel"><h3>Content</h3><pre>' + escHtml(p.content) + '</pre></div>';
-    }
-    detail.innerHTML = html;
-    detail.scrollIntoView({ behavior: 'smooth' });
-  } catch(e) {
-    detail.innerHTML = '<div class="card"><p class="muted">Error: ' + e.message + '</p></div>';
-  }
-}
-function escHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s || '';
-  return d.innerHTML;
-}
-// Load sidebar domains
-async function loadSidebarDomains() {
-  try {
-    const resp = await fetch('/v1/domains', { headers: { 'Authorization': _authHeader() } });
-    if (!resp.ok) return;
-    const data = await resp.json();
-    const domains = data.domains || [];
-    // Populate sidebar nav
-    const sb = document.getElementById('sidebar-content');
-    if (sb) {
-      let html = '';
-      for (const d of domains) {
-        const badge = d.scope === 'shared' ? 'shared' : 'personal';
-        html += '<li><a class="nav-link" href="/ui/browse">' + escHtml(d.name) + ' <span class="badge ' + badge + '">' + d.page_count + '</span></a></li>';
-      }
-      sb.innerHTML = html;
-    }
-    // Populate page filter dropdown
-    const sel = document.getElementById('browse-domain');
-    if (sel) {
-      for (const d of domains) {
+(function() {
+  const _uiUser = "{{ ui_user }}";
+  const _uiPass = "{{ ui_password }}";
+  function auth() { return "Basic " + btoa(_uiUser + ":" + _uiPass); }
+  function esc(s) { return String(s ?? ""); }
+
+  let allPages = [];
+  let currentSort = 'title';
+
+  // Load domains for filters
+  async function loadDomains() {
+    try {
+      const r = await fetch('/ui/api/domains-tree', { headers: { 'Authorization': auth() } });
+      if (!r.ok) return;
+      const data = await r.json();
+      const doms = data.domains || [];
+      const sel = document.getElementById('f-domain');
+      for (const d of doms) {
         const opt = document.createElement('option');
         opt.value = d.name;
-        opt.textContent = d.name + (d.page_count ? ' (' + d.page_count + ')' : '');
+        opt.textContent = d.title ? d.name + ' (' + d.page_count + ')' : d.name;
         sel.appendChild(opt);
       }
+      // Sidebar domains are loaded via HTMX domain_nav snippet
+    } catch {}
+  }
+
+  // Load pages from REST API
+  async function loadPages() {
+    document.getElementById('browse-status').textContent = 'Loading…';
+    try {
+      const domain = document.getElementById('f-domain').value;
+      let url = '/v1/pages?limit=500';
+      if (domain) url += '&domain=' + encodeURIComponent(domain);
+      const r = await fetch(url, { headers: { 'Authorization': auth() } });
+      if (!r.ok) throw new Error(r.status);
+      const data = await r.json();
+      allPages = (data.pages || []);
+      applyFilters();
+    } catch(e) {
+      document.getElementById('browse-tbody').innerHTML = '<tr><td colspan="5" class="muted">Failed to load: ' + esc(e.message) + '</td></tr>';
     }
-  } catch(e) {}
-}
-document.getElementById('browse-filter')?.addEventListener('click', loadPages);
-loadSidebarDomains();
-loadPages();
+  }
+
+  function applyFilters() {
+    // Kind filter
+    const kind = document.getElementById('f-kind').value;
+    let pages = allPages;
+    if (kind) pages = pages.filter(p => p.kind === kind);
+
+    // Confidence filter
+    const confMin = document.getElementById('f-conf').value;
+    if (confMin) {
+      const min = parseFloat(confMin);
+      if (!isNaN(min)) {
+        pages = pages.filter(p => {
+          let c = p.confidence ?? 0;
+          if (typeof c === 'boolean') c = c ? 1 : 0;
+          return parseFloat(c) >= min;
+        });
+      }
+    }
+
+    // Tags filter
+    const tagsStr = document.getElementById('f-tags').value.trim();
+    if (tagsStr) {
+      const required = tagsStr.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+      if (required.length) {
+        pages = pages.filter(p => {
+          const pageTags = (p.tags || []).map(String).map(t => t.toLowerCase());
+          return required.every(t => pageTags.includes(t));
+        });
+      }
+    }
+
+    // Quick search
+    const qs = document.getElementById('f-search').value.trim().toLowerCase();
+    if (qs) {
+      pages = pages.filter(p => {
+        const title = (p.title || p.page_id || '').toLowerCase();
+        const content = (p.content && p.content.length < 500 ? p.content : (p.frontmatter ? '' : '')).toLowerCase();
+        return title.includes(qs) || (p.page_id || '').toLowerCase().includes(qs);
+      });
+    }
+
+    // Sort
+    sortPages(pages, document.getElementById('f-sort').value);
+    renderTable(pages);
+  }
+
+  function sortPages(pages, sortBy) {
+    currentSort = sortBy;
+    pages.sort(function(a, b) {
+      switch (sortBy) {
+        case 'title': return esc(a.title || a.page_id).localeCompare(esc(b.title || b.page_id));
+        case 'conf-desc': return (b.confidence || 0) - (a.confidence || 0);
+        case 'conf-asc': return (a.confidence || 0) - (b.confidence || 0);
+        case 'updated':
+          const da = new Date(a.updated_at || 0);
+          const db = new Date(b.updated_at || 0);
+          return db - da;
+        default: return 0;
+      }
+    });
+  }
+
+  function confClass(c) {
+    if (c >= 0.7) return 'conf-high';
+    if (c >= 0.4) return 'conf-med';
+    return 'conf-low';
+  }
+  function confColor(c) {
+    if (c >= 0.7) return 'var(--green)';
+    if (c >= 0.4) return 'var(--yellow)';
+    return 'var(--red)';
+  }
+
+  function renderTable(pages) {
+    const tbody = document.getElementById('browse-tbody');
+    const status = document.getElementById('browse-status');
+    const count = document.getElementById('f-search').value.trim() ? ' (filtered)' : '';
+    status.textContent = allPages.length + ' total, showing ' + pages.length + count;
+
+    if (!pages.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="muted">No pages match filters.</td></tr>';
+      return;
+    }
+
+    let html = '';
+    for (const p of pages) {
+      const c = p.confidence ?? 0;
+      const confStr = typeof c === 'boolean' ? (c ? '1.0' : '0.0') : Number(c).toFixed(2);
+      const uid = encodeURIComponent(p.page_id);
+      html += '<tr onclick="location.href=\'/ui/page/' + uid + '\'" style="cursor:pointer;">'
+        + '<td><a class="nav-link" href="/ui/page/' + uid + '">' + esc(p.title || p.page_id) + '</a>'
+        + (p.auth_tags && p.auth_tags.length ? ' <span style="margin-left:4px;">' + p.auth_tags.map(function(t) { return '<span class="trust-tag">' + esc(t) + '</span>'; }).join('') + '</span>' : '')
+        + '</td>'
+        + '<td><code>' + esc(p.domain || 'general') + '</code></td>'
+        + '<td>' + esc(p.kind || 'page') + '</td>'
+        + '<td><span class="' + confClass(parseFloat(confStr)) + '">' + confStr + '</span>'
+        + '<div class="conf-bar-wrap ' + confClass(parseFloat(confStr)) + '"><div class="fill" style="width:' + (Number(confStr) * 100) + '%;background:' + confColor(parseFloat(confStr)) + '"></div></div>'
+        + '</td>'
+        + '<td>' + esc(p.updated_at || '') + '</td>'
+        + '</tr>';
+    }
+    tbody.innerHTML = html;
+  }
+
+  // Bind events
+  var fields = ['f-domain','f-kind','f-conf','f-tags','f-search','f-sort'];
+  for (var i = 0; i < fields.length; i++) {
+    var el = document.getElementById(fields[i]);
+    if (!el) continue;
+    var evt = (fields[i] === 'f-conf' || fields[i] === 'f-search') ? 'input' : 'change';
+    el.addEventListener(evt, applyFilters);
+  }
+
+  loadDomains();
+  loadPages();
+})();
 </script>
 {% endblock %}

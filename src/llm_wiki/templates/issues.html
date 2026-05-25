@@ -1,9 +1,87 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Governance Issues</h2>
-<div class="panel">
-  <div class="card">
-    <h3 class="muted">No issues to display — governance has not found conflicts.</h3>
-  </div>
+<div id="issues-status" class="muted">Loading governance data&hellip;</div>
+<div class="panels" id="issues-panels" style="display:grid;grid-template-columns:1fr;">
 </div>
+
+<script>
+const _uiUser = "{{ ui_user }}";
+const _uiPass = "{{ ui_password }}";
+function _auth() { return "Basic " + btoa(_uiUser + ":" + _uiPass); }
+function esc(s) { return String(s ?? ""); }
+
+async function loadIssues() {
+  var statusEl = document.getElementById("issues-status");
+  var panelsEl = document.getElementById("issues-panels");
+
+  try {
+    var resp = await fetch("/ui/api/dashboard-data", { headers: { "Authorization": _auth() } });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    var d = await resp.json();
+    var gov = d.governance || {};
+    var g = gov.result || {};
+    statusEl.textContent = "Last governance run: " + (gov.last_run ? new Date(gov.last_run).toLocaleString() : "never");
+
+    var cards = [];
+
+    function addCard(title, severity, details) {
+      cards.push({ title: title, severity: severity, details: details });
+    }
+
+    var lintErr = g.lint_errors || 0;
+    var lintWarn = g.lint_warnings || 0;
+    if (lintErr > 0) {
+      addCard("Lint Errors", "error", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + lintErr + '</td></tr><tr><th>Pages Checked</th><td>' + (g.total_pages || 0) + '</td></tr></table>');
+    } else if (lintWarn > 0) {
+      addCard("Lint Warnings", "warning", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + lintWarn + '</td></tr><tr><th>Pages Checked</th><td>' + (g.total_pages || 0) + '</td></tr></table>');
+    }
+
+    if (g.stale_pages > 0) {
+      addCard("Stale Pages", "warning", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + g.stale_pages + '</td></tr><tr><th>Description</th><td>Pages not updated since last governance cycle</td></tr></table>');
+    }
+
+    if (g.low_quality_pages > 0) {
+      addCard("Low Quality Pages", "warning", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + g.low_quality_pages + '</td></tr><tr><th>Criteria</th><td>Low citation count or missing front matter</td></tr></table>');
+    }
+
+    if (g.orphan_pages > 0) {
+      addCard("Orphan Pages", "info", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + g.orphan_pages + '</td></tr><tr><th>Description</th><td>Pages with no incoming or outgoing links</td></tr></table>');
+    }
+
+    if (g.duplicates > 0) {
+      addCard("Duplicate Pages", "warning", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + g.duplicates + '</td></tr><tr><th>Action</th><td>Review and merge or consolidate</td></tr></table>');
+    }
+
+    if (g.contradictions > 0) {
+      addCard("Contradictions", "error", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + g.contradictions + '</td></tr><tr><th>Action</th><td>Review conflicting data between pages</td></tr></table>');
+    }
+
+    if (g.broken_links > 0) {
+      addCard("Broken Links", "error", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + g.broken_links + '</td></tr><tr><th>Action</th><td>Update or remove broken references</td></tr></table>');
+    }
+
+    if (g.archived_pages > 0 || g.archived_candidates > 0) {
+      addCard("Archive Activity", "info", '<table style="width:100%;font-size:0.85rem;"><tr><th>Archived</th><td>' + g.archived_pages + '</td></tr><tr><th>Candidates</th><td>' + g.archived_candidates + '</td></tr></table>');
+    }
+
+    if (cards.length === 0) {
+      panelsEl.innerHTML = '<div class="panel"><h3>All Clear</h3><p class="muted">No governance issues found. Last run: ' + esc(statusEl.textContent) + '</p></div>';
+    } else {
+      panelsEl.innerHTML = "";
+      cards.forEach(function(c) {
+        var div = document.createElement("div");
+        div.className = "panel";
+        div.innerHTML = '<h3>' + esc(c.title) + '</h3>' + c.details;
+        panelsEl.appendChild(div);
+      });
+    }
+
+  } catch (e) {
+    statusEl.textContent = "Error: " + esc(e.message);
+  }
+}
+
+loadIssues();
+</script>
 {% endblock %}

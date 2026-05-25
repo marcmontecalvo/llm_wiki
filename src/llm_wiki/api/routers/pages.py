@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from datetime import datetime
+from datetime import UTC, datetime
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from llm_wiki.api.models import PageListResponse, PageResponse
 from llm_wiki.deps import get_wiki
@@ -131,4 +133,106 @@ async def list_pages(
         pages=results,
         next_cursor=next_cursor,
         total_hint=len(results),
+    )
+
+
+# ── Page write models ───────────────────────────────────────────────────────
+
+
+class PageWriteRequest(BaseModel):
+    """Body for page creation and update."""
+
+    title: str = Field(max_length=200)
+    content: str = ""
+    domain: str = "general"
+    kind: str = "page"
+    confidence: float = 0.0
+    authority_score: float = 0.0
+    tags: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    updated_at: str = ""
+
+
+@router.post("/v1/pages", response_model=PageResponse, status_code=201)
+async def create_page(
+    body: PageWriteRequest,
+    wiki: WikiQuery = Depends(get_wiki),
+) -> PageResponse:
+    """Create a new wiki page.
+
+    Writes markdown with front matter to the domain's pages directory.
+    """
+    wiki_base = wiki.wiki_base
+    page_id = body.title.strip().lower().replace(" ", "-")
+
+    return await _save_page(wiki_base, page_id, body)
+
+
+@router.put("/v1/pages/{page_id}", response_model=PageResponse)
+async def update_page(
+    page_id: str,
+    body: PageWriteRequest,
+    wiki: WikiQuery = Depends(get_wiki),
+) -> PageResponse:
+    """Update an existing wiki page.
+
+    Overwrites the markdown file with the updated content and front matter.
+    """
+    wiki_base = wiki.wiki_base
+    return await _save_page(wiki_base, page_id, body)
+
+
+async def _save_page(
+    wiki_base: Path,
+    page_id: str,
+    body: PageWriteRequest,
+) -> PageResponse:
+    """Write page markdown with front matter."""
+    # Validate domain
+    domains_dir = wiki_base / "domains" / body.domain / "pages"
+    if not domains_dir.exists():
+        # Try to create domain dir structure
+        try:
+            domains_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid domain: {e}")
+
+    updated = datetime.now(UTC).isoformat()
+
+    # Build front matter
+    fm_lines = [
+        "---",
+        f"id: {page_id}",
+        f"title: {body.title}",
+        f"domain: {body.domain}",
+        f"kind: {body.kind}",
+        f"confidence: {body.confidence:.2f}",
+        f"authority_score: {body.authority_score:.2f}",
+        f"updated_at: {updated}",
+    ]
+    if body.tags:
+        fm_lines.append("tags: [" + ", ".join(body.tags) + "]")
+    if body.sources:
+        fm_lines.append("sources: [" + ", ".join(body.sources) + "]")
+    fm_lines.append("---")
+
+    fm_text = "\n".join(fm_lines)
+    content_text = (body.content or "").lstrip("\n")
+
+    page_file = domains_dir / f"{page_id}.md"
+    await asyncio.to_thread(page_file.write_text, fm_text + "\n" + content_text, encoding="utf-8")
+
+    # Read back for response
+    content = await asyncio.to_thread(page_file.read_text, encoding="utf-8")
+    fm_dict, body_text = parse_frontmatter(content)
+
+    return PageResponse(
+        page_id=page_id,
+        title=fm_dict.get("title", page_id),
+        content=body_text,
+        frontmatter=fm_dict,
+        domain=fm_dict.get("domain", "general"),
+        kind=fm_dict.get("kind", "page"),
+        confidence=fm_dict.get("confidence", 0.0),
+        authority_score=fm_dict.get("authority_score", 0.0),
     )
