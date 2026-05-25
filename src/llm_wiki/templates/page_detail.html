@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Page: {{ page_id }}</h2>
+<div style="display:grid;grid-template-columns:1fr 320px;gap:24px;">
+  <div class="panel">
+    <h3>Content</h3>
+    <pre class="muted">Page content not yet available — REST API proxy not implemented.</pre>
+  </div>
+  <div class="panel">
+    <h3>Front Matter</h3>
+    <pre class="muted">id: {{ page_id }}</pre>
+    <h3 style="margin-top:16px;">Connects To</h3>
+    <pre class="muted">Loading…</pre>
+    <h3 style="margin-top:16px;">Connected From</h3>
+    <pre class="muted">Loading…</pre>
+  </div>
+</div>
+{% endblock %}

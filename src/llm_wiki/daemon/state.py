@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.paths import WIKI_ROOT
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,7 +21,7 @@ class DaemonState:
             state_file: Path to state file (default: wiki_system/state/daemon_state.json)
         """
         if state_file is None:
-            state_dir = Path("wiki_system") / "state"
+            state_dir = WIKI_ROOT / "state"
             state_dir.mkdir(parents=True, exist_ok=True)
             state_file = state_dir / "daemon_state.json"
         else:

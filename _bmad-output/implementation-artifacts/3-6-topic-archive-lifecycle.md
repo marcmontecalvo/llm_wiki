@@ -1,6 +1,6 @@
 # Story 3.6: Topic Archive Lifecycle
 
-Status: review
+Status: done
 
 ## Story
 

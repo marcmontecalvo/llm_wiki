@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -268,7 +269,7 @@ class QualityScorer:
         Returns:
             List of quality reports, sorted by score (ascending).
         """
-        wiki_base = wiki_base or Path("wiki_system")
+        wiki_base = resolve_wiki_base(wiki_base)
         reports: list[QualityReport] = []
 
         domains_dir = wiki_base / "domains"

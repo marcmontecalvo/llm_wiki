@@ -8,6 +8,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.paths import resolve_wiki_base
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,7 +22,7 @@ class VectorIndex:
         Args:
             index_dir: Directory to store index (defaults to wiki_system/index)
         """
-        self.index_dir = index_dir or Path("wiki_system/index")
+        self.index_dir = index_dir or (resolve_wiki_base(None) / "index")
         self.index_dir.mkdir(parents=True, exist_ok=True)
 
         self.doc_ids: list[str] = []
@@ -366,7 +368,9 @@ class VectorIndex:
         Returns:
             Number of documents indexed.
         """
-        wiki_base = wiki_base or Path("wiki_system")
+        wiki_base = resolve_wiki_base(wiki_base)
+        from llm_wiki.utils.frontmatter import parse_frontmatter  # noqa: PLC0415
+
         if not self._ensure_model():
             logger.warning("Skipping vector rebuild: sentence-transformers not available")
             return 0
@@ -376,8 +380,6 @@ class VectorIndex:
         self.id_to_idx.clear()
         self.doc_meta.clear()
         self._embedded_texts.clear()
-
-        from llm_wiki.utils.frontmatter import parse_frontmatter
 
         domains_dir = wiki_base / "domains"
         if not domains_dir.exists():

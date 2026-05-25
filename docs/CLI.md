@@ -693,23 +693,26 @@ llm-wiki integrate strategies
 
 ---
 
-### `llm-wiki trigger JOB_NAME`
+### `llm-wiki govern run JOB_NAME`
 
-Run a daemon job manually from the command line.
+Run a daemon job synchronously from the command line and print the result.
 
 ```bash
-llm-wiki trigger JOB_NAME [OPTIONS]
+llm-wiki govern run [lint|contradictions|all] [OPTIONS]
 ```
 
-**Available jobs:**
-- `inbox-scan` — Scan inbox for new files
-- `queue-to-pages` — Migrate queued files to published pages
-- `governance` — Run governance checks on published pages
-- `export` — Re-run all export formats
-- `index-rebuild` — Rebuild all search indexes
-- `retry-failed-ingests` — Retry previously failed ingestions
-- `review-queue` — Populate the review queue
-- `promotion` — Run page promotion checks
+**Governance subcommands:**
+- `lint` — Run lint checks on all pages
+- `contradictions` — Run contradiction detection
+- `all` — Run all governance checks in sequence
+
+### `llm-wiki govern status`
+
+Show last-run results for each governance job.
+
+### `llm-wiki govern report`
+
+Print the latest governance report.
 
 ---
 
@@ -768,6 +771,36 @@ llm-wiki hooks uninstall [OPTIONS]
 - Only removes entries whose command references `capture_session.py`.
 - Leaves any other hook entries intact.
 - If the event list becomes empty, the event key is dropped entirely.
+
+---
+
+### `llm-wiki honcho`
+
+Push the wiki export bundle to Honcho (agent memory), or check Honcho connectivity.
+
+```bash
+llm-wiki honcho push [OPTIONS]
+llm-wiki honcho bridge [OPTIONS]
+```
+
+**`honcho push`** — Runs `HonchoPushJob` directly. Reads `wiki_system/exports/llms.txt` + `graph.json` and pushes to Honcho.
+
+- `--push-url URL`: Remote Honcho endpoint (bypasses local SDK mode)
+- `--push-api-key KEY`: API key for remote authentication
+- `--wiki-base PATH`: Wiki directory (default: `wiki_system`)
+- `--workspace ID`: Honcho workspace ID for local SDK mode (default: `default`)
+
+**`honcho bridge`** — Runs push via the REST endpoint, capturing error results for tracking.
+
+**Prerequisites:** Configure `features.honcho_push: true` in `config/daemon.yaml` and set `honcho.push_url` for remote mode, or install the `honcho` SDK for local mode.
+
+Check Honcho connectivity:
+```bash
+# Via REST endpoint
+curl http://localhost:3050/v1/honcho/status
+
+# Returns: {"available": true, "url": "http://localhost:8000", "status": 200, "response": {"status": "ok"}}
+```
 
 ---
 

@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ class RelationshipIndex:
         Args:
             index_dir: Directory to store index (defaults to wiki_system/index)
         """
-        self.index_dir = index_dir or Path("wiki_system/index")
+        self.index_dir = index_dir or (resolve_wiki_base(None) / "index")
         self.index_dir.mkdir(parents=True, exist_ok=True)
 
         # In-memory indexes
@@ -259,7 +260,7 @@ class RelationshipIndex:
         Returns:
             Number of relationships indexed
         """
-        wiki_base = wiki_base or Path("wiki_system")
+        wiki_base = resolve_wiki_base(wiki_base)
 
         # Clear existing index
         self.by_subject.clear()

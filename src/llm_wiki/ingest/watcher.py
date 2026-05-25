@@ -14,6 +14,7 @@ from llm_wiki.adapters.obsidian import ObsidianVaultAdapter
 from llm_wiki.adapters.text import TextAdapter
 from llm_wiki.ingest.failed import FailedIngestionsTracker, FailureReason
 from llm_wiki.ingest.normalizer import NormalizationPipeline, RoutingError
+from llm_wiki.paths import resolve_wiki_base
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class InboxWatcher:
             config_dir: Config directory (defaults to config/)
             failed_tracker: Optional tracker for failed ingestions
         """
-        self.inbox_dir = inbox_dir or Path("wiki_system/inbox")
+        self.inbox_dir = inbox_dir or (resolve_wiki_base(None) / "inbox")
         self.new_dir = self.inbox_dir / "new"
         self.processing_dir = self.inbox_dir / "processing"
         self.done_dir = self.inbox_dir / "done"
@@ -258,6 +259,6 @@ def run_inbox_scan(wiki_base: Path | None = None) -> dict[str, Any]:
     Returns:
         Dictionary with processing stats
     """
-    wb = wiki_base or Path("wiki_system")
+    wb = resolve_wiki_base(wiki_base)
     watcher = InboxWatcher(inbox_dir=wb / "inbox")
     return watcher.scan()

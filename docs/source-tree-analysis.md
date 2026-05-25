@@ -169,7 +169,7 @@ All checkers produce `Finding` objects. `GovernanceJob` aggregates all findings 
 - `search(query, domain=None)` — embed query, L2 nearest neighbor search, post-filter by domain
 - `save()` / `load()` — `faiss.write_index` / `faiss.read_index` + JSON metadata
 
-**Known issue**: All index saves are non-atomic (P0-1). Fix: apply `tmp → os.replace()` pattern from `JobExecutionStore`.
+**Atomicity**: Index saves use `tmp → os.replace()` pattern (P0-1 fixed) to prevent corruption on crash.
 
 ### `ingest/` — Inbox Pipeline (4 files)
 
@@ -182,7 +182,7 @@ All checkers produce `Finding` objects. `GovernanceJob` aggregates all findings 
 
 **File state machine**: `new/` → `processing/` → `done/` or `failed/`
 
-**Known issue**: Files in `processing/` are orphaned if daemon crashes (P0-3). Fix: on startup, scan `processing/` and move files back to `new/`.
+**Crash recovery**: Startup scan moves files in `processing/` back to `new/` (P0-3 fixed).
 
 ### `integration/` — Merge Engine (2 files)
 

@@ -1,0 +1,12 @@
+<!-- HTMX browse/result table rows -->
+{% for p in pages %}
+<tr>
+  <td><a class="nav-link" hx-get="/ui/api/page/{{ p.page_id }}" hx-target="#main-content" hx-swap="innerHTML" href="#">{{ p.title or p.page_id }}</a></td>
+  <td><code>{{ p.domain or "general" }}</code></td>
+  <td>{{ p.kind or "page" }}</td>
+  <td>{{ "%.2f"|format(p.confidence or 0) }}</td>
+  <td>{{ p.updated_at or "" }}</td>
+</tr>
+{% else %}
+<tr><td colspan="6" class="muted">No pages match the selected filters.</td></tr>
+{% endfor %}

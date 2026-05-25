@@ -19,8 +19,7 @@ uv sync
 # Install entry point
 uv run llm-wiki --help   # Verifies install
 
-# With vector search support
-uv sync --extra vector
+# Vector search is always available (FAISS + sentence-transformers are core dependencies)
 ```
 
 ## Initial Setup
@@ -39,9 +38,8 @@ nano config/models.yaml    # Set provider, model, API key location
 # 4. Configure routing
 nano config/routing.yaml   # Define source → domain routing rules
 
-# 5. Verify config is valid
-uv run llm-wiki daemon start --validate-only   # (if this flag exists)
-# Or just start and watch for config errors:
+# 5. Verify config is valid — the daemon refuses to start with invalid config,
+# so just start it and watch for errors:
 uv run llm-wiki daemon start
 ```
 
@@ -226,9 +224,9 @@ uv run llm-wiki daemon status
 uv run llm-wiki daemon jobs
 
 # Force-run a specific job
-uv run llm-wiki trigger index-rebuild
-uv run llm-wiki trigger governance-check
-uv run llm-wiki trigger export
+uv run llm-wiki govern run index-rebuild
+uv run llm-wiki govern run governance-check
+uv run llm-wiki govern run export
 
 # View latest governance report
 ls -lt wiki_system/reports/ | head -5
@@ -291,21 +289,17 @@ Rough estimates at steady state:
 
 ## Security Notes
 
-- **No authentication by default** — the daemon is local-only, no network exposure
+- **No authentication by default** — the daemon is local-only, binds to `0.0.0.0` inside the container with port exposure controlled by docker-compose. For network exposure, use a reverse proxy with TLS or tunnel via Tailscale/SSH.
+- **UI auth**: When `webui_enabled` is true, the web UI uses HTTP Basic Auth (via `WIKI_UI_USER` / `WIKI_UI_PASSWORD` env vars).
 - **API keys**: Set via environment variables, never hardcode in config files
 - **LLM API calls**: All extraction/integration calls go to your configured LLM provider; documents you ingest are sent to that provider
-- **HTTP API (future)**: When implemented (Priority 1 roadmap item), will support optional Bearer token auth via `API_TOKEN` env var
+- **Honcho integration**: If running alongside Honcho, Honcho uses its own auth (JWT for self-hosted, API key for managed). Do not reuse auth credentials between the two services.
 
 ## Known Operational Issues
 
 | Issue | Impact | Workaround |
 |-------|--------|-----------|
-| Non-atomic index writes | Index corruption if daemon crashes mid-write | Run `uv run llm-wiki trigger index-rebuild` after crash |
-| No write mutex | Potential JSON corruption under concurrent jobs | Keep `max_parallel_jobs: 1` as temporary mitigation |
-| Stuck processing files | Files in `inbox/processing/` orphaned after crash | Manually move them back to `inbox/new/` |
 | LLM call no timeout | Worker thread blocks indefinitely on hung LLM | Restart daemon if stuck |
-
-All four issues are tracked in `docs/bmad/ROADMAP_REMAINING.md` as P0 items.
 
 ## Upgrading
 
@@ -313,5 +307,5 @@ All four issues are tracked in `docs/bmad/ROADMAP_REMAINING.md` as P0 items.
 git pull
 uv sync             # Update dependencies
 uv run pytest       # Verify nothing broke
-uv run llm-wiki trigger index-rebuild   # Rebuild indexes after upgrade
+uv run llm-wiki govern run index-rebuild   # Rebuild indexes after upgrade
 ```

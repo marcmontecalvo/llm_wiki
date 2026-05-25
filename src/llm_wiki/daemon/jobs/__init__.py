@@ -2,6 +2,7 @@
 
 from llm_wiki.daemon.jobs.export import ExportJob, run_export_job
 from llm_wiki.daemon.jobs.governance import GovernanceJob, run_governance_check
+from llm_wiki.daemon.jobs.honcho_push import run_honcho_push_job
 from llm_wiki.daemon.jobs.index_rebuild import IndexRebuildJob, run_index_rebuild
 from llm_wiki.daemon.jobs.promotion import PromotionJob, run_promotion_check
 from llm_wiki.daemon.jobs.queue_to_pages import QueueToPagesJob, run_queue_to_pages
@@ -21,6 +22,7 @@ __all__ = [
     "RetryFailedIngestsJob",
     "run_export_job",
     "run_governance_check",
+    "run_honcho_push_job",
     "run_index_rebuild",
     "run_promotion_check",
     "run_queue_to_pages",

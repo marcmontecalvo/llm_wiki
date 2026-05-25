@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -173,7 +174,7 @@ class StalenessDetector:
         Returns:
             List of staleness reports, sorted by score (descending)
         """
-        wiki_base = wiki_base or Path("wiki_system")
+        wiki_base = resolve_wiki_base(wiki_base)
         reports: list[StalenessReport] = []
 
         domains_dir = wiki_base / "domains"

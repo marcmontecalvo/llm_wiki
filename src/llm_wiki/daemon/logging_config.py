@@ -64,7 +64,9 @@ def setup_logging(
     """
     # Determine log file path
     if log_file is None:
-        log_dir = Path("wiki_system") / "logs"
+        from llm_wiki.paths import WIKI_ROOT
+
+        log_dir = WIKI_ROOT / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / "daemon.log"
     else:

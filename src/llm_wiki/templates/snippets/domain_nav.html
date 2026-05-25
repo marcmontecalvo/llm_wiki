@@ -1,0 +1,11 @@
+<!-- Domain navigation snippet -->
+{% for d in domains %}
+<li>
+  <a class="{% if d.name == current_domain %}active{% endif %}" href="#">
+    {{ d.name }}
+    <span class="badge">{{ d.page_count }}</span>
+    {% if d.scope == "shared" %}<span class="badge shared">shared</span>{% endif %}
+    {% if d.scope == "personal" %}<span class="badge personal">personal</span>{% endif %}
+  </a>
+</li>
+{% endfor %}

@@ -125,22 +125,21 @@ Test content.
         # Should match "proxmox" rule → homelab domain
         assert "domain: homelab" in content
 
-    def test_determine_domain_no_rule_raises(self, pipeline: NormalizationPipeline, temp_dir: Path):
-        """Files with no matching routing rule and no explicit domain raise RoutingError."""
-        from llm_wiki.ingest.normalizer import RoutingError
-
+    def test_determine_domain_no_rule_falls_back_to_general(
+        self, pipeline: NormalizationPipeline, temp_dir: Path
+    ):
+        """Files with no matching content route to 'general' via heuristic fallback."""
         test_file = temp_dir / "random-file.md"
         test_file.write_text("# Random Content\n\nNo specific domain.")
 
-        with pytest.raises(RoutingError):
-            pipeline.process_file(test_file)
+        output_path = pipeline.process_file(test_file)
+        content = output_path.read_text()
+        assert "domain: general" in content
 
-    def test_determine_domain_invalid_explicit(
+    def test_determine_domain_invalid_explicit_falls_back_to_general(
         self, pipeline: NormalizationPipeline, temp_dir: Path
     ):
-        """Invalid explicit domain (not in valid_domains) raises RoutingError."""
-        from llm_wiki.ingest.normalizer import RoutingError
-
+        """Invalid explicit domain falls back to 'general' via heuristic."""
         test_file = temp_dir / "test.md"
         test_file.write_text(
             """---
@@ -151,8 +150,9 @@ Test content.
 """
         )
 
-        with pytest.raises(RoutingError):
-            pipeline.process_file(test_file)
+        output_path = pipeline.process_file(test_file)
+        content = output_path.read_text()
+        assert "domain: general" in content
 
     def test_page_id_generation(self, pipeline: NormalizationPipeline, temp_dir: Path):
         """Test page ID is generated correctly."""

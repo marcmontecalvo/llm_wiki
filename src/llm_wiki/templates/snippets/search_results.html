@@ -1,0 +1,11 @@
+<!-- HTMX search result rows -->
+{% for r in results %}
+<tr>
+  <td><a class="nav-link" hx-get="/ui/api/page/{{ r.page_id }}" hx-target="#main-content" hx-swap="innerHTML" href="#">{{ r.title or r.page_id }}</a></td>
+  <td><code>{{ r.domain or "general" }}</code></td>
+  <td>{{ "%.2f"|format(r.confidence or 0) }}</td>
+  <td>{{ "%.2f"|format(r.authority_score or 0) }}</td>
+</tr>
+{% else %}
+<tr><td colspan="4" class="muted">No results found.</td></tr>
+{% endfor %}

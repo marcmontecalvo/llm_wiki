@@ -216,19 +216,21 @@ class TestGovernReport:
 
 
 class TestRoutingFailedArea:
-    def test_routing_error_raised_when_no_rule_matches(self, tmp_path: Path):
-        """RoutingError is raised by NormalizationPipeline when no domain rule matches."""
+    def test_content_falls_back_to_general_via_classifier(self, tmp_path: Path):
+        """Unmatched content falls back to 'general' domain via heuristic classifier."""
         from unittest.mock import MagicMock
 
         from llm_wiki.adapters.base import AdapterRegistry
-        from llm_wiki.ingest.normalizer import NormalizationPipeline, RoutingError
+        from llm_wiki.ingest.normalizer import NormalizationPipeline
 
-        # Build a pipeline with a router that returns None
+        # Build a pipeline with a mock adapter
         registry = AdapterRegistry()
         pipeline = NormalizationPipeline.__new__(NormalizationPipeline)
         pipeline.adapter_registry = registry
-        pipeline.router = MagicMock()
-        pipeline.router.route_or_none.return_value = None
+        pipeline._wiki_base = tmp_path
+        # Set _classifier to None so Classifier is used instead
+        pipeline._classifier = MagicMock()
+        pipeline._classifier.classify.return_value = "general"
 
         # Mock adapter
         mock_adapter = MagicMock()
@@ -238,8 +240,10 @@ class TestRoutingFailedArea:
         test_file = tmp_path / "test.md"
         test_file.write_text("# Test")
 
-        with pytest.raises(RoutingError):
-            pipeline._determine_domain({"source_path": str(test_file)})
+        output_path = pipeline.process_file(test_file)
+        assert output_path.exists()
+        content = output_path.read_text()
+        assert "domain: general" in content
 
     def test_watcher_moves_unroutable_to_staging(self, tmp_path: Path):
         """InboxWatcher moves a file to inbox/staging/ when RoutingError is raised."""

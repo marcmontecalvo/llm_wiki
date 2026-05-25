@@ -14,6 +14,7 @@ from llm_wiki.governance.staleness import StalenessDetector
 from llm_wiki.index.backlinks import BacklinkIndex
 from llm_wiki.index.metadata import MetadataIndex
 from llm_wiki.models.client import ModelClient
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewType
 from llm_wiki.review.queue import ReviewQueue
 from llm_wiki.utils.frontmatter import parse_frontmatter
@@ -39,7 +40,7 @@ class GovernanceJob:
             wiki_base: Base wiki directory (defaults to wiki_system/)
             client: Optional LLM client for contradiction detection
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
         self.client = client
 
         # Initialize checkers

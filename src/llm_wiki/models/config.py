@@ -1,5 +1,6 @@
 """Configuration schemas using Pydantic."""
 
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -120,6 +121,25 @@ class DuplicatesConfig(BaseModel):
     )
 
 
+class HonchoConfig(BaseModel):
+    """Configuration for Honcho integration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    push_url: str | None = Field(
+        default=None,
+        description="Remote Honcho URL for wiki push (HTTP POST to /v1/honcho/wiki-bundle)",
+    )
+    push_api_key: str | None = Field(
+        default=None,
+        description="API key for authenticating with remote Honcho",
+    )
+    workspace_id: str = Field(
+        default="default",
+        description="Honcho workspace ID for local mode",
+    )
+
+
 class FeaturesConfig(BaseModel):
     """Feature flags for optional wiki capabilities."""
 
@@ -129,6 +149,25 @@ class FeaturesConfig(BaseModel):
     synthesis_cache: bool = False
     cross_domain_promotion: bool = False
     cross_domain_summary: bool = False
+    honcho_push: bool = False
+    webui_enabled: bool = False
+    tui_enabled: bool = False
+    honcho: HonchoConfig = Field(default_factory=HonchoConfig)
+
+    @model_validator(mode="after")
+    def _override_from_env(self) -> "FeaturesConfig":
+        """Override feature flags from environment variables when set."""
+        env_map = {
+            "webui_enabled": "WIKI_WEBUI_ENABLED",
+            "tui_enabled": "WIKI_TUI_ENABLED",
+            "honcho_push": "WIKI_HONCHO_PUSH",
+        }
+        for field_name, env_var in env_map.items():
+            val = os.environ.get(env_var)
+            if val is not None:
+                setattr(self, field_name, val.lower() in ("true", "1", "yes", "on"))
+        return self
+
     # vector_search is NOT a flag — FAISS is a required dependency, always enabled
 
 

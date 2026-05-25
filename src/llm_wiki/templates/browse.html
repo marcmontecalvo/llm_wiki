@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Browse Pages</h2>
+<div id="browse-controls" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+  <select id="browse-domain" style="padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);">
+    <option value="">All domains</option>
+  </select>
+  <select id="browse-kind" style="padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);">
+    <option value="">All kinds</option>
+    <option value="page">page</option>
+    <option value="entity">entity</option>
+    <option value="concept">concept</option>
+    <option value="source">source</option>
+    <option value="summary">summary</option>
+    <option value="archive">archive</option>
+  </select>
+  <button id="browse-filter" style="padding:6px 16px;border:1px solid var(--accent);border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;">Filter</button>
+</div>
+<div id="browse-results" style="overflow-x:auto;">
+  <table>
+    <thead><tr><th>Title</th><th>Domain</th><th>Kind</th><th>Confidence</th><th>Updated</th></tr></thead>
+    <tbody id="browse-tbody"></tbody>
+  </table>
+</div>
+<div id="page-detail" style="margin-top:20px;"></div>
+<script>
+const _uiUser = "{{ ui_user }}";
+const _uiPass = "{{ ui_password }}";
+function _authHeader() {
+  return "Basic " + btoa(_uiUser + ":" + _uiPass);
+}
+async function loadPageCountForSidebar() {
+  // Pre-populate domain page counts from the page data we'll fetch
+  window._domainCounts = {};
+}
+async function loadPages() {
+  const tbody = document.getElementById('browse-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="muted">Loading...</td></tr>';
+  const domain = document.getElementById('browse-domain').value;
+  const kind = document.getElementById('browse-kind').value;
+  let url = '/v1/pages?limit=200';
+  if (domain) url += '&domain=' + encodeURIComponent(domain);
+  // Filter by kind in JS since list_pages doesn't support kind param directly
+  try {
+    const resp = await fetch(url, { headers: { 'Authorization': _authHeader() } });
+    if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="5" class="muted">Failed to load pages: ' + resp.status + '</td></tr>'; return; }
+    const data = await resp.json();
+    let pages = data.pages || [];
+    if (kind) pages = pages.filter(p => p.kind === kind);
+    renderTable(pages);
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">Error: ' + e.message + '</td></tr>';
+  }
+}
+function renderTable(pages) {
+  const tbody = document.getElementById('browse-tbody');
+  if (!pages.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">No pages found.</td></tr>';
+    return;
+  }
+  function safeClick(pageId) {
+    return "onclick='showPageDetail(" + JSON.stringify(pageId) + ")'";
+  }
+  let html = '';
+  for (const p of pages) {
+    const oid = safeClick(p.page_id);
+    html += '<tr style="cursor:pointer;" ' + oid + '>'
+      + '<td><strong>' + escHtml(p.title || p.page_id) + '</strong></td>'
+      + '<td><code>' + escHtml(p.domain || 'general') + '</code></td>'
+      + '<td>' + escHtml(p.kind || 'page') + '</td>'
+      + '<td>' + ((p.confidence ?? 0).toFixed(2)) + '</td>'
+      + '<td>' + escHtml(p.updated_at || '') + '</td>'
+      + '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+async function showPageDetail(pageId) {
+  const detail = document.getElementById('page-detail');
+  detail.innerHTML = '<div class="card"><p class="muted">Loading...</p></div>';
+  try {
+    const resp = await fetch('/v1/pages/' + encodeURIComponent(pageId), {
+      headers: { 'Authorization': _authHeader() }
+    });
+    if (!resp.ok) { detail.innerHTML = '<div class="card"><p class="muted">Failed to load page: ' + resp.status + '</p></div>'; return; }
+    const p = await resp.json();
+    let html = '<div class="panel"><h3>Metadata</h3>';
+    html += '<table style="width:100%;font-size:0.85rem;">';
+    html += '<tr><th style="width:120px;">ID</th><td><code>' + escHtml(p.page_id) + '</code></td></tr>';
+    html += '<tr><th>Title</th><td>' + escHtml(p.title) + '</td></tr>';
+    html += '<tr><th>Domain</th><td><code>' + escHtml(p.domain) + '</code></td></tr>';
+    html += '<tr><th>Kind</th><td>' + escHtml(p.kind) + '</td></tr>';
+    html += '<tr><th>Confidence</th><td>' + (p.confidence ?? 0).toFixed(2) + '</td></tr>';
+    html += '<tr><th>Authority</th><td>' + (p.authority_score ?? 0).toFixed(2) + '</td></tr>';
+    html += '</table></div>';
+    if (p.content) {
+      html += '<div class="panel"><h3>Content</h3><pre>' + escHtml(p.content) + '</pre></div>';
+    }
+    detail.innerHTML = html;
+    detail.scrollIntoView({ behavior: 'smooth' });
+  } catch(e) {
+    detail.innerHTML = '<div class="card"><p class="muted">Error: ' + e.message + '</p></div>';
+  }
+}
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+// Load sidebar domains
+async function loadSidebarDomains() {
+  try {
+    const resp = await fetch('/v1/domains', { headers: { 'Authorization': _authHeader() } });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const domains = data.domains || [];
+    // Populate sidebar nav
+    const sb = document.getElementById('sidebar-content');
+    if (sb) {
+      let html = '';
+      for (const d of domains) {
+        const badge = d.scope === 'shared' ? 'shared' : 'personal';
+        html += '<li><a class="nav-link" href="/ui/browse">' + escHtml(d.name) + ' <span class="badge ' + badge + '">' + d.page_count + '</span></a></li>';
+      }
+      sb.innerHTML = html;
+    }
+    // Populate page filter dropdown
+    const sel = document.getElementById('browse-domain');
+    if (sel) {
+      for (const d of domains) {
+        const opt = document.createElement('option');
+        opt.value = d.name;
+        opt.textContent = d.name + (d.page_count ? ' (' + d.page_count + ')' : '');
+        sel.appendChild(opt);
+      }
+    }
+  } catch(e) {}
+}
+document.getElementById('browse-filter')?.addEventListener('click', loadPages);
+loadSidebarDomains();
+loadPages();
+</script>
+{% endblock %}

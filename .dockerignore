@@ -36,7 +36,7 @@ ENV/
 env/
 
 # Runtime/generated state
-wiki_data/
+wiki_system/
 wiki_system/
 .forgeflow/run/
 

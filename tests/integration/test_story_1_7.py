@@ -182,7 +182,7 @@ def wiki_with_pages(api_wiki: Path) -> Path:
 
     # -- LLMS file for export test -----------------------------------------------------
     (api_wiki / "exports/llms.txt").write_text(
-        "# LLMs.txt\n\nVisit /wiki/ for more.\n", encoding="utf-8"
+        "# LLMs.txt\n\nVisit /wiki_system/ for more.\n", encoding="utf-8"
     )
 
     return api_wiki

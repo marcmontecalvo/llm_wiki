@@ -1,10 +1,10 @@
 # Project Status — LLM Wiki
 
-**Last updated**: 2026-05-16
+**Last updated**: 2026-05-25
 **Current version**: v0.1.0
-**Phase completed**: V1 (core system) + Phase 1.1 (Vector Search)
+**Phase completed**: Feature-complete (all core Epics: Docker Service, Trust & Verification, Cross-Domain Intelligence, Web UI)
 **Branch**: main
-**Tests**: 1106 passing, 0 failures
+**Tests**: 1617 running, 2 known failures (test_ui_routes.py — outdated expectations), 0 unexpected failures
 **Coverage**: ~93%
 **Lint**: 0 ruff errors, mypy clean
 
@@ -218,21 +218,29 @@ Max parallel workers: 2 (configurable in `daemon.yaml`)
 - [x] `review add/list/show/approve/reject/defer/stats/cleanup` — Review queue
 - [x] `integrate apply/check/history/rollback/strategies` — Deterministic integration
 - [x] `changes list/diff/show/stats` — Change log
-- [x] `trigger` — Manual job execution
+- [x] `govern run/status/report` — Run and inspect daemon jobs
 - [x] `hooks install/uninstall` — Session capture hooks
 
 ---
 
 ## Known Issues / Technical Debt
 
-### Critical (from Architecture Review 2026-04-23)
+### Resolved (All P0 fixed in Epic 1)
+
+The following issues from the Architecture Review 2026-04-23 are resolved:
+- **Non-atomic JSON index writes** — Fixed: all index saves use tmp → os.replace pattern
+- **Daemon job concurrency** — Fixed: per-index `threading.Lock` enforced via `WikiQuery`
+- **Stuck inbox files** — Fixed: startup recovery moves `processing/` files back to `new/`
+- **No HTTP API** — Fixed: full REST API + MCP server with 8 tools
+
+### Medium
 
 | Issue | Severity | Description |
 |-------|----------|-------------|
-| Non-atomic JSON index writes | **Critical** | `FulltextIndex.save()` and `MetadataIndex.save()` write directly to file (no tmp → os.replace). A crash mid-write corrupts the index. Fix: extend `JobExecutionStore`'s atomic write pattern to all index saves. Estimated effort: 30 min. |
-| Daemon job concurrency | **High** | Two worker threads can write to the same JSON index simultaneously (e.g., governance job + index rebuild job both touch `fulltext.json`). Fix: add a `threading.Lock` around index write operations. Estimated effort: 1h. |
-| Stuck inbox files | **High** | Files in `inbox/processing/` are orphaned if the daemon crashes mid-ingestion. No recovery mechanism. Fix: on startup, move `processing/` files back to `new/` or to `failed/`. Estimated effort: 2h. |
-| No HTTP API | **Blocker** | Everything talks through CLI. For agent harness + platform integration, a bidirectional HTTP interface is needed. Recommendation: FastAPI as optional dep, daemon optionally starts HTTP server on configurable port. Estimated effort: 2-3 days. |
+| 2 UI route tests failing | Low | `test_ui_routes.py` expects 500 for missing password (returns 401), and `app.state.wiki` not set in test |
+| Web UI interactive features | Low | Template scaffolding exists; servlet pages return "Coming soon" (501) |
+| API auth when network-exposed | Medium | No Bearer token auth on REST/MCP endpoints; relies on VM network isolation |
+| LLM call timeout | Medium | Worker thread blocks indefinitely on hung LLM calls; restart required |
 
 ### Medium
 

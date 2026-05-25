@@ -157,7 +157,6 @@ Controlled via `daemon.yaml` `features:` block:
 | Flag | Default | Description |
 |------|---------|-------------|
 | `llm_extraction` | `false` | LLM-assisted tag/summary/claim extraction |
-| `vector_search` | `true` | sentence-transformers semantic search |
 | `synthesis_cache` | `false` | Cache repeated query answers as wiki pages (Sprint 3) |
 | `cross_domain_promotion` | `false` | Auto-promote shared entities across domains (Sprint 3) |
 
@@ -297,7 +296,7 @@ llm-wiki health [--json]
     }
   ],
   "synthesis": "string | null",
-  "vector_search": true,
+  "vector_search": true,  // always enabled — FAISS + sentence-transformers are core deps
   "duration_ms": 0
 }
 ```
@@ -471,9 +470,9 @@ REST: HTTP status codes + JSON body with `error_code`, `message`, and optional `
 ### Search
 
 - **FR13:** Agent harnesses and operators perform full-text search across all domains, returning ranked results with confidence scores
-- **FR14:** Agent harnesses and operators perform semantic/vector search (when vector extras are installed), returning similarity-ranked results
+- **FR14:** Agent harnesses and operators perform semantic/vector search, returning similarity-ranked results
 - **FR15:** Search results from fulltext and vector indexes are merged into a single ranked list
-- **FR52:** When the vector search dependency is not installed, search returns full-text results with a capability indicator (`"vector_search": false`) rather than an error
+- **FR52:** Vector search is always enabled (FAISS + sentence-transformers are core dependencies). Search always returns `"vector_search": true`. Note: response field retained for protocol compatibility but always derives `true`.
 
 ### Daemon & Governance
 

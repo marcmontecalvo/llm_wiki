@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from llm_wiki.changelog.models import ChangeLogEntry, FieldChange
+from llm_wiki.paths import resolve_wiki_base
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class ChangeLog:
         changelog_dir: Path | None = None,
         max_entries_per_page: int = 1000,
     ):
-        self.changelog_dir = changelog_dir or Path("wiki_system/changelog")
+        self.changelog_dir = changelog_dir or (resolve_wiki_base(None) / "changelog")
         self.max_entries_per_page = max_entries_per_page
         self._pages_dir = self.changelog_dir / "pages"
         self._index_file = self.changelog_dir / "index.json"

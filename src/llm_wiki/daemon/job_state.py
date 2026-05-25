@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from llm_wiki.daemon.models import JobExecution, JobExecutionHistory, JobStatus
+from llm_wiki.paths import WIKI_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class JobStateManager:
             state_dir: Directory for storing job state (default: wiki_system/state/job_executions)
         """
         if state_dir is None:
-            state_dir = Path("wiki_system") / "state" / "job_executions"
+            state_dir = WIKI_ROOT / "state" / "job_executions"
         else:
             state_dir = Path(state_dir)
 

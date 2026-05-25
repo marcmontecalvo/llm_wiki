@@ -83,6 +83,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content=detail,
+            headers=exc.headers,
         )
 
     @app.exception_handler(WikiNotFoundError)

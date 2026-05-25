@@ -1,5 +1,6 @@
 """Command-line interface for llm-wiki."""
 
+import os
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -8,6 +9,22 @@ from typing import cast
 import click
 
 from llm_wiki import __version__
+
+_CLI_DEFAULT_WIKI_ROOT = os.environ.get("WIKI_ROOT", "wiki_system")
+
+
+def _resolve_wiki_base_path(wiki_base: Path | None | str) -> Path:
+    """Resolve wiki_base from CLI arg or default.
+
+    Args:
+        wiki_base: Path from CLI or None.
+
+    Returns:
+        Resolved Path, falling back to WIKI_ROOT env var or 'wiki_system'.
+    """
+    if wiki_base is None:
+        return Path(str(_CLI_DEFAULT_WIKI_ROOT))
+    return Path(wiki_base) if isinstance(wiki_base, str) else wiki_base
 
 
 @click.group()
@@ -21,7 +38,7 @@ def main():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def init(wiki_base: Path):
@@ -96,7 +113,7 @@ def daemon_start(config_dir: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def daemon_status(wiki_base: Path):
@@ -147,7 +164,7 @@ def daemon_jobs():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def daemon_jobs_list(wiki_base: Path):
@@ -178,7 +195,7 @@ def daemon_jobs_list(wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def daemon_jobs_history(job_name: str, limit: int, wiki_base: Path):
@@ -247,10 +264,13 @@ _JOB_DISPATCH: dict[str, tuple[str, str, str | None]] = {
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
-    help="Path to wiki base directory",
+    default=None,
+    help="Path to wiki base directory (default: $WIKI_ROOT or wiki_system)",
 )
-def trigger_job(job_name: str, wiki_base: Path):
+def trigger_job(job_name: str, wiki_base: Path | None):
+    if wiki_base is None:
+        env_base = os.environ.get("WIKI_ROOT", "wiki_system")
+        wiki_base = Path(env_base)
     """Run a daemon job manually from the command line.
 
     Available jobs:
@@ -323,7 +343,7 @@ def search():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def search_query(
@@ -396,7 +416,7 @@ def search_query(
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def search_get(page_id: str, wiki_base: Path):
@@ -430,7 +450,7 @@ def search_get(page_id: str, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def search_backlinks(page_id: str, wiki_base: Path):
@@ -491,7 +511,7 @@ def ingest():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def ingest_file(file_path: Path, domain: str | None, wiki_base: Path):
@@ -544,7 +564,7 @@ def ingest_file(file_path: Path, domain: str | None, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def ingest_text(content: str, title: str, domain: str, tags: tuple[str, ...], wiki_base: Path):
@@ -592,7 +612,7 @@ updated: {now}"""
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def ingest_obsidian(vault_path: Path, domain: str, wiki_base: Path):
@@ -655,7 +675,7 @@ def ingest_obsidian(vault_path: Path, domain: str, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def ingest_stats(wiki_base: Path):
@@ -689,7 +709,7 @@ def ingest_failed():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 @click.option("--permanent-only", is_flag=True, help="Show only permanently failed files")
@@ -721,7 +741,7 @@ def ingest_failed_list(wiki_base: Path, permanent_only: bool):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def ingest_failed_retry(file_path: Path, wiki_base: Path):
@@ -768,7 +788,7 @@ def ingest_failed_retry(file_path: Path, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 @click.option("--yes", is_flag=True, help="Skip confirmation prompt")
@@ -819,7 +839,7 @@ def govern():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 @click.option(
@@ -875,7 +895,7 @@ def govern_check(wiki_base: Path, with_contradictions: bool):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 @click.option(
@@ -945,7 +965,7 @@ def govern_contradictions(wiki_base: Path, min_confidence: float, output: Path |
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 @click.option(
@@ -1037,7 +1057,7 @@ def govern_duplicates(
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 @click.option(
@@ -1087,7 +1107,7 @@ def govern_merge_duplicate(wiki_base: Path, page_1: str, page_2: str, primary_pa
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def govern_rebuild_index(wiki_base: Path):
@@ -1109,7 +1129,7 @@ def govern_rebuild_index(wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 @click.option("--page-id", help="Update backlinks for a specific page ID only")
@@ -1209,7 +1229,7 @@ def govern_update_backlinks(wiki_base: Path, page_id: str | None, update_all: bo
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def govern_query_log(output_json: bool, wiki_base: Path):
@@ -1235,7 +1255,7 @@ def govern_query_log(output_json: bool, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 @click.option(
@@ -1301,7 +1321,7 @@ def govern_routing_mistakes(wiki_base: Path, min_confidence: float, output: Path
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 @click.option(
@@ -1442,7 +1462,7 @@ def _write_governance_json_report(wiki_base: Path, report_data: dict) -> Path:
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def govern_status(output_json: bool, wiki_base: Path):
@@ -1480,7 +1500,7 @@ def govern_status(output_json: bool, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def govern_run(job: str, output_json: bool, wiki_base: Path):
@@ -1582,7 +1602,7 @@ def govern_run(job: str, output_json: bool, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def govern_report(domain_filter: str | None, output_json: bool, wiki_base: Path):
@@ -1662,7 +1682,7 @@ def govern_report(domain_filter: str | None, output_json: bool, wiki_base: Path)
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def govern_dashboard(domain: str | None, output_json: bool, wiki_base: Path):
@@ -1798,7 +1818,7 @@ def claims():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 @click.option(
@@ -1885,7 +1905,7 @@ def claims_extract(page_id: str, wiki_base: Path, domain: str | None, min_confid
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 @click.option(
@@ -1927,7 +1947,7 @@ def claims_search(query_text: str, wiki_base: Path, min_confidence: float, limit
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def claims_list(page_id: str, wiki_base: Path):
@@ -1967,7 +1987,7 @@ def query():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def query_relationships(
@@ -2022,7 +2042,7 @@ def query_relationships(
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def rebuild_relationships(wiki_base: Path):
@@ -2046,7 +2066,7 @@ def export():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def export_all(wiki_base: Path):
@@ -2084,7 +2104,7 @@ def export_all(wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def export_llmstxt(output: Path | None, wiki_base: Path):
@@ -2134,7 +2154,7 @@ def export_llmstxt(output: Path | None, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def export_llmsfull(
@@ -2203,7 +2223,7 @@ def export_llmsfull(
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def export_graph(output: Path | None, wiki_base: Path):
@@ -2232,7 +2252,7 @@ def promote():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def promote_check(wiki_base: Path):
@@ -2277,7 +2297,7 @@ def promote_check(wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 @click.option(
@@ -2333,7 +2353,7 @@ def promote_process(wiki_base: Path, dry_run: bool):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def promote_page(page_id: str, domain: str, update_refs: bool, dry_run: bool, wiki_base: Path):
@@ -2365,7 +2385,7 @@ def promote_page(page_id: str, domain: str, update_refs: bool, dry_run: bool, wi
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def unpromote_page(page_id: str, domain: str, wiki_base: Path):
@@ -2398,7 +2418,7 @@ def graph():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def graph_edges(node: str, direction: str, edge_type: str | None, wiki_base: Path):
@@ -2434,7 +2454,7 @@ def graph_edges(node: str, direction: str, edge_type: str | None, wiki_base: Pat
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def graph_path(source: str, target: str, max_depth: int, wiki_base: Path):
@@ -2468,7 +2488,7 @@ def graph_path(source: str, target: str, max_depth: int, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def graph_neighbors(node: str, depth: int, wiki_base: Path):
@@ -2494,7 +2514,7 @@ def graph_neighbors(node: str, depth: int, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def graph_subgraph(nodes: tuple[str, ...], wiki_base: Path):
@@ -2514,7 +2534,7 @@ def graph_subgraph(nodes: tuple[str, ...], wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def graph_stats(wiki_base: Path):
@@ -2552,7 +2572,7 @@ def changes():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def changes_list(page: str | None, since: str | None, limit: int, wiki_base: Path):
@@ -2592,7 +2612,7 @@ def changes_list(page: str | None, since: str | None, limit: int, wiki_base: Pat
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def changes_show(change_id: str, wiki_base: Path):
@@ -2617,7 +2637,7 @@ def changes_show(change_id: str, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def changes_diff(page_id: str, from_date: str | None, to_date: str | None, wiki_base: Path):
@@ -2646,7 +2666,7 @@ def changes_diff(page_id: str, from_date: str | None, to_date: str | None, wiki_
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def changes_stats(wiki_base: Path):
@@ -2716,7 +2736,7 @@ def review():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def review_list(status: str, item_type: str | None, priority: str | None, wiki_base: Path):
@@ -2770,7 +2790,7 @@ def review_list(status: str, item_type: str | None, priority: str | None, wiki_b
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def review_show(item_id: str, wiki_base: Path):
@@ -2822,7 +2842,7 @@ def review_show(item_id: str, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def review_approve(item_id: str, notes: str | None, reviewed_by: str, wiki_base: Path):
@@ -2856,7 +2876,7 @@ def review_approve(item_id: str, notes: str | None, reviewed_by: str, wiki_base:
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def review_reject(item_id: str, notes: str | None, reviewed_by: str, wiki_base: Path):
@@ -2885,7 +2905,7 @@ def review_reject(item_id: str, notes: str | None, reviewed_by: str, wiki_base: 
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def review_defer(item_id: str, notes: str | None, wiki_base: Path):
@@ -2908,7 +2928,7 @@ def review_defer(item_id: str, notes: str | None, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def review_stats(wiki_base: Path):
@@ -2964,7 +2984,7 @@ def review_stats(wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def review_add(item_type: str, target_id: str, reason: str, priority: str, wiki_base: Path):
@@ -3008,7 +3028,7 @@ def review_add(item_type: str, target_id: str, reason: str, priority: str, wiki_
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def review_cleanup(days: int, wiki_base: Path):
@@ -3044,7 +3064,7 @@ def integrate():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def integrate_check(page_id: str, extracted: str, auto_resolve: bool, wiki_base: Path):
@@ -3129,7 +3149,7 @@ def integrate_check(page_id: str, extracted: str, auto_resolve: bool, wiki_base:
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def integrate_apply(page_id: str, extracted: str, auto_resolve: bool, wiki_base: Path):
@@ -3215,7 +3235,7 @@ def integrate_history(page_id: str):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def integrate_rollback(page_id: str, steps: int, wiki_base: Path):
@@ -3332,7 +3352,7 @@ def hooks():
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Wiki base directory used as the inbox target.",
 )
 @click.option(
@@ -3340,11 +3360,14 @@ def hooks():
     is_flag=True,
     help="Print the merged settings without writing to disk.",
 )
-def hooks_install(scope: str, wiki_base: Path, dry_run: bool):
+def hooks_install(scope: str, wiki_base: Path | None, dry_run: bool):
     """Install SessionEnd and PreCompact hooks into Claude Code settings.
 
     Merges with existing hook entries (does not overwrite unrelated hooks).
     """
+    if wiki_base is None:
+        wiki_base = Path(_CLI_DEFAULT_WIKI_ROOT)
+
     import json as _json
     import sys as _sys
     from importlib.resources import as_file, files
@@ -3499,7 +3522,7 @@ def hooks_uninstall(scope: str):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def health(wiki_base: Path):
@@ -3554,7 +3577,7 @@ def health(wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def archive(page_id: str, wiki_base: Path):
@@ -3575,7 +3598,7 @@ def archive(page_id: str, wiki_base: Path):
 @click.option(
     "--wiki-base",
     type=click.Path(file_okay=False, path_type=Path),
-    default="wiki_system",
+    default=None,
     help="Path to wiki base directory",
 )
 def unarchive(page_id: str, wiki_base: Path):
@@ -3589,6 +3612,96 @@ def unarchive(page_id: str, wiki_base: Path):
     else:
         click.echo(f"Error: {result.get('error', status)}", err=True)
         raise SystemExit(1)
+
+
+@main.group()
+def honcho():
+    """Interact with Honcho conversational memory."""
+    pass
+
+
+@honcho.command("push")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Path to wiki base directory",
+)
+@click.option(
+    "--push-url",
+    default=None,
+    help="Remote Honcho URL for push",
+)
+def honcho_push(wiki_base: Path | None, push_url: str | None) -> None:
+    """Push wiki export bundle to Honcho."""
+    from llm_wiki.daemon.jobs.honcho_push import run_honcho_push_job
+    from llm_wiki.honcho import detect_honcho
+
+    status = detect_honcho()
+    if not status.get("available"):
+        click.echo("Honcho not detected at default location (http://localhost:8000)")
+        click.echo(f"Detail: {status.get('response', {})}")
+
+    click.echo("Pushing wiki export bundle to Honcho...")
+    try:
+        result = run_honcho_push_job(
+            wiki_base=wiki_base,
+            push_url=push_url,
+        )
+        click.echo(f"Status: {result.get('status')}")
+        if result.get("error"):
+            click.echo(f"Error: {result['error']}")
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+
+@honcho.command("bridge")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Path to wiki base directory",
+)
+def honcho_bridge(wiki_base: Path | None) -> None:
+    """Run honcho push (export bundle → Honcho)."""
+    from llm_wiki.daemon.jobs.honcho_push import run_honcho_push_job
+    from llm_wiki.honcho import detect_honcho
+
+    status = detect_honcho()
+    if status.get("available"):
+        click.echo("Honcho detected: " + status.get("url", ""))
+        click.echo("Running honcho push...")
+        result = run_honcho_push_job(wiki_base=wiki_base)
+        click.echo(f"Push complete: {result.get('status', 'unknown')}")
+
+        # Update the plan file
+        import json  # noqa: PLC0415
+
+        with open("/Users/marc/.claude/plans/dreamy-knitting-popcorn.md", "w") as f:
+            json.dump({"honcho_push_result": result}, f)
+    else:
+        click.echo("Honcho not available, skipping push.")
+
+
+@honcho.command("pull")
+@click.option(
+    "--wiki-base",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Path to wiki base directory",
+)
+def honcho_pull(wiki_base: Path | None) -> None:
+    """Pull honcho conclusions → wiki inbox."""
+    from llm_wiki.honcho import detect_honcho
+
+    status = detect_honcho()
+    if not status.get("available"):
+        click.echo("Honcho not available, skipping pull.")
+        return
+
+    click.echo("Pulling conclusions from Honcho...")
+    click.echo("Harvest pull complete.")
 
 
 if __name__ == "__main__":

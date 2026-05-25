@@ -71,7 +71,6 @@ Thumbs.db
 *.sqlite3
 
 # Project runtime/generated state
-/wiki_data/
 /wiki_system/
 /.forgeflow/run/
 

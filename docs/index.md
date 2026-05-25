@@ -1,8 +1,7 @@
 # LLM Wiki — Documentation Index
 
 **Project**: LLM Wiki v0.1.0 · Python 3.11+ · CLI + Library
-**Generated**: 2026-05-16 (exhaustive scan, 80 source files)
-**Status**: V1 + Phase 1.1 (Vector Search) complete · 1,106 tests · ~93% coverage
+**Status**: Feature-complete (all core Epics done) · 1,617 tests · ~93% coverage
 
 ---
 
@@ -11,7 +10,7 @@
 | Document | What it answers |
 |----------|----------------|
 | [project-overview.md](project-overview.md) | What is this? Who is it for? What can it do? |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | How do the pieces fit together? Data flow diagrams, component breakdown |
+| [_bmad-output/planning-artifacts/architecture.md](../planning-artifacts/architecture.md) | How do the pieces fit together? Data flow diagrams, component breakdown |
 | [development-guide.md](development-guide.md) | How do I set up, run tests, add features? |
 | [deployment-guide.md](deployment-guide.md) | How do I run the daemon in production? systemd, launchd, config |
 | [data-models.md](data-models.md) | What are the Pydantic schemas and JSON storage formats? |
@@ -46,12 +45,10 @@
 
 | Document | Contents |
 |----------|---------|
-| [bmad/PROJECT_STATUS.md](bmad/PROJECT_STATUS.md) | Full V1+Phase 1.1 status; tech stack; known issues; completed features |
-| [bmad/ROADMAP_REMAINING.md](bmad/ROADMAP_REMAINING.md) | P0-P5 prioritized work: atomic writes → HTTP API → V2-V5 |
+| [bmad/PROJECT_STATUS.md](bmad/PROJECT_STATUS.md) | Current status; tech stack; completed features |
+| [bmad/ROADMAP_REMAINING.md](bmad/ROADMAP_REMAINING.md) | Remaining work prioritization |
 | [bmad/SESSION_REPORT_2026-05-16.md](bmad/SESSION_REPORT_2026-05-16.md) | Session report for Phase 1.1 (vector search, error hierarchy, lint) |
-| [Product_Brief.md](Product_Brief.md) | Full product brief with V2-V5 roadmap vision |
-| [roadmap.md](roadmap.md) | Roadmap overview |
-| [roadmap-deferred.md](roadmap-deferred.md) | Deferred/dropped features with rationale |
+| [Product_Brief.md](Product_Brief.md) | Full product brief with roadmap vision |
 
 ---
 
@@ -68,17 +65,24 @@
 ```
 src/llm_wiki/
 ├── cli.py            → 50+ CLI commands (Click)
-├── adapters/         → Markdown, Text, Obsidian, Claude session adapters
-├── daemon/           → APScheduler daemon + 9 scheduled jobs
-├── extraction/       → LLM-led claims/entities/concepts/relationships/QA
-├── governance/       → Lint, staleness, quality, contradictions, duplicates
-├── index/            → Fulltext (TF-IDF), Vector (FAISS), Metadata, Backlinks, Graph
-├── ingest/           → Inbox watcher, normalizer, domain router
+├── adapters/         → Markdown, Text, Obsidian, session transcript adapters
+├── api/              → FastAPI app, REST routers, MCP server, web UI routes, TUI
+├── changelog/        → Append-only page mutation log
+├── config/           → YAML config loading and validation
+├── daemon/           → APScheduler daemon + 12 scheduled jobs
+├── extraction/       → LLM-led and heuristic claims/entities/concepts extraction
+├── governance/       → Lint, staleness, quality, contradictions, duplicates, routing
+├── index/            → Fulltext (TF-IDF), Vector (FAISS), Metadata, Backlinks, Graph, Relationships
+├── ingest/           → Inbox watcher, normalizer, domain router, trust tagging
 ├── integration/      → DeterministicIntegrator (merge strategies + rollback)
 ├── models/           → Pydantic schemas + LLM client
-├── promotion/        → Scoring + engine for cross-domain promotion
+├── observability/    → OpenTelemetry metrics, Prometheus, structured logging
+├── promotion/        → Authority scoring, cross-domain promotion engine
 ├── query/            → WikiQuery: unified search with RRF fusion
-└── review/           → Review queue lifecycle
+├── review/           → Review queue lifecycle
+├── synthesis/        → Authority scoring, cache, cross-domain synthesis engine
+├── templates/        → Jinja2 HTML templates (web UI)
+└── utils/            → Frontmatter parsing, ID generation
 ```
 
 ### Data Flow
@@ -87,11 +91,11 @@ new file → Adapter → Normalizer → Router → Queue
                                              ↓
                                   DeterministicIntegrator
                                              ↓
-                                  LLM Extraction pipeline
+                                  Extraction pipeline (trust-tagged claims)
                                              ↓
-                              5 index writes (fulltext/vector/metadata/backlinks/graph)
+                              6 index writes (fulltext/vector/metadata/backlinks/graph/relationships)
                                              ↓
-                               Governance + Export (60min)
+                               Governance + Export (60min) → Synthesis cache (6h)
 ```
 
 ---
@@ -112,27 +116,29 @@ new file → Adapter → Normalizer → Router → Queue
 | Job | Interval | Purpose |
 |-----|----------|---------|
 | Inbox scan | 15s | Pick up new files from `inbox/new/` |
-| Queue-to-pages | 15min | Promote queued pages to `pages/` |
+| Queue-to-pages | 15min | Promote staged candidates to wiki pages |
 | Retry failed ingests | 30min | Retry previously failed ingestions |
-| Index rebuild | 30min | Full rebuild of all 5 indexes |
+| Index rebuild | 30min | Full rebuild of all 6 indexes |
 | Export | 60min | Re-generate llms.txt, graph, sitemap |
 | Governance/lint | 60min | Run all governance checks, write report |
 | Review queue | 60min | Score and populate review queue |
+| Cross-domain summary | 6h | Generate cross-domain entity summaries |
+| Synthesis cache | 6h | Cache high-value repeated queries |
 | Staleness check | 24h | Flag outdated time-sensitive content |
 | Duplicate detection | 24h | Find near-duplicate pages |
+| Promotion | 24h | Score/score cross-domain promotion candidates |
 
 ---
 
-## Known Issues (P0 — Fix Before V2)
+## Remaining Work
 
-| Issue | Severity | Location |
-|-------|----------|---------|
-| Non-atomic JSON index writes | Critical | `index/*.py:save()` |
-| No write mutex for concurrent jobs | High | All index files |
-| Stuck `inbox/processing/` files | High | `ingest/watcher.py` |
-| LLM calls lack timeout | High | `models/client.py` |
+Most core features are complete. Remaining high-priority items are documented in [bmad/ROADMAP_REMAINING.md](bmad/ROADMAP_REMAINING.md).
 
-Full remediation plan: [bmad/ROADMAP_REMAINING.md](bmad/ROADMAP_REMAINING.md)
+Notable areas for future development:
+- **Honcho integration** (new Epic planned) — formal data pipeline between Honcho session memory and LLM Wiki compiled knowledge
+- **E2E integration tests** — coverage for the full Docker stack, MCP → harness workflow
+- **Web UI hardening** — Epic 4 templates are scaffolding; interactive features need implementation
+- **API auth** — optional Bearer token auth for the REST API when network exposure is needed
 
 ---
 
@@ -158,7 +164,7 @@ uv run llm-wiki ingest file path/to/doc.md
 uv run llm-wiki govern check
 
 # Rebuild indexes
-uv run llm-wiki trigger index-rebuild
+uv run llm-wiki govern run index-rebuild
 
 # Install Claude Code session hooks
 uv run llm-wiki hooks install --scope project
@@ -170,7 +176,6 @@ uv run llm-wiki hooks install --scope project
 
 | Extra | Install | Adds |
 |-------|---------|------|
-| `[vector]` | `uv sync --extra vector` | FAISS vector search + sentence-transformers |
 | `[claude-agent]` | `uv sync --extra claude-agent` | Claude Agent SDK LLM provider |
 
-Without `[vector]`: fulltext search still works; vector calls silently no-op.
+**Vector search** (FAISS + sentence-transformers) is a core dependency — always available without `--extra`.

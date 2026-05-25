@@ -23,15 +23,9 @@ uv run llm-wiki --help
 uv run pytest --version
 ```
 
-### Optional: Vector Search Dependencies
+### Vector Search Dependencies
 
-```bash
-# Adds faiss-cpu + sentence-transformers (~500MB download including model)
-uv sync --extra vector
-
-# Or add to your local install
-uv add --optional vector faiss-cpu sentence-transformers
-```
+FAISS + sentence-transformers are core dependencies (always included). No `--extra` step needed.
 
 ### Optional: Claude Agent SDK
 
@@ -55,7 +49,7 @@ cat config/routing.yaml    # Source → domain routing rules
 ## Running Tests
 
 ```bash
-# All tests (1,106 passing)
+# All tests (1,617 running — 2 known failures in test_ui_routes.py)
 uv run pytest
 
 # With coverage report
@@ -140,9 +134,10 @@ uv run llm-wiki daemon status
 # List registered jobs and their next run times
 uv run llm-wiki daemon jobs
 
-# Trigger a specific job manually
-uv run llm-wiki trigger index-rebuild
-uv run llm-wiki trigger governance-check
+# Trigger a specific job synchronously via CLI
+uv run llm-wiki govern run [lint|contradictions|all]
+# Or run a template job from dashboard/status
+uv run llm-wiki govern dashboard [--domain <name>]
 ```
 
 ## Ingesting Content
@@ -299,7 +294,7 @@ Harmless. Expected output from `faiss-cpu` — will be fixed in a future faiss r
 SSH agent issue (often 1Password SSH agent). Restart the agent or push in a new terminal session.
 
 ### Index seems stale or empty
-Run `uv run llm-wiki trigger index-rebuild` to force a full rebuild.
+Run `uv run llm-wiki govern rebuild-index` to force a full rebuild.
 
 ### Daemon won't start — config validation error
 Check `config/daemon.yaml`, `config/domains.yaml`, `config/models.yaml`, `config/routing.yaml`. Run `uv run llm-wiki daemon start` and read the error message — it will name the specific invalid field.

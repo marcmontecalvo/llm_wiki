@@ -6,6 +6,7 @@ from typing import Any
 
 from llm_wiki.index.backlinks import BacklinkIndex
 from llm_wiki.index.graph_edges import GraphEdgeIndex
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.query.search import WikiQuery
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ class IndexRebuildJob:
             wiki: Injected WikiQuery singleton (falls back to creating one for
                   backward compatibility)
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
         self.wiki_query = wiki if wiki is not None else WikiQuery(wiki_base=self.wiki_base)
         self.backlink_index = BacklinkIndex(index_dir=self.wiki_base / "index")
         self.graph_edge_index = GraphEdgeIndex(index_dir=self.wiki_base / "index")

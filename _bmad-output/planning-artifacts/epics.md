@@ -1,6 +1,6 @@
 ---
 stepsCompleted: ['step-01-validate-prerequisites', 'step-02-design-epics', 'step-03-epic-1-stories', 'step-03-epic-2-stories', 'step-03-epic-3-stories', 'step-03-epic-4-placeholder', 'step-04-final-validation']
-status: complete
+status: feature-complete + residual-debt
 completedAt: '2026-05-17'
 revisedAt: '2026-05-17'
 inputDocuments:
@@ -46,9 +46,9 @@ This document provides the complete epic and story breakdown for llm_wiki, decom
 
 **Search (Sprint 1-2)**
 - FR13: Agent harnesses and operators perform full-text search across all domains, returning ranked results with confidence scores
-- FR14: Agent harnesses and operators perform semantic/vector search (when vector extras are installed), returning similarity-ranked results
+- FR14: Agent harnesses and operators perform semantic/vector search, returning similarity-ranked results
 - FR15: Search results from fulltext and vector indexes are merged into a single ranked list
-- FR52: When the vector search dependency is not installed, search returns full-text results with a capability indicator (`"vector_search": false`) rather than an error
+- FR52: Vector search is always enabled (core dependency). Search always returns `"vector_search": true`.
 
 **Daemon & Governance (Sprint 1)**
 - FR16: The daemon runs all governance jobs on schedule without manual intervention: lint, contradiction detection, staleness detection, export generation, index rebuild
@@ -171,8 +171,8 @@ This document provides the complete epic and story breakdown for llm_wiki, decom
 **Docker/Container (Sprint 1):**
 - Multi-stage Docker build; uid 1000 `llmwiki` user
 - supervisord managing two processes: uvicorn (port `$WIKI_PORT`, default 3050; REST + MCP Streamable HTTP) + WikiDaemon
-- Host-mounted volumes: `./wiki_data:/wiki`, `./config:/config:ro`
-- `WIKI_ROOT=/wiki` set in Dockerfile
+- Host-mounted volumes: `./wiki_system:/wiki_system`, `./config:/config:ro`
+- `WIKI_ROOT=/wiki_system` set in Dockerfile
 - `stopwaitsecs=30` for daemon supervisord process (mid-write crash safety)
 
 **Multi-User Domain Scoping (Sprint 1, design-now):**
@@ -198,7 +198,7 @@ N/A — this is a backend API service (MCP + REST + CLI). No UI requirements for
 | FR7, FR40, FR41, FR51    | Epic 1 | P0 fixes: atomic writes, crash recovery, checkpoint resume                                                                |
 | FR8-12, FR54, FR57, FR59 | Epic 1 | New REST + MCP query endpoints                                                                                            |
 | FR13, FR15               | Epic 1 | V1 fulltext exists; expose via REST/MCP                                                                                   |
-| FR14, FR52               | Epic 2 | Vector search wired into service + capability indicator                                                                   |
+| FR14, FR52               | Epic 2 | Vector search (always enabled — FAISS + sentence-transformers are core deps, always returns `true`)                       |
 | FR16-23                  | Epic 1 | V1 daemon jobs; run in Docker; expose status via REST/MCP; FR17/FR18 also covered by Governance CLI commands (Story 1.15) |
 | FR24-27, FR29            | Epic 1 | V1 exists; expose changelog/review/merge/domains                                                                          |
 | FR28                     | Epic 2 | Confidence scores surfaced in all query results                                                                           |
@@ -342,13 +342,13 @@ So that I can run a fully-operational wiki service without any Python environmen
 
 **Given** `docker-compose.yml`
 **When** defined
-**Then** it mounts `./wiki_data:/wiki` (read-write) and `./config:/config` (read-only), and sets `WIKI_ROOT=/wiki`
+**Then** it mounts `./wiki_system:/wiki_system` (read-write) and `./config:/config` (read-only), and sets `WIKI_ROOT=/wiki_system`
 
 **Given** `daemon.yaml` or `domains.yaml` is modified on the host
 **When** the container is restarted
 **Then** the new config takes effect without rebuilding the image (NFR-O3)
 
-**Given** `./wiki_data` does not exist on the host
+**Given** `./wiki_system` does not exist on the host
 **When** `docker-compose up` is run
 **Then** docker creates the directory and the container auto-initializes the wiki structure inside it
 
@@ -425,9 +425,6 @@ So that the service works fully without any LLM dependency by default and new ca
 **When** the service starts
 **Then** it reads `models.yaml`, validates the provider config, and instantiates the LLM client; startup fails with a clear error if `models.yaml` is missing or the provider config is invalid
 
-**Given** `features.vector_search: false`
-**When** search is executed
-**Then** it returns full-text results only with `"vector_search": false` — no error, identical to the missing-dependency path (FR52)
 
 **Given** `features.synthesis_cache: false` or `features.cross_domain_promotion: false`
 **When** the daemon scheduler initializes
@@ -435,7 +432,7 @@ So that the service works fully without any LLM dependency by default and new ca
 
 **Given** any health or status response
 **When** returned
-**Then** it includes `llm_extraction_enabled: bool` and `vector_search_enabled: bool` capability indicators
+**Then** it includes `llm_extraction_enabled: bool` capability indicator
 
 ### Story 1.6: REST Health, Daemon, and Ingest Endpoints
 
@@ -529,7 +526,7 @@ So that I can access the full wiki capability surface from any HTTP client witho
 
 **Given** `GET /v1/search?q=<text>`
 **When** called
-**Then** it returns merged full-text and vector results (when available), each with confidence scores; response body includes `"vector_search": bool` (FR13, FR15, FR52)
+**Then** it returns merged full-text and vector results, each with confidence scores (FR13, FR15)
 
 **Given** `GET /v1/pages/{page_id}` when the page exists
 **When** called
@@ -645,7 +642,7 @@ So that setup requires zero manual steps.
 
 **Acceptance Criteria:**
 
-**Given** an empty host directory mounted at `/wiki`
+**Given** an empty host directory mounted at `/wiki_system`
 **When** the service starts for the first time
 **Then** `wiki_system/` and all required subdirectories are created before any query is served (FR55, NFR-O4)
 
@@ -862,11 +859,11 @@ So that Docker or supervisord configuration regressions are caught before releas
 
 **Given** the health response
 **When** examined
-**Then** it includes `daemon_running`, `index_loaded`, `llm_extraction_enabled`, and `vector_search_enabled` fields
+**Then** it includes `daemon_running`, `index_loaded`, and `llm_extraction_enabled` fields (no `vector_search` — it is always enabled)
 
 ## Epic 2: Trust & Verification — "Know What to Trust"
 
-Operators and agents can see confidence scores on every page and claim. Every claim is tagged at ingest as extracted, inferred, or ambiguous. Pages lacking source citations are automatically flagged. Vector/semantic search is available alongside full-text, with a clear capability indicator when it is not installed.
+Operators and agents can see confidence scores on every page and claim. Every claim is tagged at ingest as extracted, inferred, or ambiguous. Pages lacking source citations are automatically flagged. Vector/semantic search is always available alongside full-text (FAISS + sentence-transformers are required core dependencies).
 
 **Story execution order is significant:** Story 2.1 establishes trust tags at ingest time. Story 2.2 uses those tags to enforce citation rules and gate promotion. Story 2.3 surfaces the resulting confidence scores in query and search results. Story 2.4 (vector search) is independent of the trust pipeline and can be implemented in parallel with any of 2.1–2.3.
 
@@ -973,27 +970,20 @@ So that I can distinguish high-confidence compiled knowledge from speculative or
 ### Story 2.4: Vector Search Integration
 
 As an agent or operator,
-I want semantic/vector search available alongside full-text search when the optional extras are installed,
+I want semantic/vector search available alongside full-text search,
 So that conceptually related pages surface in search results even when they don't share exact keywords.
 
 **Acceptance Criteria:**
 
-**Given** the service is running with `uv sync --extra vector` (FAISS + sentence-transformers installed)
+**Given** the service is running (`uv sync` — FAISS + sentence-transformers are core dependencies)
 **When** `GET /v1/search?q=<text>` is called
 **Then** the response includes results from both the fulltext index and the vector index, merged into a single ranked list (FR14, FR15)
-**And** the response body includes `"vector_search": true`
-
-**Given** the service is running without the vector extras installed
-**When** `GET /v1/search?q=<text>` is called
-**Then** the response returns full-text results only with `"vector_search": false` — no error, no exception (FR52)
-
-**Given** vector search is enabled and a query is submitted
 **When** results are merged
 **Then** the ranking uses Reciprocal Rank Fusion (RRF) combining fulltext and vector scores — implemented as `sorted(page_ids, key=lambda k: rrf_scores[k], reverse=True)` (the lambda form, not `dict.get` — avoids mypy overload trap)
 
 **Given** the MCP `search` tool is called
 **When** executed
-**Then** it returns `vector_search: bool` in its response — same value as the REST endpoint, driven by the same `WikiQuery.search()` return value; never hardcoded
+**Then** it returns `vector_search: true` in its response — driven by the same `WikiQuery.search()` return value
 
 **Given** the FAISS index is loaded at service startup
 **When** a search is executed
@@ -1002,6 +992,8 @@ So that conceptually related pages surface in search results even when they don'
 **Given** the FAISS index file is missing or corrupt on startup
 **When** the service initializes
 **Then** vector search degrades gracefully: `add_document` and `search` log a warning and return empty results rather than raising an `ImportError` or crashing the service
+
+**Note:** `uv sync --extra vector` and the fallback `"vector_search": false` path were removed in the review — FAISS and sentence-transformers are required dependencies, not optional extras. FR52 has been updated to reflect this.
 
 ## Epic 3: Cross-Domain Intelligence — "Knowledge That Compounds"
 
@@ -1215,6 +1207,91 @@ So that the active query context stays focused on current knowledge without perm
 **When** run
 **Then** the specified page is moved back from `archive/` to `pages/` and becomes visible in normal query results
 
+## Epic H: Honcho Integration — "Agent Conversational Memory + Compiled Knowledge"
+
+As an agent harness author,
+I want LLM Wiki to integrate with Honcho, so that conversational memory and compiled knowledge work together seamlessly instead of duplicating or conflicting.
+
+**Goal:** Honcho = conversational memory ("what were we just talking about?") with running peer-concept summaries and contextual conclusions. LLM Wiki = compiled knowledge ("what do we know about X?") with structured, cross-referenced, governed pages. They are complementary data stores with distinct purposes.
+
+**Data flow:**
+- **Honcho → LLM Wiki:** Honcho taps into the LLM Wiki inbox, ingests Claude Code session transcripts, extracts entities and claims, and integrates them into wiki pages — making conversational knowledge persistent and queryable.
+- **LLM Wiki → Honcho:** The harness injects the LLM Wiki export bundle (`wiki_system/exports/llms.txt` + graph) into the LLM context window via `session.upload_file()` and `context.inject()` calls, giving the agent a compact knowledge view. Query logs (`query_log.db`) can be pushed back as Honcho events so the next flip-flop learns from past queries.
+
+**Acceptance Criteria:**
+
+**Given** the service is running and Honcho is installed on the same host
+**When** `GET /v1/honcho/status` is called
+**Then** it returns a 200-to track Honcho-aware status (Honcho-not-installed placeholder with a clear message explaining the integration is not enabled yet)
+
+**Given** a Claude Code session generates wiki-worthy content
+**When** the session capture hook sends a transcript to LLM Wiki
+**Then** LLM Wiki extracts entities, claims, and relationships separately from Honcho's async deriver — intra-session Honcho memory is not clobbered by wiki extraction because Honcho's review process runs independently on a 30-second tick
+
+**Given** LLM Wiki exports are generated
+**When** the daemon writes `llms.txt` + graph + sidecars
+**Then** the system provides a CLI command (`llm-wiki honcho push`) that copies the export bundle to Honcho's expected location (or offers to set it up) so the next Honcho review pass picks it up
+
+**Given** operators and agents querying from within an Honcho flip-flop
+**When** they need structured, governed knowledge about a topic
+**Then** LLM Wiki is the natural data source for PDFs, markdown files, directories of md files, and structured data — Honcho provides the conversational context and running summaries across the flip-flop
+
+**Given** LLM Wiki and Honcho are co-present in a harness
+**When** an operator or agent is deciding which system to query
+**Then** the documentation clarifies: use Honcho for "what were we just talking about?" and LLM Wiki for "what do we know about X?"
+
+**Given** the integration is planned (Story H.1)
+**When** auto-push on export is configured in `daemon.yaml` (`features.honcho_push: true`)
+**Then** a daemon job (`HonchoPushJob`) runs on export completion, pushing the bundle to a configurable Honcho directory path
+
+### Story H.1: Honcho Detectability
+
+As an operator or agent,
+I want to detect if Honcho is reachable and healthy,
+So that I can conditionally enable integration features.
+
+**Acceptance Criteria:**
+
+1. **Given** `detect_honcho()` is called **When** no URL is provided **Then** it tries `HTTP /health` at `http://localhost:8000` (default) and returns `{"available": true/false, "url": str, "status": int, "response": dict|str}`
+2. **Given** `HONCHO_URL` env var is set **When** detect is called without explicit URL **Then** it uses the env var value
+3. **Given** Honcho is reachable at `/health` **When** queried **Then** `available: true`, `status: 200`, `response` contains the health JSON
+4. **Given** Honcho is unreachable **When** queried **Then** `available: false`, `status: 0`, `response` contains `{error: str}`
+5. **Given** the service is running **When** `GET /v1/honcho/status` is called **Then** it returns the detect result with `status_message` when not available
+6. **Given** `features.honcho_push: true` is set in config **When** config is loaded ** Then** `HonchoConfig` fields are available: `push_url`, `push_api_key`, `workspace_id`
+7. **Given** the honcho package is not installed ** When** `get /v1/honcho/status` is called ** Then** it returns a 500-error response indicating the service is not yet configured, not a stack trace
+
+### Story H.2: Honcho Push (Export Bundle Delivery)
+
+As the wiki daemon,
+I want to push exported wiki content to Honcho,
+So that agent sessions can load fresh wiki knowledge into their context.
+
+**Acceptance Criteria:**
+
+1. **Given** `features.honcho_push: true` is set in `daemon.yaml` **When** daemon starts **Then** the `honcho_push` job is scheduled alongside other export jobs
+2. **Given** `honcho_push` is disabled **When** daemon starts **Then** no honcho_push job is registered in the scheduler
+3. **Given** `push_url` + `push_api_key` are configured **When** `honcho_push` job runs **Then** it POSTs `{"llms_txt": str, "graph_json": str}` to `{push_url}/v1/honcho/wiki-bundle` with `Authorization: Bearer {api_key}`
+4. **Given** no `push_url` and honcho SDK is installed **When** job runs ** Then** it uses local mode: creates Honcho session, uploads `llms.txt` as a session file
+5. **Given** no `push_url` and honcho SDK is not installed **When** job runs ** Then** it returns `{"status": "skipped", "reason": "honcho package not installed"}`
+6. **Given** `exports/llms.txt` does not exist **When** job runs ** Then** it returns `{"status": "skipped", "reason": "No llms.txt export found"}`
+7. **Given** CLI `honcho push` is run manually **When** executed **Then** it runs the push job and returns results (with optional `--push-url` / `--push-api-key` overrides)
+8. **Given** CLI `honcho bridge` is run manually **When** executed **Then** it triggers push via the REST endpoint and captures error results for tracking
+
+### Story H.3: Honcho Pull (Conclusions → Wiki Inbox)
+
+As a wiki operator,
+I want to harvest conclusions from Honcho sessions into the wiki inbox,
+So that insights derived from agent conversations become governed wiki knowledge.
+
+**Acceptance Criteria:**
+
+1. **Given** Honcho has active sessions with conclusions **When** `harvest_conclusions()` runs ** Then** each conclusion is written as wiki markdown with frontmatter to `inbox/new/`
+2. **Given** a conclusion from observer "alice" about topic X **When** harvested **Then** the file contains frontmatter: `kind: conclusion`, `id: honcho-{observer_id[:8]}`, `title: "Conclusion from {observer} about {observed}"`
+3. **Given** multiple conclusions from the same observer **When** harvested **Then** subsequent files get suffixes: `honcho-alice-1.md`, `honcho-alice-2.md`, etc.
+4. **Given** the honcho package is not installed **When** `run_harvest_job()` is called **Then** it returns `{"status": "skipped", "reason": "honcho package not installed"}`
+5. **Given** no Honcho sessions exist **When** `harvest_conclusions()` runs **Then** it returns `{"status": "success", "harvested": 0, "reason": "No sessions found"}` but still ensures `inbox/new/` directory exists
+6. **Given** harvested files land in `inbox/new/` **When** the daemon's inbox-scan job runs **Then** they flow through the standard ingest pipeline (adapters → normalizer → domain router → queue → integrator → extraction → indexes)
+
 ## Epic 4: Web UI & Operations — "Operate and Browse as a Human" *(V4 — Placeholder)*
 
 > **Status:** Placeholder — full story breakdown will be created when Epic 3 is complete and V4 is planned in earnest. No detailed FRs are defined in the PRD yet; the architecture explicitly defers web UI decisions.
@@ -1238,3 +1315,43 @@ So that the active query context stays focused on current knowledge without perm
 - Auth requirements for the browser surface need explicit analysis — the `0.0.0.0` + compose model is not sufficient to assume the same no-auth model as the JSON API for a browser surface
 
 **Prerequisite:** Epics 1-3 complete. Epic 4 planning begins after Epic 3 retrospective.
+
+## Residual Debt — Known Issues Not Yet in an Epic
+
+### Medium Priority — Actionable
+
+| Issue | Severity | Description | Suggested Epic |
+|-------|----------|-------------|----------------|
+| LLM call timeout | High | Ingestion path makes unbounded LLM calls with no timeout. A hung LLM request blocks that worker thread until the thread pool is exhausted. Fix: add timeout to `models/client.py`. | Standalone story in Epic H or its own "Reliability" epic |
+| Simultaneous promotion race | Medium | Two daemon instances promoting the same page simultaneously could create duplicates in `shared/`. Fix: file-based lock on the shared page path. | Reliability epic |
+| API auth when network-exposed | Medium | No Bearer token auth on REST/MCP endpoints; relies on VM network isolation. | V4 planning or standalone auth story |
+
+### Medium Priority — Deferred / Low Impact
+
+| Issue | Severity | Description |
+|-------|----------|-------------|
+| Onboarding flow | Medium | Domain configs are hardcoded. `llm-wiki init` should walk through questions and generate config. Effort: 4h. |
+| `frontmatter` schema validation dead code | Medium | `contracts.require_schema_validation: true` is in `models.yaml` but `DeterministicIntegrator` doesn't validate against schemas. Effort: 2h. |
+| 2 failing UI route tests | Low | `test_ui_routes.py` expects 500 for missing password (returns 401), and `app.state.wiki` not set in test. |
+| Dependency scanning missing | Low | No `pip-audit` in CI. Effort: 30 min. |
+
+### Implemented — Future Path (Not Broken)
+
+These are intentional `NotImplementedError` placeholders that serve as documented future expansion points. The calling code handles them gracefully (falls back to heuristic).
+
+| Item | Location | Current Behavior | Epic Target |
+|------|----------|------------------|-------------|
+| LLM synthesis | `synthesis/engine.py::_synthesize_llm()` | Raises `NotImplementedError`; caller falls back to heuristic (`_synthesize_heuristic`) | Epic 2 (clearly labeled in code) |
+| External synthesis | `cli.py::llm_wiki_synthesis` / `cli.py::llm_wiki_flip_flop` | Returns `"Flip-flop feature not available."` | Future — Honcho integration path |
+| Reverse URL adapters | `export/llmsfull.py` | Writes "TODO: Implement reverse URL mapping" to export | Future |
+
+Note: `synthesis_cache.py` and `llm_wiki_synthesis` are alive paths — the daemon job exists in `jobs/summary.py`, the CLI wrapper exists, and the cache logic itself is heuristic-only (no LLM). The `NotImplementedError` is only in `_synthesize_llm()`, which the caller catches.
+
+### Wiring — No Implementation Yet
+
+These notes follow the same convention.
+
+| Item | Location | Description |
+|------|----------|-------------|
+| Word-level reverse URLs | `export/llmsfull.py` | Lines UV‑6, UV‑6b: `word_to_dict` / `dict_to_word` regressed to empty sleds after `synthesis_cache.py` adoption. Writing a mini URL→dictionary encoder is an Epic 4 (richer exports) candidate. |
+| Extractor place tokens | `templates/engine.py` | Line V1‑3: Plan to reuse the `generator` dispatch from `summary.py:extract_metadata` for templates. Low effort, done as part of template engine extraction stories when needed. |

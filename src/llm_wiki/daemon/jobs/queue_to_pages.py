@@ -6,6 +6,7 @@ from typing import Any
 
 import frontmatter
 
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.utils.frontmatter import write_frontmatter
 from llm_wiki.utils.id_gen import generate_page_id
 
@@ -24,7 +25,7 @@ class QueueToPagesJob:
         Args:
             wiki_base: Base wiki directory (defaults to wiki_system/)
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
 
     def _collision_check(self, page_id: str) -> bool:
         """Return True if *page_id* already exists on disk in pages/.

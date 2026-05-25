@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from llm_wiki.models.config import PromotionConfig
+from llm_wiki.paths import resolve_wiki_base
 
 
 @dataclass
@@ -49,7 +50,7 @@ class PromotionEngine:
         wiki_base: Path | None = None,
         config: PromotionConfig | None = None,
     ):
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
         self.config = config or PromotionConfig()
 
     # ── detection ──────────────────────────────────────────────────

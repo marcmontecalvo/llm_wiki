@@ -4,13 +4,17 @@ A daemon-governed knowledge service for AI agent harnesses. Runs as a Docker con
 
 ## How it fits in the stack
 
-| Layer | Tool | Purpose |
-|-------|------|---------|
-| Agent harness | Homefront (and others) | Orchestrates agent behavior and tool use |
-| Session memory | Honcho | Conversational context and continuity |
-| Knowledge store | **LLM Wiki** | Compiled, governed domain knowledge that compounds over time |
+LLM Wiki sits alongside [Honcho](https://github.com/plastic-labs/honcho) (agent memory infrastructure) and your agent harness (e.g., Homefront, Claude Code, OpenCode) as layer three in a compound AI system:
 
-Honcho answers "what were we just talking about?" — LLM Wiki answers "what do we know about X?" Pre-synthesized, with provenance and contradiction awareness, not re-derived from scratch on every query.
+| Layer           | Tool                               | Purpose                                                      |
+| --------------- | ---------------------------------- | ------------------------------------------------------------ |
+| Agent harness   | Homefront, Claude Code, etc.       | Orchestrates agent behavior and tool use                     |
+| Session memory  | Honcho                             | Conversational context, peer representations, session continuity |
+| Knowledge store | **LLM Wiki**                       | Compiled, governed domain knowledge that compounds over time |
+
+Honcho answers "what were we just talking about?" — LLM Wiki answers "what do we know about X?" Honcho stores raw conversations and derives representations; LLM Wiki stores *processed, verified facts* with source provenance, contradiction detection, and authority scoring, not re-derived from scratch on every query.
+
+**The data flow:** conversations are stored in Honcho for recent context; LLM Wiki ingests excerpts (via Claude Code hooks, API, or manual drop) and produces structured, governed wiki pages. The synthesized wiki pages can then be injected back into Honcho as enriched session context.
 
 ## Quick start
 
@@ -33,10 +37,10 @@ uv run llm-wiki query "homelab network topology"
 
 First-run auto-initializes the wiki directory structure. No manual `init` required.
 
-Before first use, ensure `wiki_data` is owned by uid 1000:
+Before first use, ensure `wiki_system` is owned by uid 1000:
 
 ```bash
-mkdir -p wiki_data && sudo chown -R 1000:1000 wiki_data
+mkdir -p wiki_system && sudo chown -R 1000:1000 wiki_system
 ```
 
 ### Local development
@@ -49,7 +53,25 @@ uv run pytest                # run test suite
 
 ## Deployment
 
-Each household runs its own isolated instance on a dedicated VM alongside Homefront and Honcho. The docker-compose file controls port exposure — the service binds to `0.0.0.0` inside the container; network isolation is at the VM and compose level.
+Each household runs its own isolated instance on a dedicated VM alongside Homefront (agent harness) and Honcho (session memory). The docker-compose file controls port exposure — the service binds to `0.0.0.0` inside the container; network isolation is at the VM and compose level.
+
+Honcho and LLM Wiki are purpose-built for different layers: Honcho stores raw conversations and derives peer representations; LLM Wiki stores parsed, verified facts with source provenance. When configured, LLM Wiki can push its export bundle into Honcho's session context, and pull conclusions from Honcho into the wiki inbox — the agent harness is the mediator.
+
+### Honcho Configuration
+
+Enable auto-push of wiki exports to Honcho in `config/daemon.yaml`:
+
+```yaml
+features:
+  honcho_push: true       # Enable Honcho push daemon job
+
+honcho:
+  workspace_id: default   # Honcho workspace for local push
+  push_url: null          # Remote Honcho URL (e.g. http://honcho:8000)
+  push_api_key: null      # API key for remote push authentication
+```
+
+Check Honcho connectivity: `GET /v1/honcho/status` or `curl http://host:3050/v1/honcho/status`.
 
 ```yaml
 # docker-compose.yml (example)
@@ -59,30 +81,30 @@ services:
     ports:
       - "127.0.0.1:3050:3050"   # expose to host only
     volumes:
-      - ./wiki_data:/wiki
+      - ./wiki_system:/wiki_system
       - ./config:/config:ro
 ```
 
 ## Interfaces
 
-| Interface | Endpoint | Use |
-|-----------|----------|-----|
-| MCP (Streamable HTTP) | `http://host:3050/mcp` | Agent harnesses |
-| MCP (stdio) | process spawn | Local harness integration |
-| REST | `http://host:3050/v1/` | Programmatic / scripts |
-| CLI | `uv run llm-wiki` | Operator control |
+| Interface             | Endpoint               | Use                       |
+| --------------------- | ---------------------- | ------------------------- |
+| MCP (Streamable HTTP) | `http://host:3050/mcp` | Agent harnesses           |
+| MCP (stdio)           | process spawn          | Local harness integration |
+| REST                  | `http://host:3050/v1/` | Programmatic / scripts    |
+| CLI                   | `uv run llm-wiki`      | Operator control          |
 
 ## MCP tools
 
-| Tool | Description |
-|------|-------------|
-| `query` | Retrieve knowledge at three depths: quick / standard / deep |
-| `ingest` | Submit a source; returns `job_id` |
-| `ingest_status` | Poll ingest job by `job_id` |
-| `search` | Full-text + vector search |
-| `read_page` | Fetch a single page by ID or slug |
-| `list_pages` | List pages by domain, kind, or tag |
-| `export` | Trigger or retrieve exports |
+| Tool            | Description                                                 |
+| --------------- | ----------------------------------------------------------- |
+| `query`         | Retrieve knowledge at three depths: quick / standard / deep |
+| `ingest`        | Submit a source; returns `job_id`                           |
+| `ingest_status` | Poll ingest job by `job_id`                                 |
+| `search`        | Full-text + vector search                                   |
+| `read_page`     | Fetch a single page by ID or slug                           |
+| `list_pages`    | List pages by domain, kind, or tag                          |
+| `export`        | Trigger or retrieve exports                                 |
 
 ## Feature flags
 
@@ -126,29 +148,30 @@ Queries default to household + the requesting user's personal domain merged. Pas
 
 ## Daemon jobs
 
-| Job | Interval | Purpose |
-|-----|----------|---------|
-| Inbox scan | 15s | Pick up new files |
-| Queue to pages | 15min | Promote queued content |
-| Retry failed | 30min | Retry previously failed ingest jobs |
-| Index rebuild | 30min | Rebuild all search indexes + reload FAISS |
-| Governance | 60min | Lint, contradiction detection, staleness, routing |
-| Export | 60min | Regenerate llms.txt, JSON-LD, graph |
-| Review queue | 60min | Surface review candidates |
-| Staleness | 24h | Flag outdated pages |
-| Duplicates | 24h | Near-duplicate detection |
-| Promotion | 24h | Score pages for cross-domain promotion |
+| Job            | Interval | Purpose                                           |
+| -------------- | -------- | ------------------------------------------------- |
+| Inbox scan     | 15s      | Pick up new files                                 |
+| Queue to pages | 15min    | Promote queued content                            |
+| Retry failed   | 30min    | Retry previously failed ingest jobs               |
+| Index rebuild  | 30min    | Rebuild all search indexes + reload FAISS         |
+| Governance     | 60min    | Lint, contradiction detection, staleness, routing |
+| Export         | 60min    | Regenerate llms.txt, JSON-LD, graph               |
+| Review queue   | 60min    | Surface review candidates                         |
+| Staleness      | 24h      | Flag outdated pages                               |
+| Duplicates     | 24h      | Near-duplicate detection                          |
+| Promotion      | 24h      | Score pages for cross-domain promotion            |
+| Honcho push    | 60min* | Push wiki export bundle to Honcho (if `honcho_push: true`) |
 
 ## Configuration files
 
 All mounted read-only at `/config` in the container:
 
-| File | Purpose |
-|------|---------|
-| `daemon.yaml` | Job schedules, feature flags, daemon config |
+| File           | Purpose                                       |
+| -------------- | --------------------------------------------- |
+| `daemon.yaml`  | Job schedules, feature flags, daemon config   |
 | `domains.yaml` | Domain definitions, scope, routing thresholds |
-| `models.yaml` | LLM provider config for optional extraction |
-| `routing.yaml` | Source path → domain routing rules |
+| `models.yaml`  | LLM provider config for optional extraction   |
+| `routing.yaml` | Source path → domain routing rules            |
 
 Config changes take effect on container restart — no rebuild required.
 
@@ -176,10 +199,10 @@ uv run pytest -m performance tests/performance/test_query_latency.py::test_quick
 
 Latency budgets (NFR-P1/P2/P3):
 
-| Depth    | Budget |
-|----------|--------|
-| quick    | ≤ 200ms |
-| standard | ≤ 2s   |
+| Depth    | Budget                              |
+| -------- | ----------------------------------- |
+| quick    | ≤ 200ms                             |
+| standard | ≤ 2s                                |
 | deep     | ≤ 30s (submit + poll to completion) |
 
 The deep test uses `httpx.AsyncClient` with `ASGITransport` so `asyncio.create_task()`
@@ -198,8 +221,8 @@ background jobs share the event loop and complete within the timeout window.
 
 ## Current status
 
-**v0.1.0 — V1 library complete, service pivot in progress**
+**v0.1.0 — Feature-complete**
 
-V1 core library is functionally complete (1106 tests, 93% coverage). Current work is the service pivot: Docker container, MCP server (Streamable HTTP), REST API, and daemon wiring into the container stack.
+All core features are implemented and tested: Docker container, MCP server (Streamable HTTP + stdio), REST API, CLI, daemon with 13+ scheduled jobs, governance pipeline, trust/confidence scoring, cross-domain entity promotion, synthesis cache, per-domain dashboards, topic archive lifecycle, web UI, TUI, and Honcho integration (detect, push, pull).
 
-See `_bmad-output/planning-artifacts/epics.md` for the full sprint breakdown.
+1,632 tests passing (93% coverage). See `_bmad-output/planning-artifacts/epics.md` for the full epic breakdown showing all epics complete.

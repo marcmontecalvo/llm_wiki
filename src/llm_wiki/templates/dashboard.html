@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Operations Dashboard</h2>
+<div class="panels" hx-trigger="every 30s" hx-get="/ui/api/dashboard" hx-target="#dashboard-content" hx-swap="innerHTML">
+  <div id="dashboard-content">
+    <div class="panel" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;">
+      <h3>Daemon Health</h3>
+      <p class="muted">Loading…</p>
+    </div>
+    <div class="panel" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;">
+      <h3>Wiki Health</h3>
+      <p class="muted">Loading…</p>
+    </div>
+    <div class="panel" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;">
+      <h3>Ingestion Pipeline</h3>
+      <p class="muted">Loading…</p>
+    </div>
+    <div class="panel" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;">
+      <h3>Governance</h3>
+      <p class="muted">Loading…</p>
+    </div>
+    <div class="panel" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:16px;">
+      <h3>Query Activity</h3>
+      <p class="muted">Loading…</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

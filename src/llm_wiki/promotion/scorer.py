@@ -6,6 +6,7 @@ from pathlib import Path
 
 from llm_wiki.governance.quality import QualityScorer
 from llm_wiki.index.backlinks import BacklinkIndex
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.promotion.config import PromotionConfig
 from llm_wiki.promotion.models import CrossDomainReference, PromotionCandidate
 from llm_wiki.utils.frontmatter import parse_frontmatter
@@ -24,7 +25,7 @@ class PromotionScorer:
             wiki_base: Base wiki directory (defaults to wiki_system/)
         """
         self.config = config or PromotionConfig()
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
 
         # Initialize supporting indices
         index_dir = self.wiki_base / "index"

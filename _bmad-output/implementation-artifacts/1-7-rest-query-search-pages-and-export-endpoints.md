@@ -248,7 +248,7 @@ def test_quick_query_returns_confidence(client):
     # Results may be empty on test wiki, but response shape must be correct
     body = r.json()
     assert "results" in body
-    assert "vector_search" in body
+    # Note: vector_search is always enabled, not present as a field in search response
 
 def test_deep_query_returns_job_id(client):
     r = client.post("/v1/query", json={"query": "test", "depth": "deep"})

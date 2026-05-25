@@ -159,9 +159,9 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ${WIKI_VOLUME:-./wiki_data}:/wiki
+      - ${WIKI_VOLUME:-./wiki_system}:/wiki_system
     environment:
-      - WIKI_CONFIG_DIR=/wiki/config
+      - WIKI_CONFIG_DIR=/wiki_system/config
 ```
 
 If `docker-compose.yml` hardcodes the volume path, the test needs to either:
@@ -248,7 +248,7 @@ None.
 ### Completion Notes List
 
 - Created `tests/integration/test_cold_start.py` with `@pytest.mark.integration`, Docker skip guard, `docker-compose up --build -d` cold start, 1s-poll / 30s-timeout health check, AC:3 field assertions, and `docker-compose down -v` teardown in `finally`.
-- Updated `docker-compose.yml` to use `${WIKI_VOLUME:-./wiki_data}:/wiki` so tests can inject a fresh temp volume without affecting production defaults.
+- Updated `docker-compose.yml` to use `${WIKI_VOLUME:-./wiki_system}:/wiki_system` so tests can inject a fresh temp volume without affecting production defaults.
 - Added "Run integration tests" step to `.github/workflows/ci.yml` (main-push only, Python-wrapped `pytest -m integration` with a 120s timeout). "Run performance tests" step already existed from Story 1.16.
 - Review fix: cold-start test now supports both `docker-compose` and `docker compose`, uses a unique `COMPOSE_PROJECT_NAME`, a free host/container `WIKI_PORT`, and monotonic timing so it does not collide with or tear down a developer's normal compose stack.
 - Review fix: `docker-compose.yml` now applies `${WIKI_PORT:-3050}` consistently to the host mapping, container port, and service environment.

@@ -80,7 +80,7 @@ The hooks run on the **host machine** inside the Claude Code process. The wiki c
 
 - `inbox/new/` must be a path accessible on the **host** filesystem
 - If using a Docker volume (e.g., `~/my-wiki/wiki_system`), the `--wiki-base` passed to `hooks install` must be the **host-side** path of the volume mount
-- Inside the container, the wiki sees the same directory via `/wiki/wiki_system`
+- Inside the container, the wiki sees the same directory via `/wiki_system/wiki_system`
 
 This is not a code bug — it's an operational constraint. Document it in the install command's help text or error output.
 

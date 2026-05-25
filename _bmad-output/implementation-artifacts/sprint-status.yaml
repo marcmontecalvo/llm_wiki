@@ -35,7 +35,8 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-05-17"
-last_updated: "2026-05-21T22:00:00"
+last_updated: "2026-05-25T22:00:00"
+last_updated_epic-h: "2026-05-25"
 last_updated_2-1-claim-trust-tagging-at-ingest: "2026-05-21"
 last_updated_1-10-auto-init-wiki-on-first-start: "2026-05-19"
 project: llm_wiki
@@ -82,7 +83,7 @@ development_status:
   3-3-cross-domain-summary-page-generation: done  # implementation-complete: CrossDomainSummaryJob, claim aggregation with dedup, LLM synthesis fallback, entity health lifecycle, summary boosting; 1476 tests pass
   3-4-synthesis-cache-high-value-query-pages: done  # implementation-complete: SynthesisCacheJob with query normalization, cache page generation, stale refresh, listing/query endpoints; 2512 tests pass
   3-5-per-domain-dashboards: done  # implementation-complete: REST endpoint, dashboard service, MCP tool, CLI command — all derived from index state, no persistence; 2512 tests pass
-  3-6-topic-archive-lifecycle: review  # Story created; no code dependencies
+  3-6-topic-archive-lifecycle: done  # Story created; no code dependencies
   epic-3-retrospective: optional
   last_updated_3-1-authority-scoring: "2026-05-21"
   last_updated_3-2-entity-promotion-to-cross-domain: "2026-05-21"
@@ -91,6 +92,18 @@ development_status:
   last_updated_3-5-per-domain-dashboards: "2026-05-22"
   last_updated_3-6-topic-archive-lifecycle: "2026-05-22"
 
-  # ─── Epic 4: Web UI & Operations (Placeholder) ───────────────────────────
-  epic-4: backlog
-  epic-4-retrospective: optional
+  # ─── Epic 4: Web UI & Operations ─────────────────────────────────────────
+  epic-4: done
+  4-1-feature-flags-and-auth-middleware: done  # implementation-complete: FeaturesConfig with flags, ui_auth.py (basic auth, password gen), ui_routes.py (6 route stubs + HTMX snippet routes), wired into app.py; 29 UI tests pass
+  4-2-web-ui-base-layout-and-routes: done  # implementation-complete: 6 HTML templates (base.html, search.html, browse.html, dashboard.html, issues.html, page_detail.html), 4 HTMX snippets, Jinja2 template rendering upgrade, /ui/api/* endpoints
+  4-3-tui-application: done  # implementation-complete: curses-based TUI with api.WikiAPI, offline.OfflineReader, 6 screens (Search/Browse/Dashboard/Issues/Offline/Help), credential loading, page_view; 8 TUI tests pass
+  4-4-integration-docker-operations: done  # Dockerfile: explicit templates dir creation; .env.example added; docker-compose: WIKI_UI_USER env passed; TUI: TTY check + WIKI_ROOT env discovery for docker exec
+  last_updated_epic-4: "2026-05-25"
+
+  # ─── Epic H: Honcho Integration ──────────────────────────────────────────
+  epic-h: done
+  h-1-honcho-detectability: done  # artifact: h-1-honcho-detectability.md | implementation-complete: detect_honcho() via httpx /health check, HonchoConfig+HonchoPushConfig in config schema, REST endpoint GET /v1/honcho/status, honcho package (src/llm_wiki/honcho/); 6 tests
+  h-2-honcho-push: done  # artifact: h-2-honcho-push-job.md | implementation-complete: HonchoPushJob daemon job (local SDK + remote POST modes), CLI commands (honcho push, honcho bridge), daemon scheduler wiring gated by features.honcho_push, config push_url/push_api_key; 3 tests
+  h-3-honcho-pull: done  # artifact: h-3-honcho-pull-harvester.md | implementation-complete: harvest_conclusions() -> wiki inbox/new/ with frontmatter, run_harvest_job() CLI entry, harvester module in honcho package; 4 tests
+  epic-h-retrospective: skip
+  last_updated_epic-h: "2026-05-25"

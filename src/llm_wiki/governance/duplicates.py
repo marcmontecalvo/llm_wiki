@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewType
 from llm_wiki.review.queue import ReviewQueue
 from llm_wiki.utils.frontmatter import parse_frontmatter
@@ -97,7 +98,7 @@ class DuplicateDetector:
         if wiki_base is None:
             wiki_base = self.wiki_base
         if wiki_base is None:
-            wiki_base = Path("wiki_system")
+            wiki_base = resolve_wiki_base(None)
 
         # Collect all pages
         pages_metadata: dict[str, tuple[dict, str]] = {}  # page_id -> (metadata, body)
@@ -500,7 +501,7 @@ class DuplicateDetector:
             if self.wiki_base:
                 queue_dir = self.wiki_base / "review_queue"
             else:
-                queue_dir = Path("wiki_system") / "review_queue"
+                queue_dir = resolve_wiki_base(None) / "review_queue"
 
         queue = ReviewQueue(queue_dir=queue_dir)
         created_items: list[ReviewItem] = []
@@ -588,7 +589,7 @@ class DuplicateDetector:
             Dictionary with merge results
         """
         if wiki_base is None:
-            wiki_base = self.wiki_base or Path("wiki_system")
+            wiki_base = resolve_wiki_base(self.wiki_base)
 
         if primary_page not in (page_1, page_2):
             raise ValueError(f"Primary page must be one of {page_1} or {page_2}")
@@ -679,7 +680,7 @@ This page has been merged into [[{primary_page}]].
             List of merge results for each successful merge
         """
         if wiki_base is None:
-            wiki_base = self.wiki_base or Path("wiki_system")
+            wiki_base = resolve_wiki_base(self.wiki_base)
 
         results = []
 

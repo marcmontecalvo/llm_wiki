@@ -6,6 +6,7 @@ import re
 from datetime import date, datetime
 from pathlib import Path
 
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ class GraphExporter:
         Args:
             wiki_base: Base wiki directory (defaults to wiki_system/)
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
 
     def export_json(self, output_file: Path | None = None) -> Path:
         """Export wiki as JSON graph.

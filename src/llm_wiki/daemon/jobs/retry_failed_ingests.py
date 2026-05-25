@@ -7,6 +7,7 @@ from typing import Any
 
 from llm_wiki.ingest.failed import FailedIngestionsTracker
 from llm_wiki.ingest.watcher import InboxWatcher
+from llm_wiki.paths import resolve_wiki_base
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class RetryFailedIngestsJob:
         Args:
             wiki_base: Base wiki directory (defaults to wiki_system/)
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
 
         # Initialize tracker and watcher
         state_dir = self.wiki_base / "state"

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -187,7 +188,7 @@ class RoutingMistakeDetector:
         if wiki_base is None:
             wiki_base = self.wiki_base
         if wiki_base is None:
-            wiki_base = Path("wiki_system")
+            wiki_base = resolve_wiki_base(None)
 
         domains_dir = wiki_base / "domains"
         if not domains_dir.exists():

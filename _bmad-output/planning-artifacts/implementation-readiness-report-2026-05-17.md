@@ -41,9 +41,9 @@ documentsInventoried:
 
 **Search (4 FRs)**
 - FR13: Full-text search, ranked results with confidence scores
-- FR14: Semantic/vector search (when FAISS + sentence-transformers installed)
+- FR14: Semantic/vector search via FAISS + sentence-transformers (core deps, always enabled)
 - FR15: Fulltext + vector results merged into single ranked list
-- FR52: Graceful degradation without vector deps (`vector_search: false` indicator, no error)
+- FR52: Vector search always available — FAISS and sentence-transformers are required dependencies, not optional
 
 **Daemon & Governance (8 FRs)**
 - FR16: Daemon runs all governance jobs on schedule: lint, contradiction detection, staleness, export, index rebuild
@@ -144,7 +144,7 @@ documentsInventoried:
 
 ### Additional Requirements / Constraints
 
-- **Feature flags** govern Sprint 2–3 capabilities: `llm_extraction` (default: false), `vector_search` (default: true), `synthesis_cache` (default: false), `cross_domain_promotion` (default: false)
+- **Feature flags** govern Sprint 2–3 capabilities: `llm_extraction` (default: false), `synthesis_cache` (default: false), `cross_domain_promotion` (default: false). Vector search is always enabled — FAISS and sentence-transformers are core required dependencies, not configurable flags.
 - **No LLM dependency for core operation** — FR42–44 require `llm_extraction: true`; all other FRs are LLM-free
 - **Multi-agent session coverage** (Sprint 2) — scope not yet tracked in epics/FRs per PRD note; needs confirmation during Sprint 2 planning
 - **Docker volume mounts** — wiki data on host volume; no data inside image; config via mounted YAML
@@ -171,7 +171,7 @@ documentsInventoried:
 | FR11 | Read single page by ID/slug with provenance metadata | Epic 1 (Story 1.6) | ✓ |
 | FR12 | List pages by domain/kind/tag with cursor pagination | Epic 1 (Story 1.6) | ✓ |
 | FR13 | Full-text search, ranked with confidence | Epic 1 (Story 1.6) | ✓ |
-| FR14 | Vector/semantic search (when extras installed) | Epic 2 (Story 2.4) | ✓ |
+| FR14 | Vector/semantic search (core deps, always enabled) | Epic 2 (Story 2.4) | ✓ |
 | FR15 | Merged fulltext + vector ranked list | Epic 1 (Story 1.6), Epic 2 (Story 2.4) | ✓ |
 | FR16 | Daemon runs all governance jobs on schedule | Epic 1 (Stories 1.3, 1.14) | ✓ |
 | FR17 | Daemon generates structured governance reports via CLI | Epic 1 (Story 1.14) | ✓ |
@@ -210,7 +210,7 @@ documentsInventoried:
 | FR50a | Auto-archive stale topics | Epic 3 (Story 3.6) | ✓ |
 | FR50b | Manual topic archive via CLI | Epic 3 (Story 3.6) | ✓ |
 | FR51 | Durably queue ingest when daemon not running | Epic 1 (Story 1.5) | ✓ |
-| FR52 | Graceful degradation without vector deps | Epic 2 (Story 2.4) | ✓ |
+| FR52 | Vector search always available (core required deps) | Epic 2 (Story 2.4) | ✓ |
 | FR53 | Unroutable sources held in staging | Epic 1 (Story 1.14) | ✓ |
 | FR54 | Deep query timeout returns `timed_out: true, results: []` | Epic 1 (Story 1.6) | ✓ |
 | FR55 | Auto-initialize wiki structure on first start | Epic 1 (Story 1.9) | ✓ |

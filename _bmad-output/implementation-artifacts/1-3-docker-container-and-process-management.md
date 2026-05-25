@@ -24,11 +24,11 @@ so that I can run a fully-operational wiki service without any Python environmen
 
 6. **Given** the container **When** running **Then** all processes run as uid 1000 (`llmwiki` user) — not root.
 
-7. **Given** `docker-compose.yml` **When** defined **Then** it mounts `./wiki_data:/wiki` (read-write) and `./config:/config` (read-only), and sets `WIKI_ROOT=/wiki`.
+7. **Given** `docker-compose.yml` **When** defined **Then** it mounts `./wiki_system:/wiki_system` (read-write) and `./config:/config` (read-only), and sets `WIKI_ROOT=/wiki_system`.
 
 8. **Given** `daemon.yaml` or `domains.yaml` is modified on the host **When** the container is restarted **Then** the new config takes effect without rebuilding the image (NFR-O3).
 
-9. **Given** `./wiki_data` does not exist on the host **When** `docker-compose up` is run **Then** docker creates the directory and the container auto-initializes the wiki structure inside it.
+9. **Given** `./wiki_system` does not exist on the host **When** `docker-compose up` is run **Then** docker creates the directory and the container auto-initializes the wiki structure inside it.
 
 10. **Given** WikiDaemon crashes and supervisord is restarting it **When** `GET /v1/health` is called during the restart window **Then** the response body contains `"daemon_running": false` and the Docker HEALTHCHECK reports the container as unhealthy — uvicorn being up alone is not sufficient for a healthy status.
 
@@ -37,7 +37,7 @@ so that I can run a fully-operational wiki service without any Python environmen
 - [x] Create `Dockerfile` (multi-stage build) (AC: 2, 6)
   - [x] Stage 1 `builder`: install uv, `uv sync` (including optional extras)
   - [x] Stage 2 `runtime`: copy virtualenv from builder; install supervisord; add uid 1000 `llmwiki` user
-  - [x] Set `WIKI_ROOT=/wiki` and `WIKI_PORT=3050` in Dockerfile
+  - [x] Set `WIKI_ROOT=/wiki_system` and `WIKI_PORT=3050` in Dockerfile
   - [x] Expose `$WIKI_PORT`
   - [x] Entrypoint: `supervisord -c /app/supervisord.conf`
   - [x] HEALTHCHECK: checks `/v1/health`, fails if `daemon_running` is false
@@ -48,11 +48,11 @@ so that I can run a fully-operational wiki service without any Python environmen
   - [x] Both processes run as `llmwiki` (uid 1000) user
 - [x] Create `docker-compose.yml` (AC: 1, 7, 8, 9)
   - [x] Service `llm-wiki`: image from Dockerfile; ports `3050:${WIKI_PORT:-3050}`
-  - [x] Volumes: `./wiki_data:/wiki` and `./config:/config:ro`
-  - [x] Environment: `WIKI_ROOT=/wiki`, `WIKI_PORT=3050`
+  - [x] Volumes: `./wiki_system:/wiki_system` and `./config:/config:ro`
+  - [x] Environment: `WIKI_ROOT=/wiki_system`, `WIKI_PORT=3050`
   - [x] `restart: unless-stopped`
 - [x] Create `.dockerignore` (AC: build optimization)
-  - [x] Exclude `.git`, `__pycache__`, `.mypy_cache`, `*.pyc`, `tests/`, `wiki_data/`, `.venv/`
+  - [x] Exclude `.git`, `__pycache__`, `.mypy_cache`, `*.pyc`, `tests/`, `wiki_system/`, `.venv/`
 - [x] Create example `config/` directory with all four YAML files (AC: 8)
   - [x] `config/daemon.yaml` — DaemonConfig with defaults (existing at repo root)
   - [x] `config/domains.yaml` — example with scopes (existing at repo root)
@@ -127,7 +127,7 @@ COPY src/ /app/src/
 COPY supervisord.conf /app/supervisord.conf
 RUN mkdir -p /var/log/llm-wiki && chown -R llmwiki:llmwiki /var/log/llm-wiki
 ENV PATH="/app/.venv/bin:$PATH"
-ENV WIKI_ROOT=/wiki
+ENV WIKI_ROOT=/wiki_system
 ENV WIKI_PORT=3050
 EXPOSE 3050
 # Docker health probe (optional but recommended)
@@ -147,17 +147,17 @@ services:
     ports:
       - "3050:3050"
     volumes:
-      - ./wiki_data:/wiki
+      - ./wiki_system:/wiki_system
       - ./config:/config:ro
     environment:
-      WIKI_ROOT: /wiki
+      WIKI_ROOT: /wiki_system
       WIKI_PORT: "3050"
     restart: unless-stopped
 ```
 
 **Host permission note (document in README):**
 ```bash
-mkdir -p wiki_data && sudo chown -R 1000:1000 wiki_data
+mkdir -p wiki_system && sudo chown -R 1000:1000 wiki_system
 ```
 The container runs as uid 1000 (`llmwiki`). The host directory must be owned by uid 1000, or Docker volume mounts fail with permission errors.
 
@@ -171,7 +171,7 @@ from llm_wiki.daemon.main import run_daemon
 run_daemon()
 ```
 
-supervisord runs `python -m llm_wiki.daemon` which invokes this `__main__.py`. The config dir defaults to `/config` when `WIKI_ROOT=/wiki` is set — the daemon must read config from `WIKI_CONFIG_DIR` env var (or `/config` fallback) rather than the hardcoded `"config"` in `WikiDaemon.__init__()`.
+supervisord runs `python -m llm_wiki.daemon` which invokes this `__main__.py`. The config dir defaults to `/config` when `WIKI_ROOT=/wiki_system` is set — the daemon must read config from `WIKI_CONFIG_DIR` env var (or `/config` fallback) rather than the hardcoded `"config"` in `WikiDaemon.__init__()`.
 
 **Check `WikiDaemon.__init__`** at `src/llm_wiki/daemon/main.py:23` — it currently defaults `config_dir: Path | str = "config"`. The container has config at `/config`. The `run_daemon()` function and the `__main__.py` entry point must pass `/config` (or `os.environ.get("WIKI_CONFIG_DIR", "/config")`) in the Docker context.
 
@@ -228,7 +228,7 @@ docker-compose exec llm-wiki supervisorctl status daemon  # should be RUNNING (a
 - **Never set `stopwaitsecs` below 30** for the daemon process
 - **Never run processes as root** — all processes must be `user=llmwiki` (uid 1000)
 - **Never hardcode paths inside the image** — use `WIKI_ROOT` and `WIKI_CONFIG_DIR` env vars
-- **Never put wiki data inside the image** — all data lives on host-mounted volume at `/wiki`
+- **Never put wiki data inside the image** — all data lives on host-mounted volume at `/wiki_system`
 
 ### References
 
@@ -251,12 +251,12 @@ claude-sonnet-4-6
 - Created Dockerfile with multi-stage build (builder + runtime), HEALTHCHECK, llmwiki uid 1000 user
 - Created supervisord.conf with nodaemon=true, uvicorn (stopwaitsecs=10, retries=3) and daemon (stopwaitsecs=30, retries=5) programs
 - Created docker-compose.yml with llm-wiki service, port mapping, volumes, env vars
-- Created .dockerignore excluding .git, pycache, tests, wiki_data, .venv
+- Created .dockerignore excluding .git, pycache, tests, wiki_system, .venv
 - Added fastapi, uvicorn, mcp dependencies to pyproject.toml
 - Created src/llm_wiki/daemon/__main__.py entry point for `python -m llm_wiki.daemon`
 - Updated run_daemon() in daemon/main.py to read WIKI_CONFIG_DIR env var with "config" fallback
 - Created entrypoint.sh that initializes wiki dirs (inbox, shared/*, state/), copies default config
-- Created minimal FastAPI app with /v1/health endpoint for Docker HEALTHCHECK — checks daemon liveness via PID file at /wiki/state/daemon.pid
+- Created minimal FastAPI app with /v1/health endpoint for Docker HEALTHCHECK — checks daemon liveness via PID file at /wiki_system/state/daemon.pid
 - WikiDaemon writes PID file at startup, removes it on shutdown — enables Docker HEALTHCHECK to detect daemon crashes (AC 10)
 - Fixed config_dir threading: WikiDaemon.start() now passes config_dir to InboxWatcher (was previously hardcoded to "config", causing startup crash in Docker)
 - Updated README.md with Docker quick-start section

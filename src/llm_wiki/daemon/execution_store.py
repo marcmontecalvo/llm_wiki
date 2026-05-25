@@ -7,10 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from llm_wiki.daemon.models import JobExecution, JobExecutionHistory
+from llm_wiki.paths import WIKI_ROOT
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_STATE_DIR = Path("wiki_system") / "state" / "job_executions"
+_DEFAULT_STATE_DIR = WIKI_ROOT / "state" / "job_executions"
 
 
 class JobExecutionStore:

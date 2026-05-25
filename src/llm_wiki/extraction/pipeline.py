@@ -20,6 +20,7 @@ from llm_wiki.models.client import ModelClient, create_model_client
 from llm_wiki.models.config import load_models_config
 from llm_wiki.models.extraction import ClaimExtraction
 from llm_wiki.models.page import create_frontmatter
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.utils.frontmatter import parse_frontmatter, write_with_validation
 from llm_wiki.utils.id_gen import generate_page_id
 
@@ -183,7 +184,7 @@ class ExtractionPipeline:
             llm_extraction_enabled: When False, uses heuristic fallbacks for tags,
                 summaries, and skips LLM-based extractors.
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
         self.config_dir = config_dir or Path("config")
         # Initialize LLM extractors when: explicit flag is True, OR when a
         # client is provided directly (e.g. in tests).  When both are False,

@@ -229,6 +229,33 @@ class TestFeaturesConfig:
         assert cfg.synthesis_cache is False
         assert cfg.cross_domain_promotion is False
 
+    def test_env_override_webui_enabled(self, monkeypatch: pytest.MonkeyPatch):
+        """WIKI_WEBUI_ENABLED env var overrides YAML default."""
+        monkeypatch.setenv("WIKI_WEBUI_ENABLED", "true")
+        cfg = FeaturesConfig()
+        assert cfg.webui_enabled is True
+
+    def test_env_override_tui_enabled(self, monkeypatch: pytest.MonkeyPatch):
+        """WIKI_TUI_ENABLED env var overrides YAML default."""
+        monkeypatch.setenv("WIKI_TUI_ENABLED", "1")
+        cfg = FeaturesConfig()
+        assert cfg.tui_enabled is True
+
+    def test_env_override_yes_values(self, monkeypatch: pytest.MonkeyPatch):
+        """'yes' and 'on' also count as truthy."""
+        monkeypatch.setenv("WIKI_WEBUI_ENABLED", "yes")
+        cfg = FeaturesConfig()
+        assert cfg.webui_enabled is True
+        monkeypatch.setenv("WIKI_TUI_ENABLED", "ON")
+        cfg2 = FeaturesConfig()
+        assert cfg2.tui_enabled is True
+
+    def test_env_override_yaml_value(self, monkeypatch: pytest.MonkeyPatch):
+        """Env var overrides YAML-provided value (set env before construction)."""
+        monkeypatch.setenv("WIKI_WEBUI_ENABLED", "true")
+        cfg = FeaturesConfig(webui_enabled=False)
+        assert cfg.webui_enabled is True
+
 
 class TestDaemonConfigWithFeatures:
     """Tests for DaemonConfig including the new features field."""

@@ -15,35 +15,19 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 
 from llm_wiki.api.errors import register_exception_handlers
-from llm_wiki.deps import get_wiki
 from llm_wiki.initializer import boot_wiki
 from llm_wiki.query.log import QueryLogStore
-from llm_wiki.query.search import WikiQuery
 
 if TYPE_CHECKING:
     from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
 logger = logging.getLogger(__name__)
 
-# PID file written by WikiDaemon so FastAPI can check if it is alive.
-_DAEMON_PID_FILE = "/wiki/state/daemon.pid"
 
 # Router imports added in Story 1.6 (lazy, inside create_app to avoid shadowing)
-
-
-def _daemon_running() -> bool:
-    """Return True if the daemon PID file exists and the PID is alive."""
-    try:
-        pid = Path(_DAEMON_PID_FILE).read_text().strip()
-        if not pid:
-            return False
-        os.kill(int(pid), 0)
-        return True
-    except Exception:
-        return False
 
 
 @asynccontextmanager
@@ -75,6 +59,25 @@ async def lifespan(app: FastAPI):
             set_init_failed(str(e))
         except Exception:
             pass
+
+    # Persist UI password to file so it can be retrieved after startup
+    _pw_file = Path(wiki_root) / "state" / ".ui_password"
+    try:
+        _pw_file.write_text(app.state.ui_password)
+    except Exception:
+        pass  # non-fatal (may be read-only volume)
+
+    # Mount UI router if webui is enabled
+    _webui_enabled = False
+    if _wiki_config is not None:
+        _webui_enabled = _wiki_config.daemon.daemon.features.webui_enabled
+    if _webui_enabled:
+        from llm_wiki.api.ui_routes import router as _ui_router
+
+        app.include_router(_ui_router)
+        logger.info("UI routes mounted at /ui/* (webui_enabled=true)")
+    else:
+        logger.info("UI routes disabled (webui_enabled=false)")
 
     # Create MCP server, mount it, and start the session manager
     mcp_mgr: StreamableHTTPSessionManager | None = None
@@ -134,6 +137,15 @@ def create_app() -> FastAPI:
         openapi_url="/v1/openapi.json",
         openapi_version="3.1.0",
     )
+
+    # Set UI auth password — use WIKI_UI_PASSWORD env var if set, otherwise generate ephemeral
+    from llm_wiki.api.ui_auth import generate_password
+
+    _ui_password = os.environ.get("WIKI_UI_PASSWORD", "") or generate_password()
+    _ui_user = os.environ.get("WIKI_UI_USER", "admin")
+    app.state.ui_password = _ui_password
+    app.state.ui_user = _ui_user
+    logger.info("UI auth — user: %s, password: %s", _ui_user, _ui_password)
 
     # OTel SDK init (Story 1.12.5)
     from llm_wiki.observability import sdk
@@ -195,29 +207,12 @@ def create_app() -> FastAPI:
 
     app.include_router(_archive.router)
 
-    # Legacy inline health check endpoint (story 1.6 routes at /v1/health are primary)
+    # Mount routers added in Epic H (Honcho Integration)
+    from llm_wiki.api.routers import honcho as _honcho  # noqa: E303
 
-    @app.get("/v1/health-legacy")
-    async def _legacy_health(wiki: WikiQuery = Depends(get_wiki)) -> dict:
-        daemon_running = False
-        pid_file = wiki.wiki_base / "state" / "daemon.pid"
-        if await asyncio.to_thread(pid_file.exists):
-            try:
-                pid_text = await asyncio.to_thread(pid_file.read_text)
-                pid = int(pid_text.strip())
-                os.kill(pid, 0)
-                daemon_running = True
-            except (ValueError, ProcessLookupError, PermissionError, OSError):
-                daemon_running = False
-        llm_enabled = False
-        config = getattr(app.state, "wiki_config", None)
-        if config is not None:
-            llm_enabled = config.daemon.daemon.features.llm_extraction
-        return {
-            "running": True,
-            "daemon_running": daemon_running,
-            "llm_extraction_enabled": llm_enabled,
-        }
+    app.include_router(_honcho.router)
+
+    # Legacy inline health check endpoint removed — use /v1/health and /v1/daemon/status instead
 
     return app
 

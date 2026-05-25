@@ -65,7 +65,7 @@ Content here.
         assert (watcher.done_dir / "test-doc.md").exists()
 
         # Check that normalized output was created
-        queue_dir = Path("wiki_system/domains/general/queue")
+        queue_dir = watcher.inbox_dir.parent / "domains" / "general" / "queue"
         assert queue_dir.exists()
         assert len(list(queue_dir.glob("*.md"))) > 0
 
@@ -189,7 +189,7 @@ Content.
         watcher.scan()
 
         # Find output in queue
-        queue_dir = Path("wiki_system/domains/general/queue")
+        queue_dir = watcher.inbox_dir.parent / "domains" / "general" / "queue"
         outputs = list(queue_dir.glob("*my-title*.md"))
         assert len(outputs) > 0
 
@@ -210,7 +210,7 @@ Content.
         watcher.scan()
 
         # Should be routed to homelab domain
-        homelab_queue = Path("wiki_system/domains/homelab/queue")
+        homelab_queue = watcher.inbox_dir.parent / "domains" / "homelab" / "queue"
         outputs = list(homelab_queue.glob("*.md"))
         assert len(outputs) > 0
 
@@ -231,7 +231,7 @@ Content.
         watcher.scan()
 
         # Should be in personal domain queue
-        personal_queue = Path("wiki_system/domains/personal/queue")
+        personal_queue = watcher.inbox_dir.parent / "domains" / "personal" / "queue"
         outputs = list(personal_queue.glob("*.md"))
         assert len(outputs) > 0
 

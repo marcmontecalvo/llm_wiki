@@ -14,6 +14,7 @@ from llm_wiki.daemon.errors import ConfigError
 from llm_wiki.daemon.logging_config import setup_logging
 from llm_wiki.daemon.scheduler import JobScheduler
 from llm_wiki.daemon.workers import WorkerPool
+from llm_wiki.paths import WIKI_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ class WikiDaemon:
         logger.info("Worker pool started")
 
         # Register jobs
-        wiki_base = Path("wiki_system")
+        wiki_base = WIKI_ROOT
 
         # Register governance job
         from llm_wiki.daemon.jobs.governance import run_governance_check
@@ -221,6 +222,23 @@ class WikiDaemon:
             f"(every {self.config.daemon.daemon.rebuild_index_every_minutes}m)"
         )
 
+        # Register honcho push job (Epic H — gated by feature flag)
+        if self.config.daemon.daemon.features.honcho_push:
+            honcho_cfg = self.config.daemon.daemon.features.honcho
+            from llm_wiki.daemon.jobs.honcho_push import run_honcho_push_job
+
+            self.scheduler.add_job(
+                func=run_honcho_push_job,
+                job_name="honcho_push",
+                interval_seconds=self.config.daemon.daemon.export_every_minutes * 60,
+                wiki_base=wiki_base,
+                honcho_base_url=os.environ.get("HONCHO_URL"),
+                honcho_workspace_id=honcho_cfg.workspace_id,
+                push_url=honcho_cfg.push_url,
+                push_api_key=honcho_cfg.push_api_key,
+            )
+            logger.info("Registered honcho_push job")
+
         # Startup recovery: move orphaned processing/ files back to inbox
         from llm_wiki.ingest.watcher import InboxWatcher
 
@@ -265,7 +283,7 @@ class WikiDaemon:
         logger.info("Wiki daemon started successfully")
 
         # Write PID file so /v1/health can track daemon liveness (best-effort)
-        pid_path = Path(os.environ.get("WIKI_ROOT", "/wiki")) / "state" / "daemon.pid"
+        pid_path = WIKI_ROOT / "state" / "daemon.pid"
         try:
             pid_path.parent.mkdir(parents=True, exist_ok=True)
             pid_path.write_text(str(os.getpid()))
@@ -331,7 +349,7 @@ class WikiDaemon:
         self._running = False
 
         # Remove PID file
-        pid_path = Path(os.environ.get("WIKI_ROOT", "/wiki")) / "state" / "daemon.pid"
+        pid_path = WIKI_ROOT / "state" / "daemon.pid"
         try:
             pid_path.unlink(missing_ok=True)
         except OSError:

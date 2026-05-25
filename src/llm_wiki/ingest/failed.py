@@ -8,6 +8,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.paths import resolve_wiki_base
+
 logger = logging.getLogger(__name__)
 
 
@@ -178,7 +180,7 @@ class FailedIngestionsTracker:
         Args:
             state_dir: Directory for storing state (defaults to wiki_system/state)
         """
-        self.state_dir = state_dir or Path("wiki_system/state")
+        self.state_dir = state_dir or (resolve_wiki_base(None) / "state")
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.state_file = self.state_dir / "failed_ingestions.json"
         self._ingestions: dict[str, FailedIngestion] = {}

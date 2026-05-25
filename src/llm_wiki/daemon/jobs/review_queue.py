@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewType
 from llm_wiki.review.queue import ReviewQueue
 from llm_wiki.utils.frontmatter import parse_frontmatter
@@ -21,7 +22,7 @@ class ReviewQueueJob:
         Args:
             wiki_base: Base wiki directory (defaults to wiki_system/)
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
         self.review_queue = ReviewQueue(queue_dir=self.wiki_base / "review_queue")
 
         # Configuration thresholds

@@ -9,6 +9,7 @@ from llm_wiki.export.json_sidecar import JSONSidecarExporter
 from llm_wiki.export.llmsfull import LLMSFullExporter
 from llm_wiki.export.llmstxt import LLMSTxtExporter
 from llm_wiki.export.sitemap import SitemapGenerator
+from llm_wiki.paths import resolve_wiki_base
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class ExportJob:
         Args:
             wiki_base: Base wiki directory (defaults to wiki_system/)
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
 
         # Initialize exporters
         self.llmstxt_exporter = LLMSTxtExporter(wiki_base=self.wiki_base)

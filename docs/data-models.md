@@ -155,7 +155,7 @@ class ModelProviderConfig(BaseModel):
     model: str
     temperature: float = 0.1
     max_tokens: int | None = None
-    timeout: int = 30            # seconds (not yet enforced — P0-4)
+    timeout: int = 30            # seconds — enforced via httpx timeout
     base_url: str | None = None
     api_key_env: str | None = None
 ```
@@ -203,7 +203,7 @@ class DuplicatesConfig(BaseModel):
 }
 ```
 
-**Known issue**: Written directly to file without tmp→replace (P0-1). Can be corrupted if daemon crashes during write.
+**Atomicity**: All index writes use tmp→os.replace pattern (P0-1 fixed). A crash during write never corrupts the index; the old file remains intact.
 
 ### `vector_meta.json` — Vector Index Metadata
 

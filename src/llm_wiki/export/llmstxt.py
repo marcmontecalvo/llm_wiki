@@ -3,6 +3,7 @@
 import logging
 from pathlib import Path
 
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ class LLMSTxtExporter:
         Args:
             wiki_base: Base wiki directory (defaults to wiki_system/)
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
 
     def export_page(self, page_file: Path) -> str:
         """Export a single page to llms.txt format.

@@ -12,6 +12,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.paths import resolve_wiki_base
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +35,7 @@ def run_synthesis_cache_job(
     """
     from llm_wiki.synthesis.cache import SynthesisCacheJob  # noqa: PLC0415
 
-    wiki_base = wiki_base or Path("wiki_system")
+    wiki_base = resolve_wiki_base(wiki_base)
     log_db = wiki_base / "state" / "query_log.db"
 
     # Load config values — use defaults if not available

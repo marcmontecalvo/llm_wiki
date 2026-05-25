@@ -7,6 +7,7 @@ from typing import Any
 
 from llm_wiki.index.backlinks import BacklinkIndex
 from llm_wiki.models.extraction import ExtractionResult
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ class LLMSFullExporter:
         Args:
             wiki_base: Base wiki directory (defaults to wiki_system/)
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
         self.backlink_index = BacklinkIndex(index_dir=self.wiki_base / "index")
 
     def _load_extraction_data(self, page_id: str) -> ExtractionResult | None:

@@ -19,11 +19,23 @@ The governance system ensures wiki quality through automated checks and reportin
 ### CLI
 
 ```bash
-# Run all governance checks
+# Run all governance checks and generate report
 uv run llm-wiki govern check
+
+# View last-run results
+uv run llm-wiki govern status [--json]
+
+# View latest report
+uv run llm-wiki govern report [--domain <name>] [--json]
+
+# Run a governance job synchronously
+uv run llm-wiki govern run [lint|contradictions|all]
 
 # Rebuild indexes (if needed)
 uv run llm-wiki govern rebuild-index
+
+# Detect routing mistakes
+uv run llm-wiki govern routing-mistakes
 ```
 
 ### Python API
@@ -300,14 +312,21 @@ Generated: 2024-01-15 14:30:00
 
 | Command | Description |
 |---------|-------------|
-| `llm-wiki govern check` | Run lint, staleness, quality, orphan checks |
-| `llm-wiki govern contradictions --min-confidence 0.6` | Detect conflicting claims |
+| `llm-wiki govern status` | Show last-run results for each governance job |
+| `llm-wiki govern report` | Print latest governance report, filtered by domain |
+| `llm-wiki govern run` | Run governance job(s) synchronously and print report |
+| `llm-wiki governing check` | Run lint, staleness, quality, orphan checks (general sweep) |
+| `llm-wiki govern contradictions` | Detect conflicting claims across pages |
 | `llm-wiki govern duplicates` | Find near-duplicate pages |
-| `llm-wiki govern merge-duplicate DUP_PRIM` | Merge duplicate into primary |
-| `llm-wiki govern routing-mistakes` | Detect pages in wrong domain |
+| `llm-wiki govern merge-duplicate` | Merge a duplicate page into the primary page |
+| `llm-wiki govern routing-mistakes` | Detect pages that may be routed to the wrong domain |
 | `llm-wiki govern rebuild-index` | Rebuild search indexes |
-| `llm-wiki govern update-backlinks` | Update backlink index |
-| `llm-wiki govern clean-broken-links` | Remove stale backlink refs |
+| `llm-wiki govern update-backlinks` | Update backlink index for changed pages |
+| `llm-wiki govern clean-broken-links` | Remove stale broken links from the backlink index |
+| `llm-wiki govern archive` | Archive a page by ID (move to archive/) |
+| `llm-wiki govern unarchive` | Unarchive a page (restore from archive/ to pages/) |
+| `llm-wiki govern dashboard` | Show per-domain health dashboard |
+| `llm-wiki govern query-log` | Show query log statistics |
 
 All governance features are implemented and functional. No planned governance features remain outstanding.
 
@@ -423,5 +442,5 @@ uv run llm-wiki govern check | grep ERROR
 ## See Also
 
 - [CLI.md](CLI.md) - Governance commands
-- [ARCHITECTURE.md](ARCHITECTURE.md) - Governance system design
 - [CONFIG.md](CONFIG.md) - Daemon governance configuration
+- [_bmad-output/planning-artifacts/architecture.md](../planning-artifacts/architecture.md) - Full system architecture

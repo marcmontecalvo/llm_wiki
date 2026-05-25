@@ -16,9 +16,14 @@ COPY --from=builder /app/.venv /app/.venv
 COPY . /app/
 COPY supervisord.conf /app/supervisord.conf
 COPY entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh && mkdir -p /var/log/llm-wiki /wiki/logs /var/run /app/config && chown -R llmwiki:llmwiki /var/log/llm-wiki /wiki /var/run /app/config
+RUN chmod +x /docker-entrypoint.sh
+
+# Ensure templates/ exists at the application root for Runtime and TUI discovery
+RUN mkdir -p /app/src/llm_wiki/templates/snippets && \
+    mkdir -p /var/log/llm-wiki /wiki_system/logs /var/run /app/config && \
+    chown -R llmwiki:llmwiki /var/log/llm-wiki /wiki_system /var/run /app/config /app/src/llm_wiki/templates
 ENV PATH="/app/.venv/bin:$PATH"
-ENV WIKI_ROOT=/wiki
+ENV WIKI_ROOT=/wiki_system
 ENV WIKI_PORT=3050
 EXPOSE 3050
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \

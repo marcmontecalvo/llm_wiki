@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from llm_wiki.index.metadata import MetadataIndex
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -264,7 +265,7 @@ class MetadataLinter:
         Returns:
             List of all lint issues
         """
-        wiki_base = wiki_base or Path("wiki_system")
+        wiki_base = resolve_wiki_base(wiki_base)
         issues: list[LintIssue] = []
 
         domains_dir = wiki_base / "domains"

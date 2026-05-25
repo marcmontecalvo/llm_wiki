@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from llm_wiki.index.backlinks import BacklinkIndex
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.promotion.config import PromotionConfig
 from llm_wiki.promotion.models import PromotionCandidate, PromotionReport, PromotionResult
 from llm_wiki.promotion.scorer import PromotionScorer
@@ -25,7 +26,7 @@ class PromotionEngine:
             wiki_base: Base wiki directory (defaults to wiki_system/)
         """
         self.config = config or PromotionConfig()
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
 
         # Ensure shared directory exists
         self.shared_dir = self.wiki_base / "shared"

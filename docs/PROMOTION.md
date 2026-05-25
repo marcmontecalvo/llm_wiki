@@ -192,10 +192,18 @@ Automatically promotes eligible pages or adds them to the review queue for appro
 
 ### Daemon Job
 
-The promotion job also runs automatically as part of the daemon:
+The promotion job runs automatically as part of the daemon on its 24h schedule.
+
+To inspect the promotion queue:
 
 ```bash
-uv run llm-wiki trigger promotion
+uv run llm-wiki review list
+```
+
+To manually promote a candidate to cross-domain:
+
+```bash
+uv run llm-wiki promote promote-all
 ```
 
 ## Integration with Review Queue

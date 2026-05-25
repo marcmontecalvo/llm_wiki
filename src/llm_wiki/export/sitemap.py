@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ class SitemapGenerator:
             wiki_base: Base wiki directory (defaults to wiki_system/)
             base_url: Base URL for wiki pages
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
         self.base_url = base_url or "https://example.com/wiki"
 
     def generate(self, output_file: Path | None = None) -> Path:

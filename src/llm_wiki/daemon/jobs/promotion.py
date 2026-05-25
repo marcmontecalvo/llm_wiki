@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.promotion.config import PromotionConfig
 from llm_wiki.promotion.engine import PromotionEngine
 
@@ -26,7 +27,7 @@ class PromotionJob:
             wiki_base: Base wiki directory (defaults to wiki_system/)
             config: Promotion configuration
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
         self.config = config or PromotionConfig()
 
         # Initialize promotion engine

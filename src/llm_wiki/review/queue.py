@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.review.models import ReviewItem, ReviewPriority, ReviewStatus, ReviewType
 
 
@@ -19,7 +20,7 @@ class ReviewQueue:
                       (default: wiki_system/review_queue)
         """
         if queue_dir is None:
-            queue_dir = Path("wiki_system") / "review_queue"
+            queue_dir = resolve_wiki_base(None) / "review_queue"
 
         self.queue_dir = Path(queue_dir)
         self.pending_dir = self.queue_dir / "pending"

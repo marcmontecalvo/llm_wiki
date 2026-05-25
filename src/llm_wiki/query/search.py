@@ -10,6 +10,7 @@ from typing import Any
 from llm_wiki.index.fulltext import FulltextIndex
 from llm_wiki.index.metadata import MetadataIndex
 from llm_wiki.index.vector import VectorIndex
+from llm_wiki.paths import resolve_wiki_base
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class WikiQuery:
             wiki_base: Base wiki directory (defaults to wiki_system/)
             index_dir: Directory for indexes (defaults to wiki_system/index)
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
         self.index_dir = index_dir or (self.wiki_base / "index")
 
         # Initialize indexes

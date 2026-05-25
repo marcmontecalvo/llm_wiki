@@ -6,6 +6,7 @@ from typing import Any
 
 from llm_wiki.governance.duplicates import DuplicateDetector
 from llm_wiki.models.config import DuplicatesConfig
+from llm_wiki.paths import resolve_wiki_base
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class DuplicateDetectionJob:
             wiki_base: Base wiki directory (defaults to wiki_system/)
             config: Duplicate detection configuration
         """
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
         self.config = config or DuplicatesConfig()
 
     def execute(self) -> dict[str, Any]:

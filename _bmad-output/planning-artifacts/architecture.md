@@ -27,17 +27,17 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 **Functional Requirements:**
 The PRD defines 63+ FRs across 9 categories:
 
-| Category | FRs | Sprints |
-|---|---|---|
-| Knowledge Ingestion | FR1-7, FR51, FR58 | Sprint 1 |
-| Query & Retrieval | FR8-12, FR54, FR57, FR59 | Sprint 1 |
-| Search (fulltext + vector) | FR13-15, FR52 | Sprint 1-2 |
-| Daemon & Governance | FR16-23 | Sprint 1 |
-| Knowledge Management | FR24-29, FR53, FR63 | Sprint 1-3 |
-| Export & Integration | FR30-34 | Sprint 1-2 |
-| Service Operations | FR35-41, FR55, FR60, FR61 | Sprint 1 |
-| Trust & Provenance | FR42-44 | Sprint 2 |
-| Cross-Domain Synthesis | FR45-50b, FR62 | Sprint 3 |
+| Category                   | FRs                       | Sprints    |
+| -------------------------- | ------------------------- | ---------- |
+| Knowledge Ingestion        | FR1-7, FR51, FR58         | Sprint 1   |
+| Query & Retrieval          | FR8-12, FR54, FR57, FR59  | Sprint 1   |
+| Search (fulltext + vector) | FR13-15, FR52             | Sprint 1-2 |
+| Daemon & Governance        | FR16-23                   | Sprint 1   |
+| Knowledge Management       | FR24-29, FR53, FR63       | Sprint 1-3 |
+| Export & Integration       | FR30-34                   | Sprint 1-2 |
+| Service Operations         | FR35-41, FR55, FR60, FR61 | Sprint 1   |
+| Trust & Provenance         | FR42-44                   | Sprint 2   |
+| Cross-Domain Synthesis     | FR45-50b, FR62            | Sprint 3   |
 
 **Non-Functional Requirements:**
 - **Performance:** ≤200ms quick queries, ≤2s standard, 30s hard timeout for deep synthesis, ≥10 inbox items/min ingest throughput, ≤60s full index rebuild (1,000 pages)
@@ -59,7 +59,7 @@ The PRD defines 63+ FRs across 9 categories:
 - **No LLM calls in daemon** — all governance is deterministic/algorithmic
 - **Docker + host-mounted volume** — no data inside the image; config via mounted YAML
 - **Cloud per-household deployment** — each household on a dedicated VM; VM-level isolation is the security boundary; no in-service auth required
-- **Optional vector extras** — `faiss-cpu` + `sentence-transformers` behind `uv sync --extra vector`; must degrade gracefully when absent
+- **No optional vector extras** — `faiss-cpu` + `sentence-transformers` are required core dependencies; vector search is always enabled
 - **Optional LLM extraction** — controlled by `llm_extraction` feature flag in `daemon.yaml`; when disabled, heuristics handle all extraction; when enabled, provider config in `models.yaml` supports Anthropic, OpenAI, OpenRouter, or local vLLM/Llama (all OpenAI-compatible via `base_url`)
 - **Known P0 bugs (Sprint 1 prerequisites):** non-atomic index writes (fix: tmp→os.replace), no write mutex (fix: threading.Lock per index), orphaned inbox files on crash (fix: startup recovery)
 - **MCP protocol compliance** must be verified against Homefront (real harness) as Sprint 1 acceptance gate
@@ -86,7 +86,7 @@ Core stack is already established; this section records the new service layer ad
 - CLI: Click 8.1+ — all business logic in service classes; CLI is a thin wrapper
 - Validation: Pydantic 2.0+ (v2 API throughout)
 - Daemon: APScheduler 3.10+ BackgroundScheduler + ThreadPoolExecutor(max_workers=2)
-- Search: FAISS IndexFlatL2 + sentence-transformers (optional extra: `uv sync --extra vector`)
+- Search: FAISS IndexFlatL2 + sentence-transformers (required core dependencies)
 - Retry: tenacity 8.0+
 - File watching: watchdog 3.0+
 - LLM client: openai 1.0+ (OpenAI-compatible; supports Anthropic/Ollama/LM Studio via base_url)
@@ -213,7 +213,7 @@ docker-compose up --build
 # daemon.yaml
 features:
   llm_extraction: false        # LLM tag/summary/claim extraction — off by default
-  vector_search: true          # sentence-transformers — on by default
+  # vector_search is NOT a flag — FAISS + sentence-transformers are core deps, always enabled
   synthesis_cache: false       # Sprint 3
   cross_domain_promotion: false # Sprint 3
 ```
@@ -235,13 +235,13 @@ All providers use the OpenAI-compatible API — `base_url` override covers OpenR
 
 **Extraction fallback behavior when `llm_extraction: false`:**
 
-| Task | LLM path | Heuristic fallback |
-|---|---|---|
-| Kind classification | LLM classifies entity/concept/page | First-heading pattern + keyword rules |
-| Tags | LLM generates 3-5 tags | Top TF-IDF terms from page content |
-| Summary | LLM writes 1-2 sentences | First non-heading paragraph, truncated |
-| Entities | LLM extracts with descriptions | Skip or spaCy NER (optional dep) |
-| Claims | LLM extracts atomic facts | Skip — confidence scoring uses heuristic path |
+| Task                | LLM path                           | Heuristic fallback                            |
+| ------------------- | ---------------------------------- | --------------------------------------------- |
+| Kind classification | LLM classifies entity/concept/page | First-heading pattern + keyword rules         |
+| Tags                | LLM generates 3-5 tags             | Top TF-IDF terms from page content            |
+| Summary             | LLM writes 1-2 sentences           | First non-heading paragraph, truncated        |
+| Entities            | LLM extracts with descriptions     | Skip or spaCy NER (optional dep)              |
+| Claims              | LLM extracts atomic facts          | Skip — confidence scoring uses heuristic path |
 
 ### Confidence Scoring
 
@@ -292,12 +292,12 @@ domains:
 
 **Query scoping semantics:**
 
-| `domain` param | Returns |
-|---|---|
-| omitted | `household/` + requesting profile's `user-{id}/` merged |
-| `household` | household-only results |
-| `user-{id}` | that profile's personal domain only |
-| `all` | all domains |
+| `domain` param | Returns                                                 |
+| -------------- | ------------------------------------------------------- |
+| omitted        | `household/` + requesting profile's `user-{id}/` merged |
+| `household`    | household-only results                                  |
+| `user-{id}`    | that profile's personal domain only                     |
+| `all`          | all domains                                             |
 
 **Profile identity:** passed via `X-Profile-Id` header (REST) or `profile_id` MCP tool parameter. The calling harness is responsible for populating this — llm-wiki trusts the caller. Domain scope filtering logic lives exclusively in `WikiQuery.search()`.
 
@@ -546,7 +546,7 @@ app.state.deep_jobs[job_id] = DeepQueryJob(status="running", created_at=now())
 # REST — X-Profile-Id header injected via Depends
 @router.post("/v1/query")
 async def query(req: QueryRequest, wiki=Depends(get_wiki), profile_id=Depends(get_profile_id)):
-    results, vector_search = await asyncio.to_thread(
+    results, _vector = await asyncio.to_thread(
         wiki.search, req.query, domain=req.domain, scope_to_profile=profile_id
     )
 
@@ -558,7 +558,7 @@ async def query(query: str, domain: str | None = None, profile_id: str | None = 
 
 **Rules:**
 - Domain scope logic lives in `WikiQuery.search()` exclusively — never filter domains in route or tool code
-- All search responses (REST and MCP) must include `vector_search: bool` from `WikiQuery.search()` — never hardcode it
+- All search responses (REST and MCP) must include `vector_search` derived from `WikiQuery.search()` (always `true`) — derive, never hardcode
 - The calling harness is responsible for populating `profile_id` / `X-Profile-Id` on all outgoing requests; llm-wiki trusts the caller
 
 ### Query Log Write Pattern
@@ -603,19 +603,19 @@ USER llmwiki
 ```yaml
 # docker-compose.yml
 volumes:
-  - ./wiki_data:/wiki       # host dir must be owned by uid 1000
+  - ./wiki_system:/wiki       # host dir must be owned by uid 1000
   - ./config:/config:ro
 ```
-Host setup required: `sudo chown -R 1000:1000 ./wiki_data`
+Host setup required: `sudo chown -R 1000:1000 ./wiki_system`
 
 **Volume paths (fixed inside container):**
 
-| Host path | Container path | Purpose |
-|---|---|---|
-| `./wiki_data` | `/wiki` | wiki_system/ directory tree |
-| `./config` | `/config` (read-only) | daemon.yaml, domains.yaml, models.yaml, routing.yaml |
+| Host path       | Container path        | Purpose                                              |
+| --------------- | --------------------- | ---------------------------------------------------- |
+| `./wiki_system` | `/wiki_system`        | wiki_system/ directory tree                          |
+| `./config`      | `/config` (read-only) | daemon.yaml, domains.yaml, models.yaml, routing.yaml |
 
-`WIKI_ROOT=/wiki` set in Dockerfile. Never hardcode local dev paths.
+`WIKI_ROOT=/wiki_system` set in Dockerfile. Never hardcode local dev paths.
 
 ---
 
@@ -633,7 +633,7 @@ Host setup required: `sudo chown -R 1000:1000 ./wiki_data`
 5. Name API Pydantic models `{Resource}Request` / `{Resource}Response` — never `Schema`, `Model`, or `Out`
 6. Put MCP tool definitions in `src/llm_wiki/mcp/tools.py` — never inline in `server.py`
 7. Domain scope logic lives in `WikiQuery.search()` only — never filter domains in route or tool code
-8. All search responses must include `vector_search: bool` from `WikiQuery.search()` — never hardcode
+8. All search response bodies must include `vector_search` derived from `WikiQuery.search()` (always `true`) — derive, never hardcode
 9. All `sqlite3.connect()` calls must include `check_same_thread=False`
 10. `QueryTimeoutError` is a normal response branch — never put it in `ERROR_MAP`
 11. `_maybe_init_wiki_root()` must be called before `WikiConfig.load()` in lifespan
@@ -672,7 +672,7 @@ llm_wiki/
 ├── .python-version                    # 3.11
 ├── README.md
 ├── Dockerfile                         # multi-stage build; uid 1000 llmwiki user
-├── docker-compose.yml                 # wiki_data + config mounts; port 3050
+├── docker-compose.yml                 # wiki_system + config mounts; port 3050
 ├── supervisord.conf                   # uvicorn + daemon processes
 ├── .dockerignore
 ├── .github/
@@ -873,7 +873,7 @@ REST clients   →  http://{host}:{port}/v1/
 **Daemon Boundary — filesystem only, no network:**
 ```
 APScheduler (BackgroundScheduler)
-    └── reads/writes /wiki/wiki_system/ directly
+    └── reads/writes /wiki_system/wiki_system/ directly
     └── WikiQuery (shared singleton with API; threading.Lock guards writes)
     └── no HTTP calls; no shared memory with uvicorn except the filesystem
 ```
@@ -886,7 +886,7 @@ Config changes take effect on process restart (NFR-O3). No hot-reload in V1.
 
 **Data Boundary — filesystem as source of truth:**
 ```
-/wiki/wiki_system/
+/wiki_system/wiki_system/
     ├── domains/*/pages/*.md  →  authoritative; never query indexes for page existence
     ├── index/*.json, *.faiss →  derived caches; rebuilt by IndexRebuildJob on corruption
     ├── state/jobs.json        →  authoritative daemon job history; atomic writes only
@@ -897,7 +897,7 @@ Config changes take effect on process restart (NFR-O3). No hot-reload in V1.
 ### Runtime Volume Structure
 
 ```
-wiki_data/                          # host dir, owned by uid 1000; mounted at /wiki
+wiki_system/                          # host dir, owned by uid 1000; mounted at /wiki_system
 └── wiki_system/
     ├── inbox/
     │   ├── new/                    # sources arrive here
@@ -951,7 +951,7 @@ config/                             # host dir; read-only at /config
 
 **Development workflow:**
 ```bash
-uv sync --extra vector
+uv sync
 uv run uvicorn llm_wiki.api.app:app --reload --port 3050   # local REST + MCP
 uv run python -m llm_wiki.daemon                            # daemon separately
 docker-compose up --build                                   # full stack
@@ -980,17 +980,17 @@ All 9 FR categories have direct architectural support. Sprint 1 FRs are covered 
 
 **Functional Requirements Coverage:**
 
-| FR Group | Coverage |
-|---|---|
-| FR1-7, FR51, FR58 (ingestion) | InboxScanJob + adapters + normalizer + router + integrator |
-| FR8-12, FR54, FR57, FR59 (query) | WikiQuery.search() + query log + synthesis engine |
-| FR13-15, FR52 (search) | FulltextIndex + VectorIndex + RRF fusion in WikiQuery |
-| FR16-23 (governance) | GovernanceJob + governance/* modules |
-| FR24-29, FR53, FR63 (knowledge mgmt) | ReviewQueue + QueueToPagesJob + PromotionEngine |
-| FR30-34 (export + integration) | ExportJob + export/* + HooksManager |
-| FR35-41, FR55, FR60, FR61 (service ops) | FastAPI routes + initializer + health endpoints |
-| FR42-44 (trust + provenance) | claims.py + provenance tagging in extraction pipeline |
-| FR45-50b, FR62 (synthesis) | synthesis/engine.py + synthesis/* expansion path |
+| FR Group                                | Coverage                                                   |
+| --------------------------------------- | ---------------------------------------------------------- |
+| FR1-7, FR51, FR58 (ingestion)           | InboxScanJob + adapters + normalizer + router + integrator |
+| FR8-12, FR54, FR57, FR59 (query)        | WikiQuery.search() + query log + synthesis engine          |
+| FR13-15, FR52 (search)                  | FulltextIndex + VectorIndex + RRF fusion in WikiQuery      |
+| FR16-23 (governance)                    | GovernanceJob + governance/* modules                       |
+| FR24-29, FR53, FR63 (knowledge mgmt)    | ReviewQueue + QueueToPagesJob + PromotionEngine            |
+| FR30-34 (export + integration)          | ExportJob + export/* + HooksManager                        |
+| FR35-41, FR55, FR60, FR61 (service ops) | FastAPI routes + initializer + health endpoints            |
+| FR42-44 (trust + provenance)            | claims.py + provenance tagging in extraction pipeline      |
+| FR45-50b, FR62 (synthesis)              | synthesis/engine.py + synthesis/* expansion path           |
 
 **Non-Functional Requirements Coverage:**
 - **Performance:** ≤200ms supported by WikiQuery singleton (FAISS loads once) + `asyncio.to_thread()` for non-blocking routes; 30s timeout enforced via `asyncio.timeout()` in synthesis engine
@@ -1026,16 +1026,16 @@ Complete directory tree defined to the file level for all 50+ source files. All 
 
 All architectural issues surfaced during Advanced Elicitation (Code Review Gauntlet + Self-Consistency Validation in Step 5; Architecture Decision Records in Step 6) were resolved before validation:
 
-| ADR | Issue | Resolution |
-|---|---|---|
-| ADR-1 | Cross-module DI conflict: `mcp/tools.py` importing from `api/deps.py` | `deps.py` moved to package root; both api/ and mcp/ import from `llm_wiki.deps` |
-| ADR-2 | WikiQuery DI contradiction (per-request construction vs. FAISS singleton) | WikiQuery is a singleton on `app.state` via lifespan; never instantiated in Depends |
-| ADR-3 | `QueryTimeoutError` in ERROR_MAP returns HTTP 200 as an error | Removed from ERROR_MAP; handled as normal inline response branch |
-| ADR-4 | Synthesis at `query/synthesis.py` requires file move at Sprint 3 | Located at `synthesis/engine.py` top-level from Sprint 1 |
-| ADR-5 | supervisord missing `nodaemon=true` causing container exit | Added `[supervisord]` section with `nodaemon=true` |
-| ADR-6 | Deep query REST transport — sync vs async | Both MCP and REST use async polling for deep queries; in-memory job state; 404-on-restart acceptable |
-| ADR-7 | Profile scoping inconsistency across REST and MCP | `X-Profile-Id` header (REST) + `profile_id` MCP param both route to `WikiQuery.search(scope_to_profile=...)` |
-| ADR-8 | Query log: JSONL insufficient for cross-domain analysis (FR48, 50+ domains) | SQLite at `state/query_log.db` with `check_same_thread=False` |
+| ADR   | Issue                                                                       | Resolution                                                                                                   |
+| ----- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| ADR-1 | Cross-module DI conflict: `mcp/tools.py` importing from `api/deps.py`       | `deps.py` moved to package root; both api/ and mcp/ import from `llm_wiki.deps`                              |
+| ADR-2 | WikiQuery DI contradiction (per-request construction vs. FAISS singleton)   | WikiQuery is a singleton on `app.state` via lifespan; never instantiated in Depends                          |
+| ADR-3 | `QueryTimeoutError` in ERROR_MAP returns HTTP 200 as an error               | Removed from ERROR_MAP; handled as normal inline response branch                                             |
+| ADR-4 | Synthesis at `query/synthesis.py` requires file move at Sprint 3            | Located at `synthesis/engine.py` top-level from Sprint 1                                                     |
+| ADR-5 | supervisord missing `nodaemon=true` causing container exit                  | Added `[supervisord]` section with `nodaemon=true`                                                           |
+| ADR-6 | Deep query REST transport — sync vs async                                   | Both MCP and REST use async polling for deep queries; in-memory job state; 404-on-restart acceptable         |
+| ADR-7 | Profile scoping inconsistency across REST and MCP                           | `X-Profile-Id` header (REST) + `profile_id` MCP param both route to `WikiQuery.search(scope_to_profile=...)` |
+| ADR-8 | Query log: JSONL insufficient for cross-domain analysis (FR48, 50+ domains) | SQLite at `state/query_log.db` with `check_same_thread=False`                                                |
 
 ### Architecture Completeness Checklist
 

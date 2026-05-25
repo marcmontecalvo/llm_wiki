@@ -19,6 +19,7 @@ from typing import Any
 import frontmatter
 
 from llm_wiki.models.config import SummaryConfig
+from llm_wiki.paths import resolve_wiki_base
 from llm_wiki.utils.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ class CrossDomainSummaryJob:
         config: SummaryConfig | None = None,
         llm_extraction: bool = False,
     ):
-        self.wiki_base = wiki_base or Path("wiki_system")
+        self.wiki_base = resolve_wiki_base(wiki_base)
         self.config = config or SummaryConfig()
         self.llm_extraction = llm_extraction
 

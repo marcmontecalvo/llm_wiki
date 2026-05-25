@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} — LLM Wiki</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <style>
+    :root {
+      --bg: #fff; --fg: #111; --accent: #0066cc; --muted: #6c757d; --border: #dee2e6;
+      --sidebar-bg: #f8f9fa; --card-bg: #fff; --hover: #e9ecef;
+    }
+    .dark {
+      --bg: #1a1a2e; --fg: #e0e0e0; --accent: #5dade2; --muted: #888; --border: #444;
+      --sidebar-bg: #16213e; --card-bg: #1f2937; --hover: #374151;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--fg); min-height: 100vh; display: flex; flex-direction: column; }
+    .layout { display: flex; flex: 1; min-height: calc(100vh - 48px); }
+
+    /* Sidebar 280px */
+    .sidebar { width: 280px; min-width: 280px; background: var(--sidebar-bg); border-right: 1px solid var(--border); overflow-y: auto; }
+    @media (max-width: 1024px) { .sidebar { width: 220px; min-width: 220px; } }
+    @media (max-width: 640px) { .sidebar { display: none; } }
+    .sidebar h3 { padding: 16px 16px 8px; font-size: 0.75rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; }
+    .sidebar ul { list-style: none; padding: 0; }
+    .sidebar li a, .sidebar li button { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; color: var(--fg); text-decoration: none; font-size: 0.9rem; }
+    .sidebar li a:hover, .sidebar li button:hover { background: var(--hover); }
+    .sidebar li a.active { background: var(--hover); border-left: 3px solid var(--accent); }
+    .badge { font-size: 0.7rem; padding: 1px 6px; border-radius: 8px; background: var(--border); color: var(--fg); }
+    .badge.shared { background: var(--accent); color: #fff; }
+    .badge.personal { background: var(--muted); color: #fff; }
+
+    /* Header */
+    .header { height: 48px; min-height: 48px; background: var(--sidebar-bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 12px; }
+    .header h1 { font-size: 1rem; font-weight: 600; }
+    .header .health { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
+    .header .health.offline { background: #ef4444; }
+    .header .dark-toggle { background: none; border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; cursor: pointer; color: var(--fg); font-size: 0.8rem; margin-left: auto; }
+
+    /* Main content */
+    .main { flex: 1; padding: 24px 32px; overflow-y: auto; max-width: 1200px; }
+
+    /* Footer */
+    .footer { height: 48px; min-height: 48px; background: var(--sidebar-bg); border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; color: var(--muted); }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    th { font-weight: 600; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; }
+    code { font-family: "SF Mono", "Fira Code", Consolas, monospace; font-size: 0.85em; background: var(--hover); padding: 1px 4px; border-radius: 3px; }
+    pre { background: var(--hover); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; }
+
+    /* Cards */
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+    .card h3 { font-size: 0.95rem; margin-bottom: 8px; }
+
+    /* Panels */
+    .panel { margin-bottom: 20px; }
+    .panel h3 { font-size: 0.85rem; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+    .panels { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+
+    /* Nav helper */
+    .nav-link { cursor: pointer; border: none; background: transparent; color: var(--fg); text-decoration: none; font-size: inherit; padding: 0; display: flex; align-items: center; gap: 4px; }
+    .nav-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav class="sidebar">
+      <div hx-get="/ui/api/domains-tree" hx-target="#sidebar-content" hx-swap="innerHTML">
+        <h3>Domains</h3>
+        <ul id="sidebar-content"></ul>
+      </div>
+    </nav>
+    <div style="display:flex;flex-direction:col;width:100%;min-width:0;">
+      <header class="header">
+        <h1>LLM Wiki</h1>
+        <span class="health" title="Daemon healthy"></span>
+        <button class="dark-toggle" onclick="document.body.classList.toggle('dark')" aria-label="Toggle theme">&#9682; Theme</button>
+      </header>
+      <main class="main">{% block content %}{% endblock %}</main>
+    </div>
+  </div>
+  <footer class="footer">
+    <span>LLM Wiki v1.0 &mdash; daemon healthy</span>
+  </footer>
+</body>
+</html>
