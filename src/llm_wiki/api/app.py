@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
 
-    # Persist UI password to file so it can be retrieved after startup
+    # Persist UI password to file for TUI reference (if writable)
     _pw_file = Path(wiki_root) / "state" / ".ui_password"
     try:
         _pw_file.write_text(app.state.ui_password)
@@ -138,14 +138,13 @@ def create_app() -> FastAPI:
         openapi_version="3.1.0",
     )
 
-    # Set UI auth password — use WIKI_UI_PASSWORD env var if set, otherwise generate ephemeral
-    from llm_wiki.api.ui_auth import generate_password
-
-    _ui_password = os.environ.get("WIKI_UI_PASSWORD", "") or generate_password()
+    _ui_password = os.environ.get("WIKI_UI_PASSWORD", "")
+    if not _ui_password:
+        raise RuntimeError("UI auth requires WIKI_UI_PASSWORD environment variable")
     _ui_user = os.environ.get("WIKI_UI_USER", "admin")
     app.state.ui_password = _ui_password
     app.state.ui_user = _ui_user
-    logger.info("UI auth — user: %s, password: %s", _ui_user, _ui_password)
+    logger.info("UI auth — user: %s", _ui_user)
 
     # OTel SDK init (Story 1.12.5)
     from llm_wiki.observability import sdk

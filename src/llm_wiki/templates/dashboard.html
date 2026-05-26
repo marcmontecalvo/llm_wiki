@@ -1,14 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Operations Dashboard</h2>
-<div id="dashboard-status" class="muted">Loading dashboard data…</div>
+<div id="dashboard-status" class="muted" style="font-size:0.82rem;margin-bottom:14px;"></div>
+
+<!-- Hero stat row -->
+<div class="stat-row" id="dashboard-stats">
+  <div class="stat-card blue"><div class="stat-value" style="font-size:1rem;color:var(--muted);">Loading…</div><div class="stat-label">Pages</div></div>
+  <div class="stat-card green"><div class="stat-value" style="font-size:1rem;color:var(--muted);">—</div><div class="stat-label">Daemon</div></div>
+  <div class="stat-card yellow"><div class="stat-value" style="font-size:1rem;color:var(--muted);">—</div><div class="stat-label">Inbox</div></div>
+  <div class="stat-card red"><div class="stat-value" style="font-size:1rem;color:var(--muted);">—</div><div class="stat-label">Issues</div></div>
+</div>
+
 <div class="panels" id="dashboard-panels">
   <!-- Panels populated by JS -->
-  <div class="panel"><h3>Daemon Health</h3><p class="muted">Loading…</p></div>
-  <div class="panel"><h3>Wiki Overview</h3><p class="muted">Loading…</p></div>
-  <div class="panel"><h3>Ingestion Pipeline</h3><p class="muted">Loading…</p></div>
-  <div class="panel"><h3>Governance</h3><p class="muted">Loading…</p></div>
-  <div class="panel"><h3>Query Activity</h3><p class="muted">Loading…</p></div>
 </div>
 
 <script type="module">
@@ -18,7 +22,7 @@ function _auth() { return "Basic " + btoa(_uiUser + ":" + _uiPass); }
 function esc(s) { return String(s ?? ""); }
 
 function statusDot(ok) {
-  return ok ? '<span style="color:#22c55e">&#9679;</span>' : '<span style="color:#ef4444">&#9679;</span>';
+  return ok ? '<span style="color:var(--green);font-weight:700;">&#9679;</span>' : '<span style="color:var(--red);font-weight:700;">&#9679;</span>';
 }
 
 function ago(ts) {
@@ -33,16 +37,37 @@ function ago(ts) {
   } catch { return esc(ts); }
 }
 
+function formatUptime(seconds) {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (hrs === 0) return mins + "m";
+  return hrs + "h " + mins + "m";
+}
+
 async function loadDashboard() {
   try {
     const resp = await fetch("/ui/api/dashboard-data", { headers: { "Authorization": _auth() } });
     if (!resp.ok) throw new Error(resp.status);
     const d = await resp.json();
-    document.getElementById("dashboard-status").textContent = "Updated " + new Date().toLocaleTimeString();
+    document.getElementById("dashboard-status").textContent = "Last updated " + new Date().toLocaleTimeString();
 
-    // 1. Daemon Health
     const health = d.health || {};
     const sched = d.scheduler || {};
+    const inbox = d.inbox || {};
+    const gov = d.governance || {};
+    const qs = d.query_stats || {};
+    const jobs = d.jobs || [];
+
+    // Update hero stats
+    const statsEl = document.getElementById("dashboard-stats");
+    const totalInbox = (inbox.new||0) + (inbox.staging||0) + (inbox.processing||0);
+    const totalIssues = (gov.result?.lint_errors||0) + (gov.result?.low_quality_pages||0) + (gov.result?.broken_links||0);
+    statsEl.innerHTML =
+      '<div class="stat-card green"><div class="stat-value">' + (d.total_pages || 0) + '</div><div class="stat-label">Pages</div></div>' +
+      '<div class="stat-card ' + (health.daemon_running ? 'green' : 'red') + '"><div class="stat-value">' + statusDot(health.daemon_running) + ' ' + (health.daemon_running ? 'OK' : 'Down') + '</div><div class="stat-label">Daemon</div></div>' +
+      '<div class="stat-card blue"><div class="stat-value">' + totalInbox + '</div><div class="stat-label">Inbox</div></div>' +
+      '<div class="stat-card red"><div class="stat-value">' + totalIssues + '</div><div class="stat-label">Issues</div></div>';
+
     const panels = document.getElementById("dashboard-panels");
     panels.innerHTML = "";
 
@@ -55,30 +80,29 @@ async function loadDashboard() {
       '<tr><th>Index</th><td>' + statusDot(health.index_loaded) + (health.index_loaded ? " Loaded" : " Unloaded</td>") + '</tr>' +
       '<tr><th>Scheduler</th><td>' + statusDot(sched.running) + (sched.running ? " Running (" + sched.job_count + " jobs)" : (sched.job_count > 0 ? " Has jobs (idle)" : " No jobs</td>") + '</tr>' +
       '<tr><th>Uptime</th><td>' + (sched.uptime_seconds ? formatUptime(sched.uptime_seconds) : "---") + '</td></tr>' +
-      '<tr><th>Errors</th><td>' + (sched.recent_errors > 0 ? '<span style="color:#ef4444">' + sched.recent_errors + " failing</span>" : "<span style='color:#22c55e'>None</span>") + '</td></tr>' +
+      '<tr><th>Errors</th><td>' + (sched.recent_errors > 0 ? '<span style="color:var(--red);font-weight:500;">' + sched.recent_errors + " failing</span>" : "<span style='color:var(--green)'>None</span>") + '</td></tr>' +
       '</table>';
     panels.appendChild(p1);
 
     // Panel 2: Wiki Overview
     const p2 = document.createElement("div");
     p2.className = "panel";
-    p2.innerHTML = '<h3>Wiki Overview</h3>' +
-      '<table style="width:100%;font-size:0.85rem;">' +
-      '<tr><th style="width:100px">Total Pages</th><td style="font-size:1.2em">' + (d.total_pages || 0) + '</td></tr>' +
-      '<tr><th>Low Confidence</th><td><span style="color:#ef4444">' + (d.total_low_confidence || 0) + '</span></td></tr>' +
-      '<tr><th>Stale</th><td><span style="color:#f59e0b">' + (d.total_stale || 0) + '</span></td></tr>' +
-      '</table>' +
-      (d.domains && d.domains.length > 0 ?
-        '<h4 style="margin-top:12px;font-size:0.8rem;text-transform:uppercase;color:var(--muted)">Domains</h4>' +
+    let domainsHtml = '';
+    if (d.domains && d.domains.length > 0) {
+      domainsHtml = '<h4 style="margin-top:14px;font-size:0.75rem;text-transform:uppercase;color:var(--muted);letter-spacing:0.04em;">Domains</h4>' +
         '<table style="width:100%;font-size:0.8rem;margin-top:4px;">' +
         '<tr><th>Domain</th><th>Pages</th><th>Last Updated</th></tr>' +
         d.domains.map(dom => '<tr><td><code>' + esc(dom.name) + '</code></td><td>' + (dom.page_count || 0) + '</td><td>' + ago(dom.last_updated) + '</td></tr>').join('') +
-        '</table>' : '') +
-      '</div>';
+        '</table>';
+    }
+    p2.innerHTML = '<h3>Wiki Overview</h3>' +
+      '<table style="width:100%;font-size:0.85rem;">' +
+      '<tr><th style="width:100px">Low Confidence</th><td><span style="color:var(--red);font-weight:500;">' + (d.total_low_confidence || 0) + '</span></td></tr>' +
+      '<tr><th>Stale</th><td><span style="color:var(--yellow);font-weight:500;">' + (d.total_stale || 0) + '</span></td></tr>' +
+      '</table>' + domainsHtml;
     panels.appendChild(p2);
 
     // Panel 3: Ingestion Pipeline
-    const inbox = d.inbox || {};
     const p3 = document.createElement("div");
     p3.className = "panel";
     p3.innerHTML = '<h3>Ingestion Pipeline</h3>' +
@@ -86,28 +110,27 @@ async function loadDashboard() {
       '<tr><th style="width:100px">New Files</th><td>' + (inbox.new || 0) + '</td></tr>' +
       '<tr><th>Staging</th><td>' + (inbox.staging || 0) + '</td></tr>' +
       '<tr><th>Processing</th><td>' + (inbox.processing || 0) + '</td></tr>' +
-      '<tr><th>Failed</th><td>' + (inbox.failed > 0 ? '<span style="color:#ef4444">' + (inbox.failed || 0) + '</span>' : '0') + '</td></tr>' +
+      '<tr><th>Failed</th><td>' + (inbox.failed > 0 ? '<span style="color:var(--red);font-weight:500;">' + (inbox.failed || 0) + '</span>' : '0') + '</td></tr>' +
       '<tr><th>Done</th><td>' + (inbox.done || 0) + '</td></tr>' +
       '</table>';
     panels.appendChild(p3);
 
     // Panel 4: Governance
-    const gov = d.governance || {};
     const g = gov.result || {};
     const p4 = document.createElement("div");
     p4.className = "panel";
     const govStatusText = {
-      success: '<span style="color:#22c55e">Success</span>',
-      error: '<span style="color:#ef4444">Error</span>',
-      running: '<span style="color:#3b82f6">Running</span>',
+      success: '<span style="color:var(--green);font-weight:500;">Success</span>',
+      error: '<span style="color:var(--red);font-weight:500;">Error</span>',
+      running: '<span style="color:var(--accent);font-weight:500;">Running</span>',
     };
     p4.innerHTML = '<h3>Governance</h3>' +
       '<table style="width:100%;font-size:0.85rem;">' +
-      '<tr><th style="width:100px">Last Run</th><td>' + (gov.status === "ok" ? ago(gov.last_run) : (gov.status || ""Not run</td>") + '</tr>' +
-      '<tr><th>Detailed Status</th><td>' + (govStatusText[g.status] || esc(g.status)) + '</td></tr>' +
+      '<tr><th style="width:100px">Last Run</th><td>' + (gov.status === "ok" ? ago(gov.last_run) : (gov.status || "Not run</td>") + '</tr>' +
+      '<tr><th>Status</th><td>' + (govStatusText[g.status] || esc(g.status)) + '</td></tr>' +
       '<tr><th>Pages Checked</th><td>' + (g.total_pages || 0) + '</td></tr>' +
       '<tr><th>Lint Issues</th><td>' + (g.lint_issues || 0) + '</td></tr>' +
-      '<tr><th>Low Quality</th><td><span style="color:#f59e0b">' + (g.low_quality_pages || 0) + '</span></td></tr>' +
+      '<tr><th>Low Quality</th><td><span style="color:var(--yellow);font-weight:500;">' + (g.low_quality_pages || 0) + '</span></td></tr>' +
       '<tr><th>Orphans</th><td>' + (g.orphan_pages || 0) + '</td></tr>' +
       '<tr><th>Broken Links</th><td>' + (g.broken_links || 0) + '</td></tr>' +
       '<tr><th>Stale</th><td>' + (g.stale_pages || 0) + '</td></tr>' +
@@ -117,39 +140,36 @@ async function loadDashboard() {
     panels.appendChild(p4);
 
     // Panel 5: Recent Jobs
-    const jobs = d.jobs || [];
     const p5 = document.createElement("div");
     p5.className = "panel";
-    p5.innerHTML = '<h3>Recent Daemon Jobs</h3>' +
+    p5.innerHTML = '<h3>Daemon Jobs</h3>' +
       (jobs.length > 0 ?
         '<table style="width:100%;font-size:0.8rem;">' +
         '<tr><th>Job</th><th>Status</th><th>Last Run</th></tr>' +
         jobs.map(j => {
-          const stColor = j.status === "completed" ? "#22c55e" : (j.status === "failed" ? "#ef4444" : "#f59e0b");
+          const stColor = j.status === "completed" ? "var(--green)" : (j.status === "failed" ? "var(--red)" : "var(--yellow)");
           return '<tr><td><code>' + esc(j.name) + '</code></td>' +
-            '<td><span style="color:' + stColor + '">&#9679;</span> ' + esc(j.status) + '</td>' +
+            '<td><span style="color:' + stColor + ';font-weight:700;">&#9679;</span> ' + esc(j.status) + '</td>' +
             '<td>' + ago(j.last_run) + '</td></tr>';
         }).join('') +
         '</table>' :
-        '<p class="muted">No jobs registered</p>');
+        '<p class="muted" style="font-size:0.85rem;">No jobs registered</p>');
     panels.appendChild(p5);
 
     // Panel 6: Query Activity
-    const qs = d.query_stats || {};
     const p6 = document.createElement("div");
     p6.className = "panel";
     p6.innerHTML = '<h3>Query Activity</h3>' +
       '<table style="width:100%;font-size:0.85rem;">' +
-      '<tr><th style="width:100px">Total Queries</th><td>' + (qs.total_queries || 0) + '</td></tr>' +
+      '<tr><th style="width:100px">Total Queries</th><td style="font-size:1.1rem;font-weight:700;">' + (qs.total_queries || 0) + '</td></tr>' +
       '</table>' +
       (qs.top_queries && qs.top_queries.length > 0 ?
-        '<h4 style="margin-top:12px;font-size:0.8rem;text-transform:uppercase;color:var(--muted)">Top Queries</h4>' +
+        '<h4 style="margin-top:12px;font-size:0.75rem;text-transform:uppercase;color:var(--muted);letter-spacing:0.04em;">Top Queries</h4>' +
         '<table style="width:100%;font-size:0.8rem;margin-top:4px;">' +
         qs.top_queries.slice(0, 5).map(q =>
-          '<tr><td>' + esc(q.query) + '</td><td>' + q.hits + ' hits</td></tr>'
+          '<tr><td>' + esc(q.query) + '</td><td style="color:var(--muted);">' + q.hits + ' hits</td></tr>'
         ).join('') +
-        '</table>' : '') +
-      '</div>';
+        '</table>' : '');
     panels.appendChild(p6);
 
   } catch (e) {
@@ -157,14 +177,7 @@ async function loadDashboard() {
   }
 }
 
-function formatUptime(seconds) {
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  if (hrs === 0) return mins + "m";
-  return hrs + "h " + mins + "m";
-}
-
 loadDashboard();
-setInterval(loadDashboard, 30000);  // Auto-refresh 30s
+setInterval(loadDashboard, 30000);
 </script>
 {% endblock %}

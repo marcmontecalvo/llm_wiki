@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Search</h2>
-<form id="search-form" style="margin-bottom:16px;">
-  <input type="text" id="search-q" placeholder="Search the wiki..." style="width:100%;padding:10px;font-size:1rem;border:1px solid var(--border);border-radius:6px;background:var(--card-bg);color:var(--fg);" autofocus>
+<form id="search-form" style="margin-bottom:18px;">
+  <input type="text" id="search-q" placeholder="&#128269;  Search the wiki..." style="width:100%;padding:12px 16px;min-height:48px;font-size:1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel-bg);color:var(--fg);transition:border-color 0.15s,box-shadow 0.15s;" autofocus>
 </form>
-<div id="search-status" class="muted">Type to search...</div>
+<div id="search-status" class="muted" style="font-size:0.835rem;margin-bottom:10px;"></div>
 <div id="search-results" style="overflow-x:auto;">
   <table id="search-table" style="display:none;">
-    <thead><tr><th>Title</th><th>Domain</th><th>Kind</th><th>Score</th></tr></thead>
+    <thead><tr><th style="width:45%">Title</th><th style="width:20%">Domain</th><th style="width:20%">Kind</th><th style="width:15%">Score</th></tr></thead>
     <tbody id="search-tbody"></tbody>
   </table>
 </div>
@@ -38,7 +38,7 @@ function renderTable(pages) {
     return;
   }
   table.style.display = '';
-  status.textContent = pages.length + ' result(s)';
+  status.textContent = pages.length + ' result' + (pages.length !== 1 ? 's' : '') + ' found';
   let html = '';
   for (const r of pages) {
     const score = r.score != null ? Number(r.score).toFixed(2) : '0.00';
@@ -64,6 +64,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!q) { renderTable([]); return; }
     clearTimeout(_searchTimeout);
     _searchTimeout = setTimeout(async () => {
+      status.style.display = 'flex';
+      status.classList.add('loading');
+      status.textContent = '';
       try {
         const resp = await fetch('/ui/api/search-json?q=' + encodeURIComponent(q), {
           headers: { 'Authorization': _authHeader() }
@@ -77,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
       } catch(e) {
         document.getElementById('search-status').textContent = 'Error: ' + e.message;
       }
-    }, 300);
+    }, 250);
   });
 });
 

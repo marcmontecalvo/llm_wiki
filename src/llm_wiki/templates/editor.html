@@ -1,23 +1,23 @@
 {% extends "base.html" %}
 {% block content %}
 <h2 id="editor-title">{% if page_id %}Edit: {{ page_id }}{% else %}New Page{% endif %}</h2>
-<div id="editor-status" class="muted"></div>
+<div id="editor-status" class="muted" style="font-size:0.85rem;min-height:1.5em;"></div>
 <form id="editor-form" style="max-width:900px;">
   <!-- Top row: Title + Domain + Kind -->
-  <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+  <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-bottom:16px;">
     <div>
-      <label style="font-size:0.8rem;color:var(--muted);">Title</label>
-      <input type="text" id="e-title" required style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);" placeholder="Page title">
+      <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:4px;font-weight:500;">Title</label>
+      <input type="text" id="e-title" required style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel-bg);color:var(--fg);font-size:0.9rem;transition:border-color 0.15s,box-shadow 0.15s;" placeholder="Page title">
     </div>
     <div>
-      <label style="font-size:0.8rem;color:var(--muted);">Domain</label>
-      <select id="e-domain" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);">
+      <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:4px;font-weight:500;">Domain</label>
+      <select id="e-domain" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel-bg);color:var(--fg);font-size:0.9rem;transition:border-color 0.15s,box-shadow 0.15s;">
         <option value="general">general</option>
       </select>
     </div>
     <div>
-      <label style="font-size:0.8rem;color:var(--muted);">Kind</label>
-      <select id="e-kind" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);">
+      <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:4px;font-weight:500;">Kind</label>
+      <select id="e-kind" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel-bg);color:var(--fg);font-size:0.9rem;transition:border-color 0.15s,box-shadow 0.15s;">
         <option value="page">page</option>
         <option value="entity">entity</option>
         <option value="concept">concept</option>
@@ -28,25 +28,25 @@
   </div>
 
   <!-- Metadata row -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
     <div>
-      <label style="font-size:0.8rem;color:var(--muted);">Tags (comma-sep)</label>
-      <input type="text" id="e-tags" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);" placeholder="ai, research">
+      <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:4px;font-weight:500;">Tags (comma-sep)</label>
+      <input type="text" id="e-tags" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel-bg);color:var(--fg);font-size:0.9rem;transition:border-color 0.15s,box-shadow 0.15s;" placeholder="ai, research">
     </div>
     <div>
-      <label style="font-size:0.8rem;color:var(--muted);">Sources (comma-sep)</label>
-      <input type="text" id="e-sources" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);" placeholder="source1, source2">
+      <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:4px;font-weight:500;">Sources (comma-sep)</label>
+      <input type="text" id="e-sources" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel-bg);color:var(--fg);font-size:0.9rem;transition:border-color 0.15s,box-shadow 0.15s;" placeholder="source1, source2">
     </div>
   </div>
 
   <!-- Content -->
-  <div style="margin-bottom:12px;">
-    <label style="font-size:0.8rem;color:var(--muted);">Content (Markdown)</label>
-    <textarea id="e-content" rows="20" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--fg);font-family:monospace;font-size:0.9rem;resize:vertical;line-height:1.6;" placeholder="Write page content in Markdown..."></textarea>
+  <div style="margin-bottom:16px;">
+    <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:4px;font-weight:500;">Content (Markdown)</label>
+    <textarea id="e-content" rows="22" style="width:100%;padding:14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--panel-bg);color:var(--fg);font-family:'SF Mono','Fira Code',Consolas,'Liberation Mono',monospace;font-size:0.875rem;resize:vertical;line-height:1.7;transition:border-color 0.15s,box-shadow 0.15s;min-height:200px;"></textarea>
   </div>
 
   <!-- Actions -->
-  <div style="display:flex;gap:8px;">
+  <div style="display:flex;gap:10px;">
     <button type="submit" class="btn primary">Save Page</button>
     <a href="/ui/browse" class="btn">Cancel</a>
   </div>
@@ -68,7 +68,18 @@
   function esc(s) { return String(s ?? ""); }
   function status(msg) { document.getElementById("editor-status").textContent = msg; }
 
-  // Load existing page data if editing
+  // Focus rings on all inputs
+  document.querySelectorAll('#editor-form input, #editor-form select, #editor-form textarea').forEach(function(el) {
+    el.addEventListener('focus', function() {
+      this.style.borderColor = 'var(--accent)';
+      this.style.boxShadow = '0 0 0 3px rgba(0,102,204,0.12)';
+    });
+    el.addEventListener('blur', function() {
+      this.style.borderColor = '';
+      this.style.boxShadow = '';
+    });
+  });
+
   async function loadExisting() {
     if (!pageId) return;
     try {
@@ -91,7 +102,6 @@
     } catch {}
   }
 
-  // Load domains for dropdown
   async function loadDomains() {
     try {
       const r = await fetch('/ui/api/domains-tree', { headers: { 'Authorization': auth() } });
@@ -105,7 +115,6 @@
         opt.textContent = d.title ? d.name + ' (' + d.title + ')' : d.name;
         sel.appendChild(opt);
       }
-      // Keep "general" if not in list
       if (!sel.querySelector('[value="general"]')) {
         const opt = document.createElement("option");
         opt.value = "general";
@@ -115,7 +124,6 @@
     } catch {}
   }
 
-  // Save
   document.getElementById("editor-form").addEventListener("submit", async function(e) {
     e.preventDefault();
     status("Saving...");
@@ -161,7 +169,7 @@
   });
 
   function statusSaved(pg) {
-    status('Saved as "' + esc(pg.page_id) + '".');
+    status('<span style="color:var(--green);font-weight:500;">Saved as "' + esc(pg.page_id) + '". Redirecting…</span>');
     setTimeout(function() {
       window.location.href = '/ui/page/' + encodeURIComponent(pg.page_id);
     }, 800);

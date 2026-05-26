@@ -31,16 +31,8 @@ router = APIRouter(prefix="/ui", tags=["webui"])
 
 
 def ensure_auth(request: Request) -> None:
-    """Raise HTTPException if auth is invalid.  Use as a Depends() call."""
+    """Raise HTTPException if auth is invalid."""
     ui_password = getattr(request.app.state, "ui_password", "")
-    if not ui_password:
-        # Fallback: read from persisted password file (written at startup)
-        _wiki_root = os.environ.get("WIKI_ROOT", "wiki_system")
-        pw_file = Path(_wiki_root) / "state" / ".ui_password"
-        try:
-            ui_password = pw_file.read_text().strip()
-        except Exception:
-            pass
     if not ui_password:
         raise HTTPException(
             status_code=500, detail="UI not configured — no password source available"
@@ -152,13 +144,27 @@ async def ui_browse(request: Request):
 @router.get("/dashboard", response_class=HTMLResponse)
 async def ui_dashboard(request: Request):
     ensure_auth(request)
-    return _render_page("dashboard", {"title": "Dashboard"})
+    return _render_page(
+        "dashboard",
+        {
+            "title": "Dashboard",
+            "ui_user": getattr(request.app.state, "ui_user", "admin"),
+            "ui_password": getattr(request.app.state, "ui_password", ""),
+        },
+    )
 
 
 @router.get("/issues", response_class=HTMLResponse)
 async def ui_issues(request: Request):
     ensure_auth(request)
-    return _render_page("issues", {"title": "Issues"})
+    return _render_page(
+        "issues",
+        {
+            "title": "Issues",
+            "ui_user": getattr(request.app.state, "ui_user", "admin"),
+            "ui_password": getattr(request.app.state, "ui_password", ""),
+        },
+    )
 
 
 @router.get("/editor", response_class=HTMLResponse)
@@ -198,7 +204,15 @@ async def ui_domain_overview(request: Request, domain_id: str):
 @router.get("/page/{page_id}", response_class=HTMLResponse)
 async def ui_page_detail(request: Request, page_id: str):
     ensure_auth(request)
-    return _render_page("page_detail", {"title": f"Page: {page_id}", "page_id": page_id})
+    return _render_page(
+        "page_detail",
+        {
+            "title": f"Page: {page_id}",
+            "page_id": page_id,
+            "ui_user": getattr(request.app.state, "ui_user", "admin"),
+            "ui_password": getattr(request.app.state, "ui_password", ""),
+        },
+    )
 
 
 def _render_page(template: str, context: dict, status_code: int = 200) -> HTMLResponse:
@@ -220,7 +234,7 @@ def _render_page(template: str, context: dict, status_code: int = 200) -> HTMLRe
 # ── Dashboard aggregation endpoint ──────────────────────────────────────
 
 
-@router.get("/ui/api/dashboard-data", response_model=None)
+@router.get("/api/dashboard-data", response_model=None)
 async def ui_dashboard_data(request: Request):
     """Aggregate all data sources for the operations dashboard."""
     ensure_auth(request)

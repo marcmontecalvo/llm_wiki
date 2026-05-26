@@ -1,13 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Browse Pages</h2>
-<div id="browse-status" class="muted">Loading pages…</div>
+<div id="browse-status" class="muted" style="font-size:0.835rem;margin-bottom:10px;"></div>
 
 <!-- Filters -->
-<div class="filter-bar mb-1rem">
-  <select id="f-domain">
-    <option value="">All domains</option>
-  </select>
+<div class="filter-bar">
+  <select id="f-domain"><option value="">All domains</option></select>
   <select id="f-kind">
     <option value="">All kinds</option>
     <option value="page">page</option>
@@ -31,7 +29,7 @@
 <!-- Table -->
 <div id="browse-results" style="overflow-x:auto;">
   <table>
-    <thead><tr><th style="cursor:pointer" onclick="setSort('title')">Title ↕</th><th>Domain</th><th>Kind</th><th>Confidence</th><th>Updated</th></tr></thead>
+    <thead><tr><th style="cursor:pointer" onclick="setSort('title')">Title</th><th>Domain</th><th>Kind</th><th>Confidence</th><th>Updated</th></tr></thead>
     <tbody id="browse-tbody"></tbody>
   </table>
 </div>
@@ -45,7 +43,6 @@
   let allPages = [];
   let currentSort = 'title';
 
-  // Load domains for filters
   async function loadDomains() {
     try {
       const r = await fetch('/ui/api/domains-tree', { headers: { 'Authorization': auth() } });
@@ -59,11 +56,9 @@
         opt.textContent = d.title ? d.name + ' (' + d.page_count + ')' : d.name;
         sel.appendChild(opt);
       }
-      // Sidebar domains are loaded via HTMX domain_nav snippet
     } catch {}
   }
 
-  // Load pages from REST API
   async function loadPages() {
     document.getElementById('browse-status').textContent = 'Loading…';
     try {
@@ -81,12 +76,10 @@
   }
 
   function applyFilters() {
-    // Kind filter
     const kind = document.getElementById('f-kind').value;
     let pages = allPages;
     if (kind) pages = pages.filter(p => p.kind === kind);
 
-    // Confidence filter
     const confMin = document.getElementById('f-conf').value;
     if (confMin) {
       const min = parseFloat(confMin);
@@ -99,7 +92,6 @@
       }
     }
 
-    // Tags filter
     const tagsStr = document.getElementById('f-tags').value.trim();
     if (tagsStr) {
       const required = tagsStr.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
@@ -111,17 +103,14 @@
       }
     }
 
-    // Quick search
     const qs = document.getElementById('f-search').value.trim().toLowerCase();
     if (qs) {
       pages = pages.filter(p => {
         const title = (p.title || p.page_id || '').toLowerCase();
-        const content = (p.content && p.content.length < 500 ? p.content : (p.frontmatter ? '' : '')).toLowerCase();
         return title.includes(qs) || (p.page_id || '').toLowerCase().includes(qs);
       });
     }
 
-    // Sort
     sortPages(pages, document.getElementById('f-sort').value);
     renderTable(pages);
   }
@@ -147,17 +136,12 @@
     if (c >= 0.4) return 'conf-med';
     return 'conf-low';
   }
-  function confColor(c) {
-    if (c >= 0.7) return 'var(--green)';
-    if (c >= 0.4) return 'var(--yellow)';
-    return 'var(--red)';
-  }
 
   function renderTable(pages) {
     const tbody = document.getElementById('browse-tbody');
     const status = document.getElementById('browse-status');
-    const count = document.getElementById('f-search').value.trim() ? ' (filtered)' : '';
-    status.textContent = allPages.length + ' total, showing ' + pages.length + count;
+    const isFiltered = document.getElementById('f-search').value.trim() !== '';
+    status.textContent = allPages.length + ' total, showing ' + pages.length + (isFiltered ? ' (filtered)' : '');
 
     if (!pages.length) {
       tbody.innerHTML = '<tr><td colspan="5" class="muted">No pages match filters.</td></tr>';
@@ -167,22 +151,29 @@
     let html = '';
     for (const p of pages) {
       const c = p.confidence ?? 0;
-      const confStr = typeof c === 'boolean' ? (c ? '1.0' : '0.0') : Number(c).toFixed(2);
+      const confStr = typeof c === 'boolean' ? (c ? '1.00' : '0.00') : Number(c).toFixed(2);
+      const confNum = parseFloat(confStr);
       const uid = encodeURIComponent(p.page_id);
       html += '<tr onclick="location.href=\'/ui/page/' + uid + '\'" style="cursor:pointer;">'
         + '<td><a class="nav-link" href="/ui/page/' + uid + '">' + esc(p.title || p.page_id) + '</a>'
-        + (p.auth_tags && p.auth_tags.length ? ' <span style="margin-left:4px;">' + p.auth_tags.map(function(t) { return '<span class="trust-tag">' + esc(t) + '</span>'; }).join('') + '</span>' : '')
+        + (p.auth_tags && p.auth_tags.length ? ' ' + p.auth_tags.map(function(t) { return '<span class="trust-tag">' + esc(t) + '</span>'; }).join('') : '')
         + '</td>'
         + '<td><code>' + esc(p.domain || 'general') + '</code></td>'
         + '<td>' + esc(p.kind || 'page') + '</td>'
-        + '<td><span class="' + confClass(parseFloat(confStr)) + '">' + confStr + '</span>'
-        + '<div class="conf-bar-wrap ' + confClass(parseFloat(confStr)) + '"><div class="fill" style="width:' + (Number(confStr) * 100) + '%;background:' + confColor(parseFloat(confStr)) + '"></div></div>'
+        + '<td><span class="' + confClass(confNum) + '" style="font-weight:500;">' + confStr + '</span>'
+        + '<span class="conf-bar-wrap ' + confClass(confNum) + '"><span class="fill" style="width:' + (confNum * 100) + '%;"></span></span>'
         + '</td>'
-        + '<td>' + esc(p.updated_at || '') + '</td>'
+        + '<td style="white-space:nowrap;color:var(--muted);font-size:0.835rem;">' + esc(p.updated_at || '') + '</td>'
         + '</tr>';
     }
     tbody.innerHTML = html;
   }
+
+  // Expose setSort for onclick
+  window.setSort = function(val) {
+    document.getElementById('f-sort').value = val;
+    applyFilters();
+  };
 
   // Bind events
   var fields = ['f-domain','f-kind','f-conf','f-tags','f-search','f-sort'];

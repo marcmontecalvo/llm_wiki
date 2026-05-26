@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
-<h2 id="domain-title">Loading…</h2>
-<div id="domain-status" class="muted">Loading domain data…</div>
-
-<div class="panels" id="domain-panels">
-  <!-- Populated by JS -->
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;">
+  <h2 id="domain-title" style="margin-bottom:0;">Loading…</h2>
+  <a class="btn" href="/ui/editor" style="height:32px;padding:6px 14px;font-size:0.8rem;">&#43; New Page</a>
 </div>
+<div id="domain-status" class="muted" style="font-size:0.835rem;margin-bottom:14px;"></div>
+
+<div class="panels" id="domain-panels"></div>
 
 <div class="panel" id="domain-pages-panel" style="margin-top:20px;">
-  <h3>Pages in this domain</h3>
+  <h3>Pages in <span id="domain-pages-domain"></span></h3>
   <div id="domain-pages-list" class="muted">Loading…</div>
 </div>
 
@@ -18,6 +19,7 @@
   const _uiPass = "{{ ui_password }}";
   const domain = "{{ domain_id }}";
   document.getElementById("domain-title").textContent = domain;
+  document.getElementById("domain-pages-domain").textContent = domain;
 
   function auth() { return "Basic " + btoa(_uiUser + ":" + _uiPass); }
   function esc(s) { return String(s ?? ""); }
@@ -28,7 +30,6 @@
     const pagesList = document.getElementById("domain-pages-list");
 
     try {
-      // Load domain data from domains-tree for overview stats
       const [dashR, pagesR] = await Promise.all([
         fetch('/ui/api/dashboard-data', { headers: { 'Authorization': auth() } }),
         fetch('/v1/pages?limit=200&domain=' + encodeURIComponent(domain), { headers: { 'Authorization': auth() } }),
@@ -43,30 +44,25 @@
       const pages = (pgData.pages || []);
       status.textContent = domain + ' — ' + pages.length + ' pages';
 
-      // Find per-domain dashboard data
       const foundDash = (d.domain_dashboards || []).find(function(dd) { return dd.domain === domain; });
 
-      // Panel 1: Quick stats
       let html = '<div class="panel"><h3>Overview</h3><table style="width:100%;font-size:0.85rem;">';
-      html += '<tr><th style="width:120px;">Pages</th><td>' + (pages.length || 0) + '</td></tr>';
+      html += '<tr><th style="width:100px;">Pages</th><td style="font-size:1.1rem;font-weight:700;">' + (pages.length || 0) + '</td></tr>';
 
-      // Per-domain stats from dashboard
       if (foundDash) {
-        html += '<tr><th>Low Confidence</th><td><span style="color:var(--red)">' + (foundDash.low_confidence_count || 0) + '</span></td></tr>';
-        html += '<tr><th>Stale</th><td><span style="color:var(--yellow)">' + (foundDash.stale_count || 0) + '</span></td></tr>';
+        html += '<tr><th>Low Confidence</th><td><span style="color:var(--red);font-weight:500;">' + (foundDash.low_confidence_count || 0) + '</span></td></tr>';
+        html += '<tr><th>Stale</th><td><span style="color:var(--yellow);font-weight:500;">' + (foundDash.stale_count || 0) + '</span></td></tr>';
       } else {
-        // Compute from page list
-        let lowConf = 0, stale = 0;
+        let lowConf = 0;
         for (const p of pages) {
           const c = p.confidence ?? 0;
           if (typeof c === 'boolean') c = c ? 1 : 0;
           if (parseFloat(c) < 0.5) lowConf++;
         }
-        html += '<tr><th>Low Confidence</th><td><span style="color:var(--red)">' + lowConf + '</span></td></tr>';
-        html += '<tr><th>Stale</th><td><span style="color:var(--yellow)">' + stale + '</span></td></tr>';
+        html += '<tr><th>Low Confidence</th><td><span style="color:var(--red);font-weight:500;">' + lowConf + '</span></td></tr>';
+        html += '<tr><th>Stale</th><td><span style="color:var(--yellow);font-weight:500;">0</span></td></tr>';
       }
 
-      // Count by kind
       const kindCount = {};
       for (const p of pages) {
         const k = p.kind || 'page';
@@ -77,7 +73,6 @@
       html += '</table></div>';
       panels.innerHTML = html;
 
-      // Pages list
       if (!pages.length) {
         pagesList.innerHTML = '<p class="muted">No pages found in this domain.</p>';
         return;
@@ -86,18 +81,19 @@
       let phtml = '<table style="width:100%;font-size:0.85rem;"><thead><tr><th>Title</th><th>Kind</th><th>Confidence</th><th>Updated</th></tr></thead><tbody>';
       for (const p of pages) {
         const c = p.confidence ?? 0;
-        const confStr = typeof c === 'boolean' ? (c ? '1.0' : '0.0') : Number(c).toFixed(2);
-        const confColor = parseFloat(confStr) >= 0.7 ? 'var(--green)' : (parseFloat(confStr) >= 0.4 ? 'var(--yellow)' : 'var(--red)');
+        const confStr = typeof c === 'boolean' ? (c ? '1.00' : '0.00') : Number(c).toFixed(2);
+        const confNum = parseFloat(confStr);
+        const confClass = confNum >= 0.7 ? 'conf-high' : (confNum >= 0.4 ? 'conf-med' : 'conf-low');
+        const confColorVar = confNum >= 0.7 ? 'var(--green)' : (confNum >= 0.4 ? 'var(--yellow)' : 'var(--red)');
         phtml += '<tr style="cursor:pointer;" onclick="location.href=\'/ui/page/' + encodeURIComponent(p.page_id) + '\'">'
           + '<td><a class="nav-link" href="/ui/page/' + encodeURIComponent(p.page_id) + '">' + esc(p.title || p.page_id) + '</a></td>'
           + '<td>' + esc(p.kind || 'page') + '</td>'
-          + '<td><span style="color:' + confColor + '">' + confStr + '</span></td>'
-          + '<td>' + esc(p.updated_at || '') + '</td>'
+          + '<td><span class="' + confClass + '" style="font-weight:500;">' + confStr + '</span>'
+          + '<span class="conf-bar-wrap ' + confClass + '"><span class="fill" style="width:' + (confNum * 100) + '%;"></span></span></td>'
+          + '<td style="color:var(--muted);font-size:0.835rem;white-space:nowrap;">' + esc(p.updated_at || '') + '</td>'
           + '</tr>';
       }
       phtml += '</tbody></table>';
-      // Add edit link
-      phtml += '<div style="margin-top:8px;"><a class="btn primary" href="/ui/editor">+ New Page</a></div>';
       pagesList.innerHTML = phtml;
 
     } catch (e) {

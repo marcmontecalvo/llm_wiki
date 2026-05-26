@@ -1,15 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Governance Issues</h2>
-<div id="issues-status" class="muted">Loading governance data&hellip;</div>
-<div class="panels" id="issues-panels" style="display:grid;grid-template-columns:1fr;">
+<div id="issues-status" class="muted" style="font-size:0.835rem;margin-bottom:14px;"></div>
+<div class="panels" id="issues-panels" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;">
 </div>
+
+<!-- Severity color helpers -->
+<style>
+.issue-card { border-left: 3px solid var(--border); }
+.issue-card.severity-error { border-left-color: var(--red); }
+.issue-card.severity-warning { border-left-color: var(--yellow); }
+.issue-card.severity-info { border-left-color: var(--accent); }
+</style>
 
 <script>
 const _uiUser = "{{ ui_user }}";
 const _uiPass = "{{ ui_password }}";
 function _auth() { return "Basic " + btoa(_uiUser + ":" + _uiPass); }
 function esc(s) { return String(s ?? ""); }
+
+function severityClass(sev) {
+  return 'severity-' + (sev || 'info');
+}
 
 async function loadIssues() {
   var statusEl = document.getElementById("issues-status");
@@ -32,33 +44,33 @@ async function loadIssues() {
     var lintErr = g.lint_errors || 0;
     var lintWarn = g.lint_warnings || 0;
     if (lintErr > 0) {
-      addCard("Lint Errors", "error", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + lintErr + '</td></tr><tr><th>Pages Checked</th><td>' + (g.total_pages || 0) + '</td></tr></table>');
+      addCard("Lint Errors", "error", '<table style="width:100%;font-size:0.85rem;"><tr><th style="width:100px;">Count</th><td><span style="color:var(--red);font-weight:600;">' + lintErr + '</span></td></tr><tr><th>Pages Checked</th><td>' + (g.total_pages || 0) + '</td></tr></table>');
     } else if (lintWarn > 0) {
-      addCard("Lint Warnings", "warning", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + lintWarn + '</td></tr><tr><th>Pages Checked</th><td>' + (g.total_pages || 0) + '</td></tr></table>');
+      addCard("Lint Warnings", "warning", '<table style="width:100%;font-size:0.85rem;"><tr><th style="width:100px;">Count</th><td><span style="color:var(--yellow);font-weight:600;">' + lintWarn + '</span></td></tr><tr><th>Pages Checked</th><td>' + (g.total_pages || 0) + '</td></tr></table>');
     }
 
     if (g.stale_pages > 0) {
-      addCard("Stale Pages", "warning", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + g.stale_pages + '</td></tr><tr><th>Description</th><td>Pages not updated since last governance cycle</td></tr></table>');
+      addCard("Stale Pages", "warning", '<table style="width:100%;font-size:0.85rem;"><tr><th style="width:100px;">Count</th><td><span style="color:var(--yellow);font-weight:600;">' + g.stale_pages + '</span></td></tr><tr><th>Description</th><td>Pages not updated since last governance cycle</td></tr></table>');
     }
 
     if (g.low_quality_pages > 0) {
-      addCard("Low Quality Pages", "warning", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + g.low_quality_pages + '</td></tr><tr><th>Criteria</th><td>Low citation count or missing front matter</td></tr></table>');
+      addCard("Low Quality Pages", "warning", '<table style="width:100%;font-size:0.85rem;"><tr><th style="width:100px;">Count</th><td><span style="color:var(--yellow);font-weight:600;">' + g.low_quality_pages + '</span></td></tr><tr><th>Criteria</th><td>Low citation count or missing front matter</td></tr></table>');
     }
 
     if (g.orphan_pages > 0) {
-      addCard("Orphan Pages", "info", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + g.orphan_pages + '</td></tr><tr><th>Description</th><td>Pages with no incoming or outgoing links</td></tr></table>');
+      addCard("Orphan Pages", "info", '<table style="width:100%;font-size:0.85rem;"><tr><th style="width:100px;">Count</th><td>' + g.orphan_pages + '</td></tr><tr><th>Description</th><td>Pages with no incoming or outgoing links</td></tr></table>');
     }
 
     if (g.duplicates > 0) {
-      addCard("Duplicate Pages", "warning", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + g.duplicates + '</td></tr><tr><th>Action</th><td>Review and merge or consolidate</td></tr></table>');
+      addCard("Duplicate Pages", "warning", '<table style="width:100%;font-size:0.85rem;"><tr><th style="width:100px;">Count</th><td><span style="color:var(--yellow);font-weight:600;">' + g.duplicates + '</span></td></tr><tr><th>Action</th><td>Review and merge or consolidate</td></tr></table>');
     }
 
     if (g.contradictions > 0) {
-      addCard("Contradictions", "error", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + g.contradictions + '</td></tr><tr><th>Action</th><td>Review conflicting data between pages</td></tr></table>');
+      addCard("Contradictions", "error", '<table style="width:100%;font-size:0.85rem;"><tr><th style="width:100px;">Count</th><td><span style="color:var(--red);font-weight:600;">' + g.contradictions + '</span></td></tr><tr><th>Action</th><td>Review conflicting data between pages</td></tr></table>');
     }
 
     if (g.broken_links > 0) {
-      addCard("Broken Links", "error", '<table style="width:100%;font-size:0.85rem;"><tr><th>Count</th><td>' + g.broken_links + '</td></tr><tr><th>Action</th><td>Update or remove broken references</td></tr></table>');
+      addCard("Broken Links", "error", '<table style="width:100%;font-size:0.85rem;"><tr><th style="width:100px;">Count</th><td><span style="color:var(--red);font-weight:600;">' + g.broken_links + '</span></td></tr><tr><th>Action</th><td>Update or remove broken references</td></tr></table>');
     }
 
     if (g.archived_pages > 0 || g.archived_candidates > 0) {
@@ -66,12 +78,12 @@ async function loadIssues() {
     }
 
     if (cards.length === 0) {
-      panelsEl.innerHTML = '<div class="panel"><h3>All Clear</h3><p class="muted">No governance issues found. Last run: ' + esc(statusEl.textContent) + '</p></div>';
+      panelsEl.innerHTML = '<div class="panel"><h3>All Clear</h3><p class="muted" style="font-size:0.85rem;">No governance issues found. Last run: ' + esc(statusEl.textContent) + '</p></div>';
     } else {
       panelsEl.innerHTML = "";
       cards.forEach(function(c) {
         var div = document.createElement("div");
-        div.className = "panel";
+        div.className = "panel issue-card " + severityClass(c.severity);
         div.innerHTML = '<h3>' + esc(c.title) + '</h3>' + c.details;
         panelsEl.appendChild(div);
       });
