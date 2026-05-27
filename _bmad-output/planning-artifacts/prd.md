@@ -26,7 +26,96 @@ LLM Wiki is a self-maintaining, daemon-governed knowledge service for agentic AI
 
 The core shift from traditional RAG: knowledge is compiled once, maintained continuously, and queried with provenance. Agents receive pre-synthesized answers with confidence scores, source citations, and contradiction warnings instead of raw chunks. Every new source makes the wiki richer through cross-referencing, entity integration, and synthesis caching — knowledge compounds; it does not evaporate between sessions.
 
-This is a brownfield expansion of a working V1 codebase. The pivot from importable Python library to standalone Docker service removes all embedding overhead — no language lock-in, no version conflicts, no harness-specific integration work. Each household runs its own isolated instance on a dedicated cloud VM alongside Homefront and Honcho. The service is auth-free (VM-level isolation is the security boundary), and plain-text on disk (Obsidian-compatible markdown); the knowledge is always yours and always readable without the service running.
+This is a brownfield expansion of a working V1 codebase. The pivot from importable Python library to standalone Docker service removes all embedding overhead — no language lock-in, no version conflicts, no harness-specific integration work. Each workspace runs its own isolated instance on a dedicated cloud VM alongside Homefront and Honcho. The service is auth-free (VM-level isolation is the security boundary), and plain-text on disk (Obsidian-compatible markdown); the knowledge is always yours and always readable without the service running.
+
+### Homefront Integration — Workspace Facts
+
+LLM-Wiki serves Homefront as a deterministic structured facts service and governed wiki knowledge service. This is a complementary layer to the existing page/wiki/search/query/export capability — facts and pages are distinct surfaces.
+
+**Architecture roles:**
+- **Homefront**: household operating runtime — policies, routines, context assembly, approvals, scheduling. Asks LLM-Wiki for facts and knowledge.
+- **Honcho**: conversational/profile memory — sessions, messages, peer cards, conclusions. Asks/Lookups by Homefront for memory.
+- **LLM-Wiki**: deterministic structured facts + governed wiki knowledge — exact facts with provenance, confidence, versioning, conflict/review; plus governed markdown pages with search and synthesis.
+
+**Object model alignment:**
+- `Workspace` = top-level isolated cell (replaces `household_id` in technical contracts, with `household.*` category aliases preserved for backward compatibility)
+- `Peer` = person/assistant/support/system actor referenced in provenance
+- `Session` = source interaction context (Honcho-owned)
+- `Fact` = deterministic structured key/value knowledge item (LLM-Wiki-owned)
+- `Page` = governed markdown/wiki artifact (LLM-Wiki-owned)
+- `Domain` = organizational/search/routing label, NOT a security boundary
+
+**Workspace Facts API:**
+
+```
+GET    /v1/workspaces/{workspace_id}/facts
+GET    /v1/workspaces/{workspace_id}/facts/{fact_key}
+PUT    /v1/workspaces/{workspace_id}/facts/{fact_key}
+DELETE /v1/workspaces/{workspace_id}/facts/{fact_key}
+GET    /v1/workspaces/{workspace_id}/facts/{fact_key}/history
+POST   /v1/workspaces/{workspace_id}/facts:batch
+```
+
+**Fact schema (Python Pydantic):**
+
+```python
+class KnowledgeFact(BaseModel):
+    id: UUID
+    workspace_id: str
+    category: str
+    key: str
+    value: dict[str, Any]
+    source: KnowledgeSource
+    provenance: list[ProvenanceRef] = []
+    confidence: float | None = None
+    authority_score: float | None = None
+    status: Literal["active", "pending_review", "conflicted", "archived", "deleted"]
+    visibility: Literal["workspace", "adults_only", "profile_private", "support_redacted", "system_internal"] = "workspace"
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    version: int
+```
+
+**Category registry (canonical `workspace.*` with legacy `household.*` aliases):**
+
+| Canonical | Legacy Alias |
+|-----------|-------------|
+| workspace.roster | household.roster |
+| workspace.assignments | household.assignments |
+| workspace.pets | household.pets |
+| workspace.appliances | household.appliances |
+| workspace.preferences | household.preferences |
+| workspace.schedule | household.schedule |
+| workspace.vehicles | household.vehicles |
+| workspace.presence | household.presence |
+| workspace.recurring_responsibilities | household.recurring_responsibilities |
+
+**Storage model:** Facts stored as machine-readable files alongside wiki pages, not in a database:
+
+```
+wiki_system/
+  workspaces/
+    {workspace_id}/
+      facts/
+        index.json
+        categories/
+          workspace.pets.jsonl
+          workspace.schedule.jsonl
+        history/
+          {fact_key_hash}.jsonl
+      pages/          (existing wiki pages, workspace-scoped)
+      inbox/
+      exports/
+```
+
+Rules:
+- Current fact state is machine-readable without markdown parsing
+- Fact history is append-only
+- Writes use temp file + `os.replace` (atomic)
+- Per-workspace/per-fact locks prevent concurrent write races
+- Pages may reference facts but are not the canonical fact state
 
 LLM-assisted extraction is optional and off by default — the system runs fully on heuristics and sentence-transformers with no LLM dependency. Enable `llm_extraction: true` in `daemon.yaml` to unlock richer tag extraction, claim confidence scoring, and LLM-quality summaries. Provider config (Anthropic, OpenAI, OpenRouter, or local vLLM/Llama) lives in `models.yaml`.
 
@@ -64,9 +153,8 @@ The competitive moat is completeness: every peer project has one or two of these
 
 ### Business Success
 
-- **Sprint 1 (~2-3 days):** Docker service live — MCP + REST + CLI functional, daemon running V1 jobs, Homefront connected and querying
-- **Sprint 2 (~2-3 days):** V2 trust layer + cross-cutting gaps (confidence scoring, citation enforcement, vector search, `llms.txt` exports, multi-agent coverage)
-- **Sprint 3 (~2-3 days):** V3 cross-domain synthesis (entity promotion, cross-domain summaries, authority scoring, synthesis cache)
+- **Office Pilot (~2-3 days per phase):** Docker service live with MCP + REST + CLI, daemon running V1 jobs, Homefront connected and querying, workspace facts API core operational
+- **Family Production Rollout (~2-3 days per phase):** Trust layer complete, cross-domain intelligence, full confidence/citation pipeline, workspace facts with conflict/review, Homefront context snapshot assembler ready
 - **Sprint 4+ (when ready):** V4 web UI + graph, V5 online integrations
 
 ### Technical Success
@@ -87,7 +175,7 @@ The competitive moat is completeness: every peer project has one or two of these
 
 ## Product Scope
 
-### MVP — Service Pivot (Sprint 1)
+### Office Pilot Foundation — Service Pivot (Sprint 1)
 
 The minimum that makes LLM Wiki useful as a service rather than a library:
 
@@ -95,12 +183,13 @@ The minimum that makes LLM Wiki useful as a service rather than a library:
 - Daemon running all V1 governance jobs (lint, contradiction detection, staleness, export, index rebuild)
 - MCP tool surface: `query` (three depths), `ingest`, `ingest_status`, `search`, `read_page`, `list_pages`, `export`
 - REST API mirroring MCP surface
-- `docker-compose.yml` + host-mounted volume for wiki data
+- Workspace Facts API: CRUD endpoints under `/v1/workspaces/{workspace_id}/facts`
+- `docker-compose.yml` + host-mounted volume for wiki data (includes facts storage layout)
 - Health check endpoint; structured daemon logs queryable via CLI
 
-### Growth Features — V2 through V4
+### Growth Features — V2 through V4 (Family Production Rollout Phase)
 
-Built on the service foundation, in delivery order:
+Built on the service foundation and Office Pilot validation, in delivery order:
 
 - **V2 Trust Layer:** Confidence scoring, citation enforcement, hallucination guard, truth-seeking audits, orphan/stale detection
 - **V2 Cross-cutting:** Vector/semantic search, AI-consumable exports (`llms.txt`, JSON-LD), multi-agent session coverage (Gemini CLI, Ollama)
@@ -224,6 +313,12 @@ LLM Wiki exposes three complementary surfaces over the same underlying service l
 | `read_page` | Fetch a single wiki page by ID or slug; includes frontmatter provenance metadata |
 | `list_pages` | List pages by domain, kind, or tag; cursor-based pagination |
 | `export` | Trigger or retrieve exports (`llms_txt`, `llms_full_txt`, `json_ld`, `graph`); includes `generated_at` and `page_count` |
+| `fact_get` | Get a single fact by key in a workspace |
+| `fact_list` | List facts in a workspace with category filter |
+| `fact_put` | Create or update a fact in a workspace |
+| `fact_delete` | Delete a fact |
+| `fact_history` | Get fact version history |
+| `fact_batch_put` | Batch create/update facts |
 
 **REST API**
 
@@ -243,6 +338,30 @@ LLM Wiki exposes three complementary surfaces over the same underlying service l
 | `POST` | `/v1/export` | Trigger export generation |
 | `GET` | `/v1/export/{format}` | Retrieve export; `Last-Modified` header included |
 | `GET` | `/v1/domains/{domain}/dashboard` | Per-domain health summary: page count, confidence distribution, staleness, contradictions (Epic 3) |
+
+**Workspace Facts API**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/workspaces/{workspace_id}/facts` | List facts for workspace with category filter |
+| `GET` | `/v1/workspaces/{workspace_id}/facts/{fact_key}` | Get single fact by key |
+| `PUT` | `/v1/workspaces/{workspace_id}/facts/{fact_key}` | Create or update fact |
+| `DELETE` | `/v1/workspaces/{workspace_id}/facts/{fact_key}` | Delete fact |
+| `GET` | `/v1/workspaces/{workspace_id}/facts/{fact_key}/history` | Get fact version history |
+| `POST` | `/v1/workspaces/{workspace_id}/facts:batch` | Batch create/update facts |
+
+**Workspace-Scoped Knowledge API**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/workspaces/{workspace_id}/knowledge/inbox` | Submit source for workspace |
+| `POST` | `/v1/workspaces/{workspace_id}/knowledge/search` | Search within workspace |
+| `POST` | `/v1/workspaces/{workspace_id}/knowledge/query` | Query within workspace |
+| `GET` | `/v1/workspaces/{workspace_id}/knowledge/pages/{page_id}` | Read page in workspace scope |
+| `GET` | `/v1/workspaces/{workspace_id}/knowledge/review` | Review queue for workspace |
+| `GET` | `/v1/workspaces/{workspace_id}/knowledge/conflicts` | Fact conflicts for workspace |
+| `GET` | `/v1/workspaces/{workspace_id}/knowledge/stale` | Stale content for workspace |
+| `POST` | `/v1/workspaces/{workspace_id}/knowledge/export` | Export for workspace |
 
 **CLI Commands**
 
@@ -265,7 +384,7 @@ llm-wiki health [--json]
 ### API Versioning
 
 - URL path versioning: `/v1/`, `/v2/` etc.
-- `v1` covers the service pivot MVP through V3 features
+- `v1` covers the service pivot Office Pilot through V3 features
 - Breaking changes require a major version bump; non-breaking additions (new optional fields, new endpoints) do not
 - MCP tool names are stable within a major version; deprecation window is one major version
 - `X-LLM-Wiki-Version` response header on all REST responses
@@ -368,6 +487,7 @@ llm-wiki health [--json]
 | `INVALID_DEPTH` | MCP, REST | Unrecognized query depth value |
 | `EXPORT_NOT_READY` | MCP, REST, CLI | Export not yet generated; trigger first |
 | `DOMAIN_UNKNOWN` | MCP, REST, CLI | Specified domain not in `domains.yaml` |
+| `UNKNOWN_FACT_CATEGORY` | MCP, REST, CLI | Specified fact category not in the category registry |
 REST: HTTP status codes + JSON body with `error_code`, `message`, and optional `rebuild_hint`. MCP: JSON-RPC error objects. CLI: exit code 1, error on stderr.
 
 **Note:** Deep query timeout is a *normal response variant*, not an error. A deep query that exceeds 30s returns HTTP 200 with `{"partial": true, "timed_out": true, "results": [...]}` — it does not return an error code. `QUERY_TIMEOUT` is therefore absent from the error table; it does not appear in `ERROR_MAP` and does not trigger an HTTP 4xx/5xx.
@@ -380,13 +500,13 @@ REST: HTTP status codes + JSON body with `error_code`, `message`, and optional `
 
 ## Project Scoping & Phased Development
 
-### MVP Strategy & Philosophy
+### Office Pilot Strategy & Philosophy
 
-**MVP Approach:** Platform MVP — establish the service foundation so every subsequent sprint builds on a running, connectable system. The minimum is a Docker container that any agent harness can reach over MCP within 15 minutes of `docker-compose up`.
+**Office Pilot Approach:** Platform foundation — establish the service and facts API foundation so every subsequent sprint builds on a running, connectable system. The minimum is a Docker container that any agent harness can reach over MCP within 15 minutes of `docker-compose up`, plus workspace facts CRUD.
 
 **Resource Requirements:** Solo developer (Marc); ~2-3 days per sprint; all tooling already in place (uv, pytest, ruff, mypy, CI).
 
-### Sprint 1 — Service Pivot (MVP)
+### Sprint 1 — Service Pivot (Office Pilot)
 
 **Core User Journeys Supported:** Zero-to-MCP integration; crash recovery.
 
@@ -395,13 +515,15 @@ REST: HTTP status codes + JSON body with `error_code`, `message`, and optional `
 - Daemon running all V1 governance jobs (lint, contradiction detection, staleness, export, index rebuild)
 - MCP tool surface: `query` (three depths), `ingest`, `ingest_status`, `search`, `read_page`, `list_pages`, `export`
 - REST API mirroring MCP surface + `/v1/health`, `/v1/daemon/status`, `/v1/daemon/jobs`, `/v1/daemon/jobs/index-rebuild`
-- `docker-compose.yml` + host-mounted volume for wiki data
+- Workspace Facts API: CRUD endpoints under `/v1/workspaces/{workspace_id}/facts` with atomic writes
+- Workspace-Scoped Knowledge API endpoints
+- `docker-compose.yml` + host-mounted volume for wiki data (includes facts storage layout)
 - Health check endpoint; structured daemon logs queryable via CLI
 - Checkpoint/resume for daemon crash recovery; atomic page writes
 
 ### Sprint 2 — V2 Trust Layer + Cross-Cutting
 
-**Core User Journeys Supported:** Contradiction surfaces automatically; all four journeys fully supported.
+**Core User Journeys Supported:** Contradiction surfaces automatically; all four journeys fully supported; trust pipeline operational for both facts and pages.
 
 **Must-Have Capabilities:**
 - Confidence scoring on pages and claims; visible in query results
@@ -573,4 +695,5 @@ REST: HTTP status codes + JSON body with `error_code`, `message`, and optional `
 
 ### Security
 
-- **NFR-S1:** The service binds to `0.0.0.0` inside the container; port exposure is controlled by `docker-compose.yml` port mapping. Each household runs on a dedicated VM — VM-level isolation is the security boundary. No in-service auth is required.
+- **NFR-S1:** The service binds to `0.0.0.0` inside the container; port exposure is controlled by `docker-compose.yml` port mapping. Each workspace runs on a dedicated VM — VM-level isolation is the security boundary. No in-service auth is required.
+- **NFR-S2:** Domain is a categorization/routing label, NOT a security boundary. workspace_id is the isolation object. Personal domains cannot leak across workspace boundaries via workspace-scoped API endpoints.

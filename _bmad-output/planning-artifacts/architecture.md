@@ -58,7 +58,7 @@ The PRD defines 63+ FRs across 9 categories:
 - **No external database** — filesystem is source of truth; indexes are derived caches
 - **No LLM calls in daemon** — all governance is deterministic/algorithmic
 - **Docker + host-mounted volume** — no data inside the image; config via mounted YAML
-- **Cloud per-household deployment** — each household on a dedicated VM; VM-level isolation is the security boundary; no in-service auth required
+- **Cloud per-workspace deployment** — each workspace on a dedicated VM; VM-level isolation is the security boundary; no in-service auth required
 - **No optional vector extras** — `faiss-cpu` + `sentence-transformers` are required core dependencies; vector search is always enabled
 - **Optional LLM extraction** — controlled by `llm_extraction` feature flag in `daemon.yaml`; when disabled, heuristics handle all extraction; when enabled, provider config in `models.yaml` supports Anthropic, OpenAI, OpenRouter, or local vLLM/Llama (all OpenAI-compatible via `base_url`)
 - **Known P0 bugs (Sprint 1 prerequisites):** non-atomic index writes (fix: tmp→os.replace), no write mutex (fix: threading.Lock per index), orphaned inbox files on crash (fix: startup recovery)
@@ -250,7 +250,7 @@ All providers use the OpenAI-compatible API — `base_url` override covers OpenR
 ```yaml
 # domains.yaml — confidence weight config per domain
 domains:
-  - name: household
+  - name: workspace
     confidence_weights:
       citation_presence: 0.4   # has valid source citations
       trust_tag: 0.2           # extracted > inferred > ambiguous (llm_extraction only)
@@ -271,18 +271,91 @@ Default weights apply when not specified. When `llm_extraction: false`, `trust_t
 
 ---
 
-### Multi-User Household Architecture
+## Three-Layer Architecture — Ownership Boundaries
 
-**Deployment topology:** One llm-wiki instance per household, running as a sidecar container alongside the agent harness on a dedicated VM.
+LLM-Wiki integrates with two other services in the Homefront stack. Clear ownership boundaries prevent duplication and ensure correct authority.
 
-**Domain structure for multi-user households:**
+```
+┌──────────────────────────────────────────────────┐
+│              Homefront Runtime                    │
+│  - Workspace provisioning                         │
+│  - Policies, rules, approvals                     │
+│  - Routines, routine runs                         │
+│  - Context snapshot assembly                      │
+│  - Activity/action ledger                         │
+└──────────┬───────────────────────┬────────────────┘
+           │ asks Honcho           │ asks LLM-Wiki
+           │ for memory            │ for facts + knowledge
+           ▼                       ▼
+┌─────────────────────┐  ┌────────────────────────┐
+│    Honcho Memory     │  │   LLM-Wiki Facts       │
+│ - Peer/session/msg   │  │ - Deterministic facts  │
+│ - Profile cards      │  │ - Fact history/v1      │
+│ - Conversational     │  │ - Source/provenance    │
+│   continuity         │  │ - Conflict/review      │
+│ - Memory search      │  │                        │
+│                    │  │ ┌────────────────────────┐ │
+│                    │  │ │ Page Knowledge Layer   │ │
+│                    │  │ │ - Governed markdown    │ │
+│                    │  │ │ - Search/query         │ │
+│                    │  │ │ - Exports              │ │
+│                    │  │ └────────────────────────┘ │
+└─────────────────────┘  └────────────────────────┘
+```
+
+**Ownership rules:**
+
+| Service | Owns | Does Not Own |
+|---------|------|-------------|
+| Homefront | Workspace/cell isolation, policies, routines, context snapshots, approvals | Facts (asks LLM-Wiki, does not store), Memory (asks Honcho, does not store) |
+| Honcho | Conversational/profile memory, peer/session/message data, memory search | Facts, policy authority, routine execution |
+| LLM-Wiki | Deterministic facts, page knowledge, provenance/confidence, fact history, conflict/review | Memory, policy execution, routine execution |
+
+**Honcho bridge (push/pull) semantics:**
+
+- **Push**: LLM-Wiki exports wiki knowledge to Honcho context. This makes wiki knowledge available as source material for Honcho-enabled agents. It does NOT make Honcho the source of truth for LLM-Wiki facts or pages.
+- **Pull**: LLM-Wiki harvests Honcho conclusions as candidate source material. This does NOT make Honcho conclusions automatically trusted facts -- factual conclusions from Honcho require review gating, especially for safety-sensitive categories. Honcho conclusions land as `honcho_conclusion` source type with default `pending_review` status.
+
+**Data integrity**: Fact current state must be machine-readable without parsing markdown prose. Fact history must be append-only. Writes must use temp file + `os.replace`. Concurrent writes must use a workspace/fact-key lock. Pages may reference facts but pages are not the canonical fact state.
+
+## Workspace Facts Storage Layout
+
+Facts are stored as machine-readable files alongside wiki pages, preserving the file-backed data model:
+
+```
+wiki_system/
+  workspaces/
+    {workspace_id}/
+      facts/
+        index.json
+        categories/
+          workspace.pets.jsonl
+          workspace.schedule.jsonl
+          workspace.assignments.jsonl
+        history/
+          {fact_key_hash}.jsonl
+      pages/          (existing wiki pages, workspace-scoped)
+      inbox/
+      exports/
+```
+
+**Domain vs workspace**:
+
+- `Domain` = categorization, routing, and search label. NOT a security boundary. Pages in `user-{id}/` domain using personal scope are still isolated by workspace.
+- `Workspace` = the technical isolation boundary, aligned with Honcho's workspace concept. Corresponds to Homefront's "household" in the UI (UI copy may say "household", technical contracts use `workspace_id`).
+
+### Multi-User Workspace Architecture
+
+**Deployment topology:** One llm-wiki instance per workspace, running as a sidecar container alongside the agent harness on a dedicated VM.
+
+**Domain structure for multi-user workspaces:**
 
 ```yaml
-# domains.yaml — household instance
+# domains.yaml — workspace instance
 domains:
-  - name: household
+  - name: workspace
     scope: shared          # visible to all members
-    description: Shared household knowledge
+    description: Shared workspace knowledge
 
   - name: user-{profile_id}
     scope: personal        # scoped to one profile
@@ -294,8 +367,8 @@ domains:
 
 | `domain` param | Returns                                                 |
 | -------------- | ------------------------------------------------------- |
-| omitted        | `household/` + requesting profile's `user-{id}/` merged |
-| `household`    | household-only results                                  |
+| omitted        | `workspace/` + requesting profile's `user-{id}/` merged |
+| `workspace`    | workspace-only results                                  |
 | `user-{id}`    | that profile's personal domain only                     |
 | `all`          | all domains                                             |
 
@@ -304,15 +377,15 @@ domains:
 **Cross-pollination (personal → shared knowledge):**
 
 - Sprint 3 cross-domain synthesis (FR45-47) handles automatic entity promotion
-- When an entity in `user-{id}/` is referenced across enough sources/domains, it becomes a candidate for promotion to `household/`
-- Promotion thresholds configurable per-household in `domains.yaml`
+- When an entity in `user-{id}/` is referenced across enough sources/domains, it becomes a candidate for promotion to `workspace/`
+- Promotion thresholds configurable per-workspace in `domains.yaml`
 
 **Sprint 1 implications (design now, not deferred):**
 
 1. `domains.yaml` schema: add `scope: shared|personal` and optional `owner: {profile_id}` — validated by Pydantic on startup
-2. `WikiQuery.search()`: add `scope_to_profile: str | None` — when set, merges `household/` + `user-{id}/` results
+2. `WikiQuery.search()`: add `scope_to_profile: str | None` — when set, merges `workspace/` + `user-{id}/` results
 3. MCP `query` tool: `profile_id` parameter; REST: `X-Profile-Id` header via `Depends(get_profile_id)`
-4. Daemon governance: scope-aware job execution — `GovernanceJob` runs `household/` globally, `user-{id}/` per owner
+4. Daemon governance: scope-aware job execution — `GovernanceJob` runs `workspace/` globally, `user-{id}/` per owner
 
 ## Implementation Patterns & Consistency Rules
 
@@ -943,7 +1016,7 @@ config/                             # host dir; read-only at /config
 - MCP stdio: process spawn; harness selects transport per connection config
 - Profile scoping: `X-Profile-Id` header (REST), `profile_id` param (MCP); harness populates these
 - llm-wiki trusts the caller; no auth layer in llm-wiki itself
-- Domain contract: omit `domain` → household + user-{id} merged; `household` → shared only; `user-{id}` → personal only
+- Domain contract: omit `domain` → workspace + user-{id} merged; `workspace` → shared only; `user-{id}` → personal only; domain is categorization only, not the isolation boundary
 
 **Claude Code hooks → inbox:**
 - `SessionEnd` / `PreCompact` hooks write to `wiki_system/inbox/new/`
@@ -1076,7 +1149,7 @@ All architectural issues surfaced during Advanced Elicitation (Code Review Gaunt
 **Key Strengths:**
 - All 13 implementation rules are specific, verifiable, and include counter-examples and anti-pattern code blocks
 - Sprint 3 expansion pre-positioned: `synthesis/` module structure + async generator protocol ensure no re-arch needed at Sprint 3
-- Multi-user domain scoping fully specified: `X-Profile-Id` / `profile_id` pattern, `WikiQuery.search(scope_to_profile=...)`, household + personal domain merge semantics
+- Multi-user domain scoping fully specified: `X-Profile-Id` / `profile_id` pattern, `WikiQuery.search(scope_to_profile=...)`, workspace + personal domain merge semantics; domain is categorization only
 - Feature flag system enables LLM-optional operation from day one; heuristic path is first-class, not a fallback footnote
 - Brownfield constraints respected throughout: existing file-based storage, daemon job patterns, and APScheduler wiring are unchanged
 - Error handling consolidated: single `exceptions.py` + single `errors.py` ERROR_MAP eliminates scattered exception handling across routers and tools

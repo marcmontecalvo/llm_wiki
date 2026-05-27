@@ -175,9 +175,10 @@ This document provides the complete epic and story breakdown for llm_wiki, decom
 - `WIKI_ROOT=/wiki_system` set in Dockerfile
 - `stopwaitsecs=30` for daemon supervisord process (mid-write crash safety)
 
-**Multi-User Domain Scoping (Sprint 1, design-now):**
+**Multi-User Domain Scoping and Workspace Isolation (Sprint 1, design-now):**
 - `domains.yaml` schema: add `scope: shared|personal` and optional `owner: {profile_id}` fields validated by Pydantic
 - `WikiQuery.search()`: add `scope_to_profile: str | None` parameter for profile-based domain scoping
+- `workspace_id` is the technical isolation boundary (not domain). Domains are categorization labels only.
 - MCP `query` tool: `profile_id` parameter; REST: `X-Profile-Id` header via `Depends(get_profile_id)`
 - Domain scope logic lives in `WikiQuery.search()` exclusively — never filter domains in route or tool code
 
@@ -213,6 +214,13 @@ N/A — this is a backend API service (MCP + REST + CLI). No UI requirements for
 | FR60-61                  | Epic 1 | Domain list endpoint; updated_since filter on list_pages                                                                  |
 | FR62                     | Epic 3 | Synthesis cache pages tagged kind:synthesis                                                                               |
 | FR63                     | Epic 1 | SQLite query log at state/query_log.db                                                                                    |
+| **HF.1**                 | Epic HF| Workspace Facts API (REST + MCP), workspace_id, Fact CRUD                                                                |
+| **HF.2**                 | Epic HF| Fact storage and history (file-backed, atomic, locked)                                                                  |
+| **HF.3**                 | Epic HF| Category registry and aliases                                                                                           |
+| **HF.4**                 | Epic HF| Fact conflict detection and review queue                                                                                |
+| **HF.5**                 | Epic HF| Homefront contract test harness, CI integration                                                                         |
+| **HF.6**                 | Epic HF| Workspace-scoped knowledge API, domain-as-categorization                                                                |
+| **HF.7**                 | Epic HF| Export/delete for Homefront, profile-scoped facts                                                                       |
 
 ## Epic List
 
@@ -230,6 +238,12 @@ Operators and agents can see confidence scores on every page and claim. Low-conf
 Entities shared across domains surface automatically. Repeated high-value queries become cached wiki pages. Per-domain dashboards show health at a glance.
 **FRs covered:** FR45-50b, FR62 (uses FR63 from Epic 1)
 **NFRs:** NFR-P5 (index rebuild at scale)
+
+### Epic HF: Homefront Integration — "Deterministic Workspace Knowledge"
+
+Structured facts API with workspace scoping, history, conflict detection, and review queue. This epic enables Homefront to run simulations from deterministic knowledge and assemble policy-filtered context snapshots.
+
+**FRs covered:** New — workspace facts CRUD, fact history, conflict/review, category registry, workspace-scoped knowledge, contract tests, export/delete for Homefront
 
 ### Epic 4: Web UI & Operations — "Operate and Browse as a Human" *(V4 — future)*
 A browser-based UI for search, browse, graph visualization, and daemon control. First epic with human-facing interface.
@@ -1207,12 +1221,128 @@ So that the active query context stays focused on current knowledge without perm
 **When** run
 **Then** the specified page is moved back from `archive/` to `pages/` and becomes visible in normal query results
 
-## Epic H: Honcho Integration — "Agent Conversational Memory + Compiled Knowledge"
+## Epic HF: Homefront Integration — "Deterministic Workspace Knowledge"
+
+A system of structured facts scoped by workspace, with history, conflict detection, and review behavior, so that Homefront can run simulations from deterministic knowledge and assemble policy-filtered context snapshots.
+
+**Data flow:**
+- ** workspace_id** is the technical isolation boundary. All fact operations are scoped to a workspace. Domain remains a categorization label only.
+- **Categories**: canonical `workspace.*` names with legacy `household.*` aliases normalized on ingest.
+- **Conflict detection**: fact-level conflicts are separate from page-level contradiction detection. When two sources propose incompatible values for the same fact key, a conflict is created in the review queue.
+- **Prior ownership boundary**: This epic is new — enabled by the shared Homefront/Honcho/LLM-Wiki contract v1.
+
+### Story HF.1: Workspace Facts API Foundation
+
+As a Homefront integration client,
+I need exact structured facts scoped by workspace,
+So that Homefront can run simulations from deterministic knowledge.
+
+**Acceptance Criteria:**
+
+1. REST endpoints under `/v1/workspaces/{workspace_id}/facts` exist: `GET /facts`, `GET /facts/{fact_key}`, `PUT /facts/{fact_key}`, `DELETE /facts/{fact_key}`, `GET /facts/{fact_key}/history`, `POST /facts:batch`.
+2. MCP tools `fact_get`, `fact_list`, `fact_put`, `fact_delete`, `fact_history`, and `fact_batch_put` exist.
+3. Facts include `workspace_id`, `category`, `key`, `value`, `source`, `provenance`, `status`, `visibility`, `version`, and timestamps.
+4. Writes are atomic (temp file + `os.replace`) and versioned (monotonic increment).
+5. Unknown categories return `UNKNOWN_FACT_CATEGORY` error.
+6. Existing page/query/search behavior is not broken.
+
+### Story HF.2: Workspace Fact Storage and History
+
+As a wiki operator,
+I want fact storage to be machine-readable, append-only, and crash-safe,
+So that fact history is reliable and concurrent writes never corrupt data.
+
+**Acceptance Criteria:**
+
+1. Current facts are machine-readable without markdown parsing.
+2. Fact history is append-only (JSONL).
+3. Writes use temp file + `os.replace`.
+4. Per-workspace and per-fact locks prevent concurrent write races.
+5. Startup integrity check detects corrupt fact indexes.
+
+### Story HF.3: Category Registry and Aliases
+
+As a Homefront integration client,
+I want a canonical category registry with legacy alias support,
+So that known categories work and unknown categories return stable errors.
+
+**Acceptance Criteria:**
+
+1. `workspace.*` categories are canonical.
+2. `household.*` aliases are accepted and normalized to `workspace.*` equivalents.
+3. Category registry is exposed through REST/MCP/CLI.
+4. Unknown categories are stable errors with `UNKNOWN_FACT_CATEGORY` code and list of valid categories.
+5. Tests cover aliases and invalid categories.
+
+### Story HF.4: Fact Conflict and Review Queue
+
+As a wiki operator,
+I want conflicting fact writes to be detected and queued for review,
+So that incompatible facts don't silently overwrite each other.
+
+**Acceptance Criteria:**
+
+1. Conflicting writes produce `conflict_detected` response with candidates and versions.
+2. Conflicted facts are listed in a workspace-scoped review queue.
+3. Admin/operator can list fact conflicts via REST/MCP/CLI.
+4. Review can choose canonical value, reject candidate, or mark stale.
+5. Sensitive Honcho-harvested conclusions default to `pending_review`.
+
+### Story HF.5: Homefront Contract Test Harness
+
+As an integration verifier,
+I want contract tests covering all Homefront-required endpoints,
+So that future changes don't break Homefront integration.
+
+**Acceptance Criteria:**
+
+1. A contract test file verifies Homefront-required endpoints.
+2. Tests cover read/write/list/history/delete/batch.
+3. Tests cover conflict behavior.
+4. Tests cover workspace isolation.
+5. Tests cover category aliases.
+6. Tests run in CI.
+
+### Story HF.6: Workspace-Scoped Knowledge API
+
+As a Homefront integration client,
+I want all knowledge endpoints (query, search, pages, review, conflicts, export) scoped to a workspace,
+So that domain remains categorization only and workspace is the isolation boundary.
+
+**Acceptance Criteria:**
+
+1. Existing query/search/page/export endpoints support workspace scoping via path-based `workspace_id`.
+2. Domain remains categorization, not isolation.
+3. `X-Profile-Id`/peer scoping is advisory from Homefront and does not replace workspace scoping.
+4. Personal domains cannot leak across workspace boundaries.
+
+### Story HF.7: Export/Delete for Homefront
+
+As a Homefront integration client,
+I need structured export and profile-scoped delete for a workspace,
+So that profile data can be exported and deleted per Homefront's privacy contract.
+
+**Acceptance Criteria:**
+
+1. LLM-Wiki can export facts/pages for a workspace and optionally a peer/profile.
+2. Export includes schema version and provenance.
+3. Profile-private facts can be deleted/tombstoned.
+4. Shared workspace facts are not deleted by profile deletion unless explicitly profile-private.
+5. Unavailable/corrupt export returns failure, not an empty successful bundle.
+
+## Epic H: Honcho Bridge — "Context Integration"
 
 As an agent harness author,
-I want LLM Wiki to integrate with Honcho, so that conversational memory and compiled knowledge work together seamlessly instead of duplicating or conflicting.
+I want LLM Wiki to integrate with Honcho through a push/pull bridge,
+So that wiki knowledge and Honcho memory flow together without duplicating or conflicting.
 
-**Goal:** Honcho = conversational memory ("what were we just talking about?") with running peer-concept summaries and contextual conclusions. LLM Wiki = compiled knowledge ("what do we know about X?") with structured, cross-referenced, governed pages. They are complementary data stores with distinct purposes.
+**Goal:** Honcho = conversational memory ("what were we just talking about?") with running peer-concept summaries and contextual conclusions. LLM Wiki = compiled knowledge ("what do we know about X?") with structured, cross-referenced, governed pages. The bridge is a source/context conduit, not a runtime authority.
+
+**Data flow:**
+- **Honcho Pull**: LLM-Wiki harvests Honcho conclusions as candidate source material for the inbox. This does NOT make Honcho conclusions automatically trusted facts — factual conclusions from Honcho require review gating. Promotes to `honcho_conclusion` source type, default `pending_review` for safety-sensitive categories.
+- **Honcho Push**: LLM-Wiki exports wiki knowledge to Honcho context via export bundle. This does NOT make Honcho the source of truth for LLM-Wiki facts or pages.
+
+**No ownership transfer**: Honcho memory cannot authorize actions. LLM-Wiki does not become Honcho's persistence layer.
 
 **Data flow:**
 - **Honcho → LLM Wiki:** Honcho taps into the LLM Wiki inbox, ingests Claude Code session transcripts, extracts entities and claims, and integrates them into wiki pages — making conversational knowledge persistent and queryable.

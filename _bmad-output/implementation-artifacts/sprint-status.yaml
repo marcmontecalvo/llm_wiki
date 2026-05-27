@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-05-17"
-last_updated: "2026-05-25T22:00:00"
+last_updated: "2026-05-26T12:00:00"
 last_updated_epic-h: "2026-05-25"
 last_updated_2-1-claim-trust-tagging-at-ingest: "2026-05-21"
 last_updated_1-10-auto-init-wiki-on-first-start: "2026-05-19"
@@ -100,10 +100,20 @@ development_status:
   4-4-integration-docker-operations: done  # Dockerfile: explicit templates dir creation; .env.example added; docker-compose: WIKI_UI_USER env passed; TUI: TTY check + WIKI_ROOT env discovery for docker exec
   last_updated_epic-4: "2026-05-25"
 
-  # ─── Epic H: Honcho Integration ──────────────────────────────────────────
+  # ─── Epic H: Honcho Integration (Context Bridge) ─────────────────────────
   epic-h: done
   h-1-honcho-detectability: done  # artifact: h-1-honcho-detectability.md | implementation-complete: detect_honcho() via httpx /health check, HonchoConfig+HonchoPushConfig in config schema, REST endpoint GET /v1/honcho/status, honcho package (src/llm_wiki/honcho/); 6 tests
   h-2-honcho-push: done  # artifact: h-2-honcho-push-job.md | implementation-complete: HonchoPushJob daemon job (local SDK + remote POST modes), CLI commands (honcho push, honcho bridge), daemon scheduler wiring gated by features.honcho_push, config push_url/push_api_key; 3 tests
   h-3-honcho-pull: done  # artifact: h-3-honcho-pull-harvester.md | implementation-complete: harvest_conclusions() -> wiki inbox/new/ with frontmatter, run_harvest_job() CLI entry, harvester module in honcho package; 4 tests
   epic-h-retrospective: skip
   last_updated_epic-h: "2026-05-25"
+
+  # ─── Epic HF: Homefront Integration — Deterministic Workspace Facts ────
+  epic-hf: backlog
+  hf-1-workspace-facts-api: backlog  # Workspace Facts API CRUD (REST + MCP), workspace_id scoping, fact_put/fact_delete/fact_history/fact_batch_put tools
+  hf-2-fact-storage-history: backlog  # File-backed facts storage, atomic writes, append-only history, per-fact locks, startup integrity
+  hf-3-category-registry: backlog  # Canonical workspace.* categories, household.* aliases, UNKNOWN_FACT_CATEGORY error
+  hf-4-fact-conflict-review: backlog  # Conflicting write detection, conflict candidates, review queue, honcho_conclusion pending_review default
+  hf-5-contract-test-harness: backlog  # End-to-end tests for facts API, conflict, workspace isolation, category aliases, CI integration
+  hf-6-workspace-scoped-knowledge: backlog  # Workspace-scoped query/search/pages/review/conflicts/export, domain-as-categorization enforcement
+  hf-7-export-delete-for-homefront: backlog  # Profile-scoped export/delete, provenance in export, tombstone for profile-private facts
