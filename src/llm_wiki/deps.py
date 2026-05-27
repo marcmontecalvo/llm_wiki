@@ -19,6 +19,7 @@ from fastapi import Header, Request
 
 from llm_wiki.api.user_jobs import UserJobStore
 from llm_wiki.config.loader import WikiConfig
+from llm_wiki.knowledge.storage import WorkspaceFactStore
 from llm_wiki.query.search import WikiQuery
 
 
@@ -55,3 +56,8 @@ def get_user_job_store_sync(wiki_base: Path) -> UserJobStore:
 async def get_profile_id(x_profile_id: str | None = Header(default=None)) -> str | None:
     """Return the ``X-Profile-ID`` header value if provided."""
     return x_profile_id
+
+
+async def get_knowledge_store(request: Request) -> WorkspaceFactStore:
+    """Return the :class:`WorkspaceFactStore` singleton stored on ``app.state``."""
+    return request.app.state.knowledge_store  # type: ignore[no-any-return]

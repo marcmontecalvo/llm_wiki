@@ -10,9 +10,12 @@ from llm_wiki.exceptions import (
     DaemonNotRunningError,
     DomainUnknownError,
     ExportNotReadyError,
+    FactConflictError,
     IndexStaleError,
     IngestError,
     InvalidDepthError,
+    UnknownFactCategoryError,
+    UnknownFactKeyError,
     WikiNotFoundError,
 )
 
@@ -24,6 +27,9 @@ ERROR_MAP: dict[type, tuple[int, str]] = {
     DaemonNotRunningError: (503, "DAEMON_NOT_RUNNING"),
     ExportNotReadyError: (404, "EXPORT_NOT_READY"),
     InvalidDepthError: (422, "INVALID_DEPTH"),
+    UnknownFactCategoryError: (422, "UNKNOWN_KNOWLEDGE_CATEGORY"),
+    UnknownFactKeyError: (404, "UNKNOWN_FACT_KEY"),
+    FactConflictError: (409, "FACT_CONFLICT"),
 }
 # QueryTimeoutError is intentionally absent — it is a normal response branch
 
@@ -138,6 +144,34 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(InvalidDepthError)
     async def invalid_depth_handler(request: Request, exc: InvalidDepthError) -> JSONResponse:
+        http_exc = wiki_error_to_http(exc)
+        return JSONResponse(
+            status_code=http_exc.status_code,
+            content=http_exc.detail,
+        )
+
+    @app.exception_handler(UnknownFactCategoryError)
+    async def unknown_fact_category_handler(
+        request: Request, exc: UnknownFactCategoryError
+    ) -> JSONResponse:
+        http_exc = wiki_error_to_http(exc)
+        detail = http_exc.detail if isinstance(http_exc.detail, dict) else {}
+        detail["details"] = {"category": exc.category, "valid_categories": exc.valid_categories}
+        return JSONResponse(
+            status_code=http_exc.status_code,
+            content=detail,
+        )
+
+    @app.exception_handler(UnknownFactKeyError)
+    async def unknown_fact_key_handler(request: Request, exc: UnknownFactKeyError) -> JSONResponse:
+        http_exc = wiki_error_to_http(exc)
+        return JSONResponse(
+            status_code=http_exc.status_code,
+            content=http_exc.detail,
+        )
+
+    @app.exception_handler(FactConflictError)
+    async def fact_conflict_handler(request: Request, exc: FactConflictError) -> JSONResponse:
         http_exc = wiki_error_to_http(exc)
         return JSONResponse(
             status_code=http_exc.status_code,

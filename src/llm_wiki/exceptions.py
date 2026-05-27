@@ -15,6 +15,9 @@ __all__ = [
     "ExportNotReadyError",
     "InvalidDepthError",
     "QueryTimeoutError",
+    "UnknownFactCategoryError",
+    "UnknownFactKeyError",
+    "FactConflictError",
 ]
 
 
@@ -57,3 +60,34 @@ class QueryTimeoutError(WikiError):
     it represents a normal response branch, not an HTTP error. The caller
     should return partial results with timed_out=True.
     """
+
+
+class UnknownFactCategoryError(WikiError):
+    """Raised when a fact write uses a category not in the contract registry.
+
+    Attributes:
+        category: The invalid category that was provided.
+        valid_categories: Sorted list of accepted category values.
+    """
+
+    valid_categories: list[str] = []
+    category: str = ""
+
+    def __init__(self, category: str, valid: list[str], message: str | None = None) -> None:
+        self.category = category
+        self.valid_categories = sorted(valid)
+        super().__init__(
+            message
+            or (
+                f"The category '{category}' is not a recognized knowledge category. "
+                f"Valid categories: {self.valid_categories}"
+            )
+        )
+
+
+class UnknownFactKeyError(WikiError):
+    """Raised when a read targets a non-existent fact."""
+
+
+class FactConflictError(WikiError):
+    """Raised when two authoritative sources conflict on the same fact."""

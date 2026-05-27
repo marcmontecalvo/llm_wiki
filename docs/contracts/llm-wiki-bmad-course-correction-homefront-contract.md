@@ -262,7 +262,7 @@ Unknown categories should return a stable error shape:
 
 ```json
 {
-  "error_code": "UNKNOWN_FACT_CATEGORY",
+  "error_code": "unknown_knowledge_category",
   "message": "The category '[X]' is not recognized",
   "valid_categories": ["..."]
 }
@@ -360,7 +360,7 @@ Acceptance criteria:
 2. MCP tools `fact_get`, `fact_list`, `fact_put`, `fact_delete`, `fact_history`, and `fact_batch_put` exist.
 3. Facts include `workspace_id`, `category`, `key`, `value`, `source`, `provenance`, `status`, `visibility`, `version`, and timestamps.
 4. Writes are atomic and versioned.
-5. Unknown categories return `UNKNOWN_FACT_CATEGORY`.
+5. Unknown categories return `unknown_knowledge_category`.
 6. Existing page/query/search behavior is not broken.
 
 ### Story HF.2 — Workspace Fact Storage and History

@@ -1243,7 +1243,7 @@ So that Homefront can run simulations from deterministic knowledge.
 2. MCP tools `fact_get`, `fact_list`, `fact_put`, `fact_delete`, `fact_history`, and `fact_batch_put` exist.
 3. Facts include `workspace_id`, `category`, `key`, `value`, `source`, `provenance`, `status`, `visibility`, `version`, and timestamps.
 4. Writes are atomic (temp file + `os.replace`) and versioned (monotonic increment).
-5. Unknown categories return `UNKNOWN_FACT_CATEGORY` error.
+5. Unknown categories return `unknown_knowledge_category` error with valid category list.
 6. Existing page/query/search behavior is not broken.
 
 ### Story HF.2: Workspace Fact Storage and History
@@ -1271,7 +1271,7 @@ So that known categories work and unknown categories return stable errors.
 1. `workspace.*` categories are canonical.
 2. `household.*` aliases are accepted and normalized to `workspace.*` equivalents.
 3. Category registry is exposed through REST/MCP/CLI.
-4. Unknown categories are stable errors with `UNKNOWN_FACT_CATEGORY` code and list of valid categories.
+4. Unknown categories are stable errors with `unknown_knowledge_category` code and list of valid categories.
 5. Tests cover aliases and invalid categories.
 
 ### Story HF.4: Fact Conflict and Review Queue
@@ -1306,7 +1306,7 @@ So that future changes don't break Homefront integration.
 ### Story HF.6: Workspace-Scoped Knowledge API
 
 As a Homefront integration client,
-I want all knowledge endpoints (query, search, pages, review, conflicts, export) scoped to a workspace,
+I want all knowledge endpoints (query, search, pages, review, conflicts, export, inbox, stale) scoped to a workspace,
 So that domain remains categorization only and workspace is the isolation boundary.
 
 **Acceptance Criteria:**
@@ -1340,13 +1340,9 @@ So that wiki knowledge and Honcho memory flow together without duplicating or co
 
 **Data flow:**
 - **Honcho Pull**: LLM-Wiki harvests Honcho conclusions as candidate source material for the inbox. This does NOT make Honcho conclusions automatically trusted facts — factual conclusions from Honcho require review gating. Promotes to `honcho_conclusion` source type, default `pending_review` for safety-sensitive categories.
-- **Honcho Push**: LLM-Wiki exports wiki knowledge to Honcho context via export bundle. This does NOT make Honcho the source of truth for LLM-Wiki facts or pages.
+- **Honcho Push**: LLM-Wiki exports wiki knowledge to Honcho context via a cell-mediated bridge (not direct LLM-Wiki → Honcho calls). This does NOT make Honcho the source of truth for LLM-Wiki facts or pages.
 
-**No ownership transfer**: Honcho memory cannot authorize actions. LLM-Wiki does not become Honcho's persistence layer.
-
-**Data flow:**
-- **Honcho → LLM Wiki:** Honcho taps into the LLM Wiki inbox, ingests Claude Code session transcripts, extracts entities and claims, and integrates them into wiki pages — making conversational knowledge persistent and queryable.
-- **LLM Wiki → Honcho:** The harness injects the LLM Wiki export bundle (`wiki_system/exports/llms.txt` + graph) into the LLM context window via `session.upload_file()` and `context.inject()` calls, giving the agent a compact knowledge view. Query logs (`query_log.db`) can be pushed back as Honcho events so the next flip-flop learns from past queries.
+**No ownership transfer**: Honcho memory cannot authorize actions. LLM-Wiki does not become Honcho's persistence layer. Honcho does not directly ingest from LLM-Wiki — all inter-service movement is mediated by the workspace cell runtime.
 
 **Acceptance Criteria:**
 
@@ -1356,7 +1352,7 @@ So that wiki knowledge and Honcho memory flow together without duplicating or co
 
 **Given** a Claude Code session generates wiki-worthy content
 **When** the session capture hook sends a transcript to LLM Wiki
-**Then** LLM Wiki extracts entities, claims, and relationships separately from Honcho's async deriver — intra-session Honcho memory is not clobbered by wiki extraction because Honcho's review process runs independently on a 30-second tick
+**Then** LLM Wiki processes the transcript through its own ingest pipeline independently — Honcho's memory representation is not affected
 
 **Given** LLM Wiki exports are generated
 **When** the daemon writes `llms.txt` + graph + sidecars
@@ -1372,7 +1368,7 @@ So that wiki knowledge and Honcho memory flow together without duplicating or co
 
 **Given** the integration is planned (Story H.1)
 **When** auto-push on export is configured in `daemon.yaml` (`features.honcho_push: true`)
-**Then** a daemon job (`HonchoPushJob`) runs on export completion, pushing the bundle to a configurable Honcho directory path
+**Then** a daemon job (`HonchoPushJob`) runs on export completion, delivering the bundle to the configured cell-mediated path (`delivery_path` from config)
 
 ### Story H.1: Honcho Detectability
 
@@ -1387,40 +1383,39 @@ So that I can conditionally enable integration features.
 3. **Given** Honcho is reachable at `/health` **When** queried **Then** `available: true`, `status: 200`, `response` contains the health JSON
 4. **Given** Honcho is unreachable **When** queried **Then** `available: false`, `status: 0`, `response` contains `{error: str}`
 5. **Given** the service is running **When** `GET /v1/honcho/status` is called **Then** it returns the detect result with `status_message` when not available
-6. **Given** `features.honcho_push: true` is set in config **When** config is loaded ** Then** `HonchoConfig` fields are available: `push_url`, `push_api_key`, `workspace_id`
+6. **Given** `features.honcho_push: true` is set in config **When** config is loaded ** Then** `HonchoConfig` fields are available: `delivery_path`, `delivery_token`, `workspace_id`
 7. **Given** the honcho package is not installed ** When** `get /v1/honcho/status` is called ** Then** it returns a 500-error response indicating the service is not yet configured, not a stack trace
 
-### Story H.2: Honcho Push (Export Bundle Delivery)
+### Story H.2: Honcho Push (Export Bundle Delivery — Cell-Mediated Only)
 
 As the wiki daemon,
-I want to push exported wiki content to Honcho,
-So that agent sessions can load fresh wiki knowledge into their context.
+I want exported wiki content to be available to Honcho through the cell runtime,
+So that agent sessions can load fresh wiki knowledge into their context without direct LLM-Wiki → Honcho calls.
 
 **Acceptance Criteria:**
 
 1. **Given** `features.honcho_push: true` is set in `daemon.yaml` **When** daemon starts **Then** the `honcho_push` job is scheduled alongside other export jobs
 2. **Given** `honcho_push` is disabled **When** daemon starts **Then** no honcho_push job is registered in the scheduler
-3. **Given** `push_url` + `push_api_key` are configured **When** `honcho_push` job runs **Then** it POSTs `{"llms_txt": str, "graph_json": str}` to `{push_url}/v1/honcho/wiki-bundle` with `Authorization: Bearer {api_key}`
-4. **Given** no `push_url` and honcho SDK is installed **When** job runs ** Then** it uses local mode: creates Honcho session, uploads `llms.txt` as a session file
-5. **Given** no `push_url` and honcho SDK is not installed **When** job runs ** Then** it returns `{"status": "skipped", "reason": "honcho package not installed"}`
-6. **Given** `exports/llms.txt` does not exist **When** job runs ** Then** it returns `{"status": "skipped", "reason": "No llms.txt export found"}`
-7. **Given** CLI `honcho push` is run manually **When** executed **Then** it runs the push job and returns results (with optional `--push-url` / `--push-api-key` overrides)
-8. **Given** CLI `honcho bridge` is run manually **When** executed **Then** it triggers push via the REST endpoint and captures error results for tracking
+3. **Given** the export bundle (`llms.txt` + graph JSON) is written **When** `honcho_push` job runs **Then** it copies or POSTs the bundle to the cell-mediated delivery path (a configurable directory or API endpoint with `Authorization: Bearer <cell-level-service-token>`), not directly to Honcho
+4. **Given** no delivery path is configured **When** job runs ** Then** it returns `{"status": "skipped", "reason": "No honcho delivery path configured"}`
+5. **Given** `exports/llms.txt` does not exist **When** job runs ** Then** it returns `{"status": "skipped", "reason": "No llms.txt export found"}`
+6. **Given** CLI `honcho push` is run manually **When** executed **Then** it runs the push job and returns results (with optional `--push-url` override)
 
-### Story H.3: Honcho Pull (Conclusions → Wiki Inbox)
+### Story H.3: Honcho Pull (Conclusions → Wiki Inbox — Source Material Only)
 
 As a wiki operator,
-I want to harvest conclusions from Honcho sessions into the wiki inbox,
-So that insights derived from agent conversations become governed wiki knowledge.
+I want to harvest conclusions from Honcho sessions as source material into the wiki inbox,
+So that insights derived from agent conversations can become governed wiki knowledge through the normal review pipeline.
 
 **Acceptance Criteria:**
 
-1. **Given** Honcho has active sessions with conclusions **When** `harvest_conclusions()` runs ** Then** each conclusion is written as wiki markdown with frontmatter to `inbox/new/`
+1. **Given** Honcho has active sessions with conclusions **When** `harvest_conclusions()` runs ** Then** each conclusion is written as wiki markdown with frontmatter: `kind: conclusion`, `id: honcho-{observer_id[:8]}`, `kind_source: honcho_conclusion` to `inbox/new/`
 2. **Given** a conclusion from observer "alice" about topic X **When** harvested **Then** the file contains frontmatter: `kind: conclusion`, `id: honcho-{observer_id[:8]}`, `title: "Conclusion from {observer} about {observed}"`
 3. **Given** multiple conclusions from the same observer **When** harvested **Then** subsequent files get suffixes: `honcho-alice-1.md`, `honcho-alice-2.md`, etc.
 4. **Given** the honcho package is not installed **When** `run_harvest_job()` is called **Then** it returns `{"status": "skipped", "reason": "honcho package not installed"}`
 5. **Given** no Honcho sessions exist **When** `harvest_conclusions()` runs **Then** it returns `{"status": "success", "harvested": 0, "reason": "No sessions found"}` but still ensures `inbox/new/` directory exists
 6. **Given** harvested files land in `inbox/new/` **When** the daemon's inbox-scan job runs **Then** they flow through the standard ingest pipeline (adapters → normalizer → domain router → queue → integrator → extraction → indexes)
+7. **Given** a harvested conclusion produces a fact candidate **When** categorized as safety-sensitive (children, safety, schedules, locks, alarms, cameras, privacy, purchases, credentials, integrations, external communications) **Then** it defaults to `pending_review` status per contract v1 section 8 rules
 
 ## Epic 4: Web UI & Operations — "Operate and Browse as a Human" *(V4 — Placeholder)*
 

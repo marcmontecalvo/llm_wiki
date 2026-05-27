@@ -17,6 +17,7 @@ import logging
 import uuid
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast
 
 from mcp.server.fastmcp.exceptions import ToolError
 
@@ -48,6 +49,9 @@ _MCP_ERROR_CODES: dict[str, int] = {
     "DAEMON_NOT_RUNNING": 1005,
     "EXPORT_NOT_READY": 1006,
     "INVALID_DEPTH": 1007,
+    "UNKNOWN_KNOWLEDGE_CATEGORY": 1008,
+    "UNKNOWN_FACT_KEY": 1009,
+    "FACT_CONFLICT": 1010,
 }
 
 
@@ -191,7 +195,13 @@ def _create_deep_query_runner_with_config(
     return run_deep_query_with_config_fn
 
 
-def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # type: ignore[default-value]
+def register_tools(
+    server,
+    wiki,
+    wiki_config=None,
+    query_log=None,
+    knowledge_store=None,  # type: ignore[default-value]
+) -> None:
     """Register MCP tools with the given server instance.
 
     Args:
@@ -199,6 +209,7 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
         wiki: WikiQuery singleton.
         wiki_config: Optional wiki configuration.
         query_log: Optional QueryLogStore singleton for logging queries.
+        knowledge_store: Optional WorkspaceFactStore singleton for facts API.
     """
     state_dir = wiki.wiki_base / "state"
     store = UserJobStore(state_dir=state_dir)
@@ -597,3 +608,209 @@ def register_tools(server, wiki, wiki_config=None, query_log=None) -> None:  # t
             raise ToolError(f"archive_failed: {result.get('error', 'unknown')}")
         except WikiError as e:
             raise _handle_wiki_error(e) from e
+
+    # ── Knowledge facts tools (Epic HF) ───────────────────────────────────
+
+    if knowledge_store is not None:
+
+        @server.tool()
+        async def fact_get(
+            workspace_id: str,
+            fact_key: str,
+        ) -> dict:
+            """Retrieve a single structured fact by key.
+
+            Returns the full fact for the given workspace and key, or an
+            error if the fact does not exist.
+
+            Args:
+                workspace_id: The workspace identifier.
+                fact_key: The fact identifier (must be unique within the workspace).
+            """
+            try:
+                fact = await asyncio.to_thread(knowledge_store.get_fact, workspace_id, fact_key)
+                if fact is None:
+                    raise ToolError(f"Fact not found: {fact_key}")
+                return dict(fact.model_dump())
+            except ToolError:
+                raise
+            except WikiError as e:
+                raise _handle_wiki_error(e) from e
+
+        @server.tool()
+        async def fact_list(
+            workspace_id: str,
+            category: str | None = None,
+            limit: int = 50,
+        ) -> dict:
+            """List facts for a workspace with optional category filter.
+
+            Returns paginated results with a cursor for next-page navigation.
+
+            Args:
+                workspace_id: The workspace identifier.
+                category: Optional category filter.
+                limit: Max results (1-200).
+            """
+            try:
+                result = await asyncio.to_thread(
+                    knowledge_store.list_facts,
+                    workspace_id,
+                    category=category,
+                    limit=limit,
+                )
+                return dict(result.model_dump())
+            except ToolError:
+                raise
+            except WikiError as e:
+                raise _handle_wiki_error(e) from e
+
+        @server.tool()
+        async def fact_put(
+            workspace_id: str,
+            fact_key: str,
+            value: str,
+            source_type: str = "manual_admin",
+            category: str | None = None,
+        ) -> dict:
+            """Create or update a structured fact.
+
+            Accepts simple key-value pairs and persists them atomically.
+
+            Args:
+                workspace_id: The workspace identifier.
+                fact_key: The fact identifier (unique within the workspace).
+                value: JSON string value for the fact.
+                source_type: Source type identifier.
+                category: Category identifier (e.g. 'workspace.roster').
+                          Auto-derived from fact_key prefix if omitted, but
+                          explicit category is preferred.
+            """
+            try:
+                import json as _json  # noqa: PLC0415
+
+                parsed_value = _json.loads(value) if isinstance(value, str) else value
+                from datetime import UTC, datetime  # noqa: PLC0415
+
+                from llm_wiki.knowledge.models import (  # noqa: PLC0415
+                    KnowledgeFactWriteRequest,
+                    KnowledgeSource,
+                )
+
+                _category = category or f"workspace.{fact_key.split('.')[0]}"
+                req = KnowledgeFactWriteRequest(
+                    category=_category,
+                    key=fact_key,
+                    value=parsed_value,
+                    source=KnowledgeSource(
+                        type=cast(
+                            Any,
+                            source_type if source_type else None,
+                        ),
+                        observed_at=datetime.now(tz=UTC),
+                    ),
+                )
+                result = await asyncio.to_thread(knowledge_store.put_fact, workspace_id, req)
+                return dict(result.model_dump())
+            except ToolError:
+                raise
+            except WikiError as e:
+                raise _handle_wiki_error(e) from e
+
+        @server.tool()
+        async def fact_delete(
+            workspace_id: str,
+            fact_key: str,
+        ) -> dict:
+            """Delete (tombstone) a structured fact.
+
+            Sets the fact status to 'deleted' and returns the tombstone.
+
+            Args:
+                workspace_id: The workspace identifier.
+                fact_key: The fact identifier to delete.
+            """
+            try:
+                result = await asyncio.to_thread(
+                    knowledge_store.delete_fact, workspace_id, fact_key
+                )
+                if result is None:
+                    raise ToolError(f"Fact not found: {fact_key}")
+                return dict(result.model_dump())
+            except ToolError:
+                raise
+            except WikiError as e:
+                raise _handle_wiki_error(e) from e
+
+        @server.tool()
+        async def fact_history(
+            workspace_id: str,
+            fact_key: str,
+        ) -> list[dict]:
+            """Return the full version history of a fact.
+
+            Each entry is the complete KnowledgeFact state at a version point.
+
+            Args:
+                workspace_id: The workspace identifier.
+                fact_key: The fact identifier.
+            """
+            try:
+                history = await asyncio.to_thread(
+                    knowledge_store.get_history, workspace_id, fact_key
+                )
+                return [f.model_dump() for f in history]
+            except ToolError:
+                raise
+            except WikiError as e:
+                raise _handle_wiki_error(e) from e
+
+        @server.tool()
+        async def fact_batch_put(
+            workspace_id: str,
+            facts: str,
+        ) -> list[dict]:
+            """Bulk write multiple structured facts.
+
+            Each fact is processed atomically. Returns per-result status.
+
+            Args:
+                workspace_id: The workspace identifier.
+                facts: JSON string array of {key, value, source_type, category} objects.
+                       Each item MUST include 'category' (e.g. 'workspace.roster').
+            """
+            try:
+                import json as _json  # noqa: PLC0415
+
+                items = _json.loads(facts) if isinstance(facts, str) else facts
+                from datetime import UTC, datetime  # noqa: PLC0415
+
+                from llm_wiki.knowledge.models import (  # noqa: PLC0415
+                    KnowledgeFactWriteRequest,
+                    KnowledgeSource,
+                )
+
+                requests = []
+                for item in items:
+                    cat = item.get("category")
+                    if cat is None:
+                        raise ToolError(
+                            "INVALID_REQUEST(1000): 'category' is required for each item in batch"
+                        )
+                    requests.append(
+                        KnowledgeFactWriteRequest(
+                            category=cat,
+                            key=item["key"],
+                            value=item["value"],
+                            source=KnowledgeSource(
+                                type=item.get("source_type", "manual_admin"),
+                                observed_at=datetime.now(tz=UTC),
+                            ),
+                        )
+                    )
+                results = await asyncio.to_thread(knowledge_store.batch_put, workspace_id, requests)
+                return [r.model_dump() for r in results]
+            except ToolError:
+                raise
+            except WikiError as e:
+                raise _handle_wiki_error(e) from e

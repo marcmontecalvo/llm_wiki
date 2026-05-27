@@ -1,0 +1,409 @@
+"""File-backed, thread-safe fact store scoped by workspace_id.
+
+Each workspace gets:
+  - A directory: wiki_system/workspaces/{workspace_id}/facts/
+  - An index:   facts/index.json (mapping key -> metadata)
+  - A history:  facts/history/{hash}.jsonl (append-only version log)
+
+Concurrency:
+  - Per-fact locks for write operations on specific (workspace_id, fact_key) tuples.
+  - Per-workspace lock for coarse index writes.
+  - Read operations are lock-free (JSONL is append-only).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+import tempfile
+import threading
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from llm_wiki.knowledge.models import (
+    KnowledgeFact,
+    KnowledgeFactWriteRequest,
+    KnowledgeFactWriteResponse,
+    KnowledgeListResponse,
+)
+
+logger = logging.getLogger(__name__)
+
+# ── Contract v1 category registry ──────────────────────────────────────────────
+
+_VALID_CATEGORIES: set[str] = {
+    "workspace.roster",
+    "workspace.assignments",
+    "workspace.pets",
+    "workspace.appliances",
+    "workspace.preferences",
+    "workspace.schedule",
+    "workspace.vehicles",
+    "workspace.presence",
+    "workspace.recurring_responsibilities",
+    "workspace.rooms",
+    "workspace.integrations",
+    "workspace.voice_nodes",
+}
+
+_CATEGORY_ALIASES: dict[str, str] = {
+    "household.roster": "workspace.roster",
+    "household.assignments": "workspace.assignments",
+    "household.pets": "workspace.pets",
+    "household.appliances": "workspace.appliances",
+    "household.preferences": "workspace.preferences",
+    "household.schedule": "workspace.schedule",
+    "household.vehicles": "workspace.vehicles",
+    "household.presence": "workspace.presence",
+    "household.recurring_responsibilities": "workspace.recurring_responsibilities",
+}
+
+# Re-export from canonical exceptions module for cross-module compatibility.
+# The canonical exceptions live in llm_wiki.exceptions as WikiError subclasses;
+# importing them here ensures raises in this module match what routes catch.
+from llm_wiki.exceptions import (  # noqa: E402 F401
+    FactConflictError,
+    UnknownFactCategoryError,
+    UnknownFactKeyError,
+)
+
+
+class WorkspaceFactStore:
+    """Thread-safe, file-backed fact store scoped by workspace_id."""
+
+    def __init__(self, wiki_base: str | None = None) -> None:
+        self._wiki_base = wiki_base or os.environ.get("WIKI_ROOT", "wiki_system")
+        # Per-fact lock: lazy, keyed by (workspace_id, fact_key)
+        self._fact_locks: dict[tuple[str, str], threading.Lock] = {}
+        # Per-workspace lock for coarse index operations
+        self._workspace_locks: dict[str, threading.Lock] = {}
+        # Protects dict insertions themselves (thread-safe lazy init)
+        self._lock_lock = threading.Lock()
+
+    # ── Lock helpers ───────────────────────────────────────────────────────
+
+    def _get_fact_lock(self, workspace_id: str, fact_key: str) -> threading.Lock:
+        key = (workspace_id, fact_key)
+        if key not in self._fact_locks:
+            with self._lock_lock:
+                if key not in self._fact_locks:  # double-check
+                    self._fact_locks[key] = threading.Lock()
+        return self._fact_locks[key]
+
+    def _get_workspace_lock(self, workspace_id: str) -> threading.Lock:
+        if workspace_id not in self._workspace_locks:
+            with self._lock_lock:
+                if workspace_id not in self._workspace_locks:
+                    self._workspace_locks[workspace_id] = threading.Lock()
+        return self._workspace_locks[workspace_id]
+
+    # ── Path helpers ───────────────────────────────────────────────────────
+
+    def _workspace_facts_path(self, workspace_id: str) -> Path:
+        return Path(self._wiki_base) / "workspaces" / workspace_id / "facts"
+
+    def _index_path(self, workspace_id: str) -> Path:
+        return self._workspace_facts_path(workspace_id) / "index.json"
+
+    def _history_path(self, workspace_id: str, fact_key: str) -> Path:
+        base = self._workspace_facts_path(workspace_id)
+        hash_key = hashlib.sha256(fact_key.encode()).hexdigest()[:16]
+        return base / "history" / f"{hash_key}.jsonl"
+
+    def _ensure_workspace(self, workspace_id: str) -> Path:
+        """Create directory structure atomically. Idempotent.
+
+        Uses a single mkdir call for the full tree so concurrent callers
+        never see a partially created workspace directory.
+        """
+        facts_dir = self._workspace_facts_path(workspace_id)
+        facts_dir.mkdir(parents=True, exist_ok=True)
+        return facts_dir
+
+    # ── Index operations ───────────────────────────────────────────────────
+
+    def _read_index(self, workspace_id: str) -> dict[str, Any]:
+        """Read index.json. Returns empty dict if missing or corrupt."""
+        idx_path = self._index_path(workspace_id)
+        if not idx_path.exists():
+            return {}
+        try:
+            text = idx_path.read_text(encoding="utf-8")
+            data = json.loads(text)
+            if isinstance(data, dict):
+                return data
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("Corrupt index.json for workspace %s: %s", workspace_id, e)
+        return {}
+
+    def _write_index(self, workspace_id: str, index: dict[str, Any]) -> None:
+        """Atomically write index.json."""
+        idx_path = self._index_path(workspace_id)
+        self._atomic_json(idx_path, index)
+
+    def _atomic_json(self, path: Path, data: Any) -> None:
+        """Write JSON atomically via temp file + os.replace."""
+        dir_path = path.parent or Path(".")
+        fd, tmp_path = tempfile.mkstemp(dir=str(dir_path), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, default=str)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+    # ── History operations ─────────────────────────────────────────────────
+
+    def _read_history(self, workspace_id: str, fact_key: str) -> list[KnowledgeFact]:
+        """Read all history entries from the JSONL file."""
+        hist_path = self._history_path(workspace_id, fact_key)
+        if not hist_path.exists():
+            return []
+        results: list[KnowledgeFact] = []
+        try:
+            for line in hist_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    results.append(KnowledgeFact(**json.loads(line)))
+                except (json.JSONDecodeError, Exception) as e:
+                    logger.warning("Skipping corrupt history line in %s: %s", hist_path, e)
+        except OSError as e:
+            logger.warning("Failed to read history %s: %s", hist_path, e)
+        return results
+
+    def _append_history(self, workspace_id: str, fact: KnowledgeFact) -> None:
+        """Append a single JSON line to the history file atomically."""
+        hist_path = self._history_path(workspace_id, fact.key)
+        line = json.dumps(fact.model_dump(), default=str) + "\n"
+
+        dir_path = hist_path.parent
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+        fd, tmp_path = tempfile.mkstemp(dir=str(dir_path), suffix=".tmp")
+        try:
+            # Read existing content if any
+            existing = b""
+            if hist_path.exists():
+                try:
+                    existing = hist_path.read_bytes()
+                except OSError:
+                    pass
+
+            with os.fdopen(fd, "wb") as f:
+                f.write(existing)
+                f.write(line.encode("utf-8"))
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, hist_path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+    # ── Category validation ────────────────────────────────────────────────
+
+    def _normalize_category(self, category: str) -> str:
+        """Normalize category alias to canonical form.
+
+        Raises UnknownFactCategoryError if the category is not recognized.
+        """
+        canonical = _CATEGORY_ALIASES.get(category, category)
+        if canonical not in _VALID_CATEGORIES:
+            raise UnknownFactCategoryError(category, sorted(_VALID_CATEGORIES))
+        return canonical
+
+    # ── Core CRUD ──────────────────────────────────────────────────────────
+
+    def put_fact(
+        self, workspace_id: str, write_req: KnowledgeFactWriteRequest
+    ) -> KnowledgeFactWriteResponse:
+        """Create or update a fact. Thread-safe via per-fact lock.
+
+        Optimistic concurrency: if expected_previous_version or
+        expected_previous_updated_at is provided and doesn't match, returns
+        stale_rejected.
+        """
+        category = self._normalize_category(write_req.category)
+        return self._put_fact_internal(
+            workspace_id=workspace_id,
+            fact_key=write_req.key,
+            request=write_req,
+            category=category,
+        )
+
+    def get_fact(self, workspace_id: str, fact_key: str) -> KnowledgeFact | None:
+        """Read the most recent version of a fact. Returns None if not found."""
+        history = self._read_history(workspace_id, fact_key)
+        if not history:
+            return None
+        return history[-1]
+
+    def delete_fact(self, workspace_id: str, fact_key: str) -> KnowledgeFact | None:
+        """Write a tombstone with status=deleted. Returns the tombstone."""
+        latest = self.get_fact(workspace_id, fact_key)
+        if latest is None:
+            return None
+        tombstone = KnowledgeFact(
+            id=latest.id,
+            workspace_id=workspace_id,
+            category=latest.category,
+            key=latest.key,
+            value=latest.value,
+            source=latest.source,
+            provenance=latest.provenance,
+            confidence=latest.confidence,
+            authority_score=latest.authority_score,
+            status="deleted",
+            visibility=latest.visibility,
+            valid_from=latest.valid_from,
+            valid_until=latest.valid_until,
+            created_at=latest.created_at,
+            updated_at=datetime.now(tz=UTC),
+            version=latest.version + 1,
+        )
+        self._append_history(workspace_id, fact=tombstone)
+        return tombstone
+
+    def list_facts(
+        self,
+        workspace_id: str,
+        *,
+        category: str | None = None,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> KnowledgeListResponse:
+        """Paginated list of facts from index.json."""
+        index = self._read_index(workspace_id)
+        if not index:
+            return KnowledgeListResponse()
+
+        # Build fact list: resolve each index entry from history
+        facts: list[KnowledgeFact] = []
+        for key, meta in index.items():
+            if category and meta.get("category") != category:
+                continue
+            fact = self.get_fact(workspace_id, key)
+            if fact is not None:
+                facts.append(fact)
+
+        # Cursor pagination (simple offset-based via base64-like token)
+        offset = 0
+        if cursor:
+            try:
+                offset = int(cursor)
+            except ValueError:
+                offset = 0
+
+        limited = facts[offset : offset + limit]
+        total_hint = len(facts)
+        next_cursor = str(offset + limit) if (offset + limit) < total_hint else None
+
+        return KnowledgeListResponse(
+            facts=limited,
+            next_cursor=next_cursor,
+            total_hint=total_hint,
+        )
+
+    def batch_put(
+        self,
+        workspace_id: str,
+        requests: list[KnowledgeFactWriteRequest],
+        *,
+        category_map: dict[str, str] | None = None,
+    ) -> list[KnowledgeFactWriteResponse]:
+        """Process writes sequentially, each under its own per-fact lock."""
+        cat_map = category_map or {}
+        results: list[KnowledgeFactWriteResponse] = []
+        for req in requests:
+            category = cat_map.get(req.category, req.category)
+            result = self._put_fact_internal(
+                workspace_id=workspace_id,
+                fact_key=req.key,
+                request=req,
+                category=category,
+            )
+            results.append(result)
+        return results
+
+    def get_history(self, workspace_id: str, fact_key: str) -> list[KnowledgeFact]:
+        """Return full version history for a fact."""
+        return self._read_history(workspace_id, fact_key)
+
+    # ── Internal ───────────────────────────────────────────────────────────
+
+    def _put_fact_internal(
+        self,
+        workspace_id: str,
+        fact_key: str,
+        request: KnowledgeFactWriteRequest,
+        category: str,
+    ) -> KnowledgeFactWriteResponse:
+        """Core write logic, invoked under the per-fact lock."""
+        lock = self._get_fact_lock(workspace_id, fact_key)
+        with lock:
+            # Read existing for optimistic concurrency
+            existing = self.get_fact(workspace_id, fact_key)
+
+            # Optimistic concurrency check
+            if existing is not None:
+                if request.expected_previous_version is not None:
+                    if existing.version != request.expected_previous_version:
+                        return KnowledgeFactWriteResponse(key=fact_key, status="stale_rejected")
+                if request.expected_previous_updated_at is not None:
+                    if existing.updated_at != request.expected_previous_updated_at:
+                        return KnowledgeFactWriteResponse(key=fact_key, status="stale_rejected")
+
+            # Unchanged check
+            if existing is not None and existing.value == request.value:
+                return KnowledgeFactWriteResponse(key=fact_key, status="unchanged", fact=existing)
+
+            now = datetime.now(tz=UTC)
+            new_version = (existing.version + 1) if existing else 1
+            fact = KnowledgeFact(
+                workspace_id=workspace_id,
+                category=category,
+                key=fact_key,
+                value=request.value,
+                source=request.source,
+                provenance=request.provenance,
+                confidence=request.confidence,
+                visibility=request.visibility,
+                valid_from=request.valid_from,
+                valid_until=request.valid_until,
+                created_at=existing.created_at if existing else now,
+                updated_at=now,
+                version=new_version,
+            )
+
+            # Append-only history
+            self._append_history(workspace_id, fact=fact)
+
+            # Update index
+            ws_lock = self._get_workspace_lock(workspace_id)
+            with ws_lock:
+                index = self._read_index(workspace_id)
+                hist_path = self._history_path(workspace_id, fact_key)
+                index[fact_key] = {
+                    "path": str(hist_path.relative_to(self._workspace_facts_path(workspace_id)))
+                    if hist_path.exists()
+                    else "",
+                    "version": new_version,
+                    "updated_at": now.isoformat(),
+                    "category": category,
+                }
+                self._write_index(workspace_id, index)
+
+            return KnowledgeFactWriteResponse(key=fact_key, status="written", fact=fact)

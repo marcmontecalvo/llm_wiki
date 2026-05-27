@@ -45,6 +45,14 @@ async def lifespan(app: FastAPI):
         app.state.wiki_config = _wiki_config
     app.state.user_job_store = user_job_store
     app.state.deep_jobs = deep_jobs  # type: ignore[assignment]
+
+    # Knowledge fact store (Story HF.1)
+    from llm_wiki.knowledge.storage import WorkspaceFactStore  # noqa: E303
+
+    app.state.knowledge_store = WorkspaceFactStore(  # type: ignore[assignment]
+        wiki_base=str(wiki_root),
+    )
+    logger.info("Knowledge fact store initialized (wiki_base=%s)", wiki_root)
     try:
         app.state.query_log = QueryLogStore(wiki_root / "state" / "query_log.db")  # type: ignore[assignment]  # noqa: E501 PLR2004
         app.state.query_log_error = False  # type: ignore[assignment]
@@ -85,7 +93,10 @@ async def lifespan(app: FastAPI):
         from llm_wiki.mcp.server import create_mcp_server
 
         _mcp_server, mcp_asgi, mcp_mgr = create_mcp_server(
-            wiki, wiki_config=_wiki_config, query_log=app.state.query_log
+            wiki,
+            wiki_config=_wiki_config,
+            query_log=app.state.query_log,
+            knowledge_store=app.state.knowledge_store,
         )  # type: ignore[attr-defined]
         app.mount("/mcp", mcp_asgi)
     except Exception as e:
@@ -210,6 +221,11 @@ def create_app() -> FastAPI:
     from llm_wiki.api.routers import honcho as _honcho  # noqa: E303
 
     app.include_router(_honcho.router)
+
+    # Mount routers added in Epic HF (Homefront Facts)
+    from llm_wiki.api.routers import facts as _facts  # noqa: E303
+
+    app.include_router(_facts.router)
 
     # Legacy inline health check endpoint removed — use /v1/health and /v1/daemon/status instead
 

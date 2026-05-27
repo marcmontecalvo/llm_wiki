@@ -53,6 +53,7 @@ def create_mcp_server(
     wiki,
     wiki_config=None,
     query_log=None,  # type: ignore[default-value]  # noqa: B006
+    knowledge_store=None,  # type: ignore[default-value]
 ) -> tuple[FastMCP, MCPAsgiApp, StreamableHTTPSessionManager]:
     """Create an MCP server and its ASGI mountable app.
 
@@ -60,13 +61,20 @@ def create_mcp_server(
         wiki: WikiQuery singleton to share with MCP tools.
         wiki_config: Optional wiki configuration.
         query_log: Optional QueryLogStore singleton for logging queries.
+        knowledge_store: Optional WorkspaceFactStore singleton for facts tools.
 
     Returns:
         Tuple of (FastMCP instance, MCPAsgiApp mountable ASGI wrapper,
         StreamableHTTPSessionManager for lifespan management).
     """
     server = FastMCP("llm-wiki", stateless_http=True)
-    register_tools(server, wiki, wiki_config=wiki_config, query_log=query_log)  # type: ignore[arg-type]
+    register_tools(  # type: ignore[arg-type]
+        server,
+        wiki,
+        wiki_config=wiki_config,
+        query_log=query_log,
+        knowledge_store=knowledge_store,
+    )
 
     # Access streamable_http_app to trigger internal session manager creation
     _ = server.streamable_http_app

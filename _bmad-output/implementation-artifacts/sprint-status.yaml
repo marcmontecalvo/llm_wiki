@@ -35,8 +35,9 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-05-17"
-last_updated: "2026-05-26T12:00:00"
+last_updated: "2026-05-27"
 last_updated_epic-h: "2026-05-25"
+last_updated_epic-hf: "2026-05-27"
 last_updated_2-1-claim-trust-tagging-at-ingest: "2026-05-21"
 last_updated_1-10-auto-init-wiki-on-first-start: "2026-05-19"
 project: llm_wiki
@@ -110,10 +111,10 @@ development_status:
 
   # ─── Epic HF: Homefront Integration — Deterministic Workspace Facts ────
   epic-hf: backlog
-  hf-1-workspace-facts-api: backlog  # Workspace Facts API CRUD (REST + MCP), workspace_id scoping, fact_put/fact_delete/fact_history/fact_batch_put tools
-  hf-2-fact-storage-history: backlog  # File-backed facts storage, atomic writes, append-only history, per-fact locks, startup integrity
-  hf-3-category-registry: backlog  # Canonical workspace.* categories, household.* aliases, UNKNOWN_FACT_CATEGORY error
-  hf-4-fact-conflict-review: backlog  # Conflicting write detection, conflict candidates, review queue, honcho_conclusion pending_review default
-  hf-5-contract-test-harness: backlog  # End-to-end tests for facts API, conflict, workspace isolation, category aliases, CI integration
-  hf-6-workspace-scoped-knowledge: backlog  # Workspace-scoped query/search/pages/review/conflicts/export, domain-as-categorization enforcement
-  hf-7-export-delete-for-homefront: backlog  # Profile-scoped export/delete, provenance in export, tombstone for profile-private facts
+  hf-1-workspace-facts-api: done  # artifact: hf-1-workspace-facts-api.md | spec created: facts API CRUD (REST + MCP), workspace_id scoping, workspace isolation, category aliases; 36 tests passing API CRUD (REST + MCP), workspace_id scoping, (workspace_id/scoping, fact_key, Works, workspace isolation, category aliases
+  hf-2-fact-storage-history: ready-for-dev  # artifact: hf-2-fact-storage-history.md | spec created: file-backed facts storage, atomic writes, append-only history, per-fact locks, startup integrity
+  hf-3-category-registry: ready-for-dev  # We're required for hf-2: canonical workspace.* categories, household.* aliases, UNKNOWN_FACT_CATEGORY error
+  hf-4-fact-conflict-review: ready-for-dev  # artifact: hf-4-fact-conflict-review.md | spec created: conflicting write detection, conflict candidates, review queue, honcho_conclusion pending_review default
+  hf-5-contract-test-harness: ready-for-dev  # artifact: hf-5-contract-test-harness.md | spec created: end-to-end contract tests for facts API, conflict, workspace isolation, category aliases, CI integration
+  hf-6-workspace-scoped-knowledge: ready-for-dev  # artifact: hf-6-workspace-scoped-knowledge.md | spec created: workspace-scoped query/search/pages/review/conflicts/export, domain-as-categorization enforcement
+  hf-7-export-delete-for-homefront: ready-for-dev  # artifact: hf-7-export-delete-for-homefront.md | spec created: profile-scoped export/delete, provenance in export, tombstone for profile-private facts
