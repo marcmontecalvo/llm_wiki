@@ -121,6 +121,8 @@ class WorkspaceFactStore:
         """
         facts_dir = self._workspace_facts_path(workspace_id)
         facts_dir.mkdir(parents=True, exist_ok=True)
+        (facts_dir / "categories").mkdir(parents=True, exist_ok=True)
+        (facts_dir / "history").mkdir(parents=True, exist_ok=True)
         return facts_dir
 
     # ── Index operations ───────────────────────────────────────────────────
@@ -163,24 +165,28 @@ class WorkspaceFactStore:
 
     # ── History operations ─────────────────────────────────────────────────
 
-    def _read_history(self, workspace_id: str, fact_key: str) -> list[KnowledgeFact]:
-        """Read all history entries from the JSONL file."""
-        hist_path = self._history_path(workspace_id, fact_key)
-        if not hist_path.exists():
-            return []
+    def _parse_jsonl(self, path: Path) -> list[KnowledgeFact]:
+        """Parse KnowledgeFacts from a JSONL file, skipping corrupt lines."""
         results: list[KnowledgeFact] = []
         try:
-            for line in hist_path.read_text(encoding="utf-8").splitlines():
+            for line in path.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if not line:
                     continue
                 try:
                     results.append(KnowledgeFact(**json.loads(line)))
                 except (json.JSONDecodeError, Exception) as e:
-                    logger.warning("Skipping corrupt history line in %s: %s", hist_path, e)
+                    logger.warning("Skipping corrupt line in %s: %s", path, e)
         except OSError as e:
-            logger.warning("Failed to read history %s: %s", hist_path, e)
+            logger.warning("Failed to read %s: %s", path, e)
         return results
+
+    def _read_history(self, workspace_id: str, fact_key: str) -> list[KnowledgeFact]:
+        """Read all history entries from the JSONL file."""
+        hist_path = self._history_path(workspace_id, fact_key)
+        if not hist_path.exists():
+            return []
+        return self._parse_jsonl(hist_path)
 
     def _append_history(self, workspace_id: str, fact: KnowledgeFact) -> None:
         """Append a single JSON line to the history file atomically."""
@@ -192,7 +198,8 @@ class WorkspaceFactStore:
 
         fd, tmp_path = tempfile.mkstemp(dir=str(dir_path), suffix=".tmp")
         try:
-            # Read existing content if any
+            # Read existing content if any. Safe because callers hold the
+            # per-fact lock, so no concurrent writer targets this path.
             existing = b""
             if hist_path.exists():
                 try:
@@ -245,11 +252,20 @@ class WorkspaceFactStore:
         )
 
     def get_fact(self, workspace_id: str, fact_key: str) -> KnowledgeFact | None:
-        """Read the most recent version of a fact. Returns None if not found."""
+        """Read the most recent version of a fact.
+
+        Returns the fact unless the latest history entry is a tombstone
+        (status="deleted"), in which case None is returned. If the latest
+        entry is a tombstone but there are older non-deleted entries, those
+        are NOT returned — a deletion means "this fact no longer exists."
+        """
         history = self._read_history(workspace_id, fact_key)
         if not history:
             return None
-        return history[-1]
+        latest = history[-1]
+        if latest.status == "deleted":
+            return None
+        return latest
 
     def delete_fact(self, workspace_id: str, fact_key: str) -> KnowledgeFact | None:
         """Write a tombstone with status=deleted. Returns the tombstone."""
@@ -341,6 +357,147 @@ class WorkspaceFactStore:
     def get_history(self, workspace_id: str, fact_key: str) -> list[KnowledgeFact]:
         """Return full version history for a fact."""
         return self._read_history(workspace_id, fact_key)
+
+    # ── Latest entry helper ────────────────────────────────────────────────
+
+    def _latest_entry(self, workspace_id: str, fact_key: str) -> KnowledgeFact | None:
+        """Read the most recent version from the JSONL history file directly.
+
+        Skips tombstoned (status="deleted") entries — returns the latest
+        non-deleted entry, or None if all entries are deleted or the file
+        doesn't exist.
+        """
+        hist_path = self._history_path(workspace_id, fact_key)
+        if not hist_path.exists():
+            return None
+        try:
+            lines = hist_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return None
+        for line in reversed(lines):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = KnowledgeFact(**json.loads(line))
+                if entry.status != "deleted":
+                    return entry
+            except (json.JSONDecodeError, Exception):
+                continue
+        return None
+
+    # ── Startup integrity ─────────────────────────────────────────────────
+
+    def _read_history_from_path(self, path: Path) -> list[KnowledgeFact]:
+        """Read KnowledgeFacts directly from a given JSONL path.
+
+        Used during index rebuild where we don't have the original fact_key.
+        """
+        if not path.exists():
+            return []
+        return self._parse_jsonl(path)
+
+    def _integrity_check(self, workspace_id: str) -> dict[str, Any]:
+        """Validate and return the index dict for a workspace.
+
+        - If index.json is missing: creates it via _scan_or_build_index,
+          logs a warning ``workspace_facts_index_missing``, returns the
+          rebuilt index.
+        - If index.json is corrupt (not valid JSON or wrong shape): logs
+          an error, starts with an empty index for that workspace, and
+          returns an empty dict so subsequent queries include a degraded
+          signal rather than blocking the service.
+        """
+        idx_path = self._index_path(workspace_id)
+
+        if not idx_path.exists():
+            ws_dir = self._workspace_facts_path(workspace_id)
+            if ws_dir.exists():
+                logger.warning(
+                    "index.json missing for workspace %s — rebuilding from history", workspace_id
+                )
+            else:
+                logger.info("No workspace directory for %s — creating empty index", workspace_id)
+                self._ensure_workspace(workspace_id)
+            self._scan_or_build_index(workspace_id)
+            return self._read_index(workspace_id)
+
+        try:
+            text = idx_path.read_text(encoding="utf-8")
+            data = json.loads(text)
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError as e:
+            logger.error(
+                "Corrupt index.json for workspace %s: %s — starting with empty facts",
+                workspace_id,
+                e,
+            )
+        except OSError as e:
+            logger.error(
+                "Failed to read index.json for workspace %s: %s — starting with empty facts",
+                workspace_id,
+                e,
+            )
+        return {}
+
+    def _scan_history_files(self, workspace_id: str) -> tuple[dict[str, Any], int]:
+        """Rebuild the index from JSONL history files.
+
+        Reads every ``.jsonl`` file in ``facts/history/``, takes the last
+        valid entry per fact key, and returns a fresh index dict.
+
+        Returns ``(index, recovery_count)`` where ``recovery_count`` is the
+        number of unique fact keys recovered from history files that were
+        not present in the index before rebuilding (used for a warning log).
+        """
+        history_dir = self._workspace_facts_path(workspace_id) / "history"
+        rebuilt: dict[str, Any] = {}
+        recovery_count = 0
+
+        if not history_dir.exists():
+            return rebuilt, 0
+
+        for jsonl_path in sorted(history_dir.glob("*.jsonl")):
+            entries = self._read_history_from_path(jsonl_path)
+            if not entries:
+                continue
+            latest = entries[-1]
+            # Skip tombstoned entries — deleted facts should not reappear
+            # in the index after an index rebuild, keeping consistent with
+            # delete_fact semantics.
+            if latest.status == "deleted":
+                continue
+            key = latest.key
+            new_version = latest.version
+            if key not in rebuilt:
+                recovery_count += 1
+            rebuilt[key] = {
+                "path": str(jsonl_path.relative_to(self._workspace_facts_path(workspace_id))),
+                "version": new_version,
+                "updated_at": latest.updated_at.isoformat(),
+                "category": latest.category,
+            }
+
+        return rebuilt, recovery_count
+
+    def _scan_or_build_index(self, workspace_id: str) -> None:
+        """Rebuild the index from history files if index is missing.
+
+        Called at startup when index.json is missing but the workspace
+        directory exists. If history files are found, they are used to
+        reconstruct the index.
+        """
+        rebuilt, recovery_count = self._scan_history_files(workspace_id)
+        if recovery_count > 0:
+            logger.warning(
+                "workspace_facts_index_missing: rebuilt index for workspace %s from %d history entries",
+                workspace_id,
+                recovery_count,
+            )
+        if not rebuilt:
+            logger.info("No history found for workspace %s — wrote empty index", workspace_id)
+        self._write_index(workspace_id, rebuilt)
 
     # ── Internal ───────────────────────────────────────────────────────────
 

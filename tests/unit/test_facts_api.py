@@ -268,8 +268,7 @@ class TestFactStoreCRUD:
         assert result.version == 2
 
         fact = store.get_fact(ws, key)
-        assert fact is not None
-        assert fact.status == "deleted"
+        assert fact is None, "Fact should be invisible after deletion"
 
     def test_delete_nonexistent_returns_none(self, store):
         assert store.delete_fact("ws", "key") is None
