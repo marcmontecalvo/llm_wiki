@@ -113,7 +113,7 @@ development_status:
   epic-hf: backlog
   hf-1-workspace-facts-api: done  # artifact: hf-1-workspace-facts-api.md | spec created: facts API CRUD (REST + MCP), workspace_id scoping, workspace isolation, category aliases; 36 tests passing API CRUD (REST + MCP), workspace_id scoping, (workspace_id/scoping, fact_key, Works, workspace isolation, category aliases
   hf-2-fact-storage-history: complete  # artifact: hf-2-fact-storage-history.md | spec created: file-backed facts storage, atomic writes, append-only history, per-fact locks, startup integrity; 21 new tests + review fixes F1-F7
-  hf-3-category-registry: ready-for-dev  # We're required for hf-2: canonical workspace.* categories, household.* aliases, UNKNOWN_FACT_CATEGORY error
+  hf-3-category-registry: review  # implementation-complete: canonical category registry module, REST endpoint, MCP tool, CLI command, storage refactor; 27 new tests + 1549 existing pass
   hf-4-fact-conflict-review: ready-for-dev  # artifact: hf-4-fact-conflict-review.md | spec created: conflicting write detection, conflict candidates, review queue, honcho_conclusion pending_review default
   hf-5-contract-test-harness: ready-for-dev  # artifact: hf-5-contract-test-harness.md | spec created: end-to-end contract tests for facts API, conflict, workspace isolation, category aliases, CI integration
   hf-6-workspace-scoped-knowledge: ready-for-dev  # artifact: hf-6-workspace-scoped-knowledge.md | spec created: workspace-scoped query/search/pages/review/conflicts/export, domain-as-categorization enforcement

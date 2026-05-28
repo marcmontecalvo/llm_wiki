@@ -814,3 +814,20 @@ def register_tools(
                 raise
             except WikiError as e:
                 raise _handle_wiki_error(e) from e
+
+    # ── Category registry tool (Epic HF.3) ────────────────────────────────
+
+    @server.tool()
+    def categories_list() -> dict:
+        """List the canonical category registry with legacy aliases.
+
+        Returns the same data served by the REST
+        GET /v1/workspaces/{workspace_id}/facts/categories endpoint.
+
+        AC: 4
+        """
+        from llm_wiki.knowledge.categories import (  # noqa: PLC0415
+            get_categories_list as _get_categories_list,
+        )
+
+        return _get_categories_list()

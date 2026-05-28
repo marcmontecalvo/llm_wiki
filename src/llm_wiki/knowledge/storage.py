@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from llm_wiki.knowledge.categories import normalize_category
 from llm_wiki.knowledge.models import (
     KnowledgeFact,
     KnowledgeFactWriteRequest,
@@ -31,35 +32,6 @@ from llm_wiki.knowledge.models import (
 )
 
 logger = logging.getLogger(__name__)
-
-# ── Contract v1 category registry ──────────────────────────────────────────────
-
-_VALID_CATEGORIES: set[str] = {
-    "workspace.roster",
-    "workspace.assignments",
-    "workspace.pets",
-    "workspace.appliances",
-    "workspace.preferences",
-    "workspace.schedule",
-    "workspace.vehicles",
-    "workspace.presence",
-    "workspace.recurring_responsibilities",
-    "workspace.rooms",
-    "workspace.integrations",
-    "workspace.voice_nodes",
-}
-
-_CATEGORY_ALIASES: dict[str, str] = {
-    "household.roster": "workspace.roster",
-    "household.assignments": "workspace.assignments",
-    "household.pets": "workspace.pets",
-    "household.appliances": "workspace.appliances",
-    "household.preferences": "workspace.preferences",
-    "household.schedule": "workspace.schedule",
-    "household.vehicles": "workspace.vehicles",
-    "household.presence": "workspace.presence",
-    "household.recurring_responsibilities": "workspace.recurring_responsibilities",
-}
 
 # Re-export from canonical exceptions module for cross-module compatibility.
 # The canonical exceptions live in llm_wiki.exceptions as WikiError subclasses;
@@ -223,14 +195,8 @@ class WorkspaceFactStore:
     # ── Category validation ────────────────────────────────────────────────
 
     def _normalize_category(self, category: str) -> str:
-        """Normalize category alias to canonical form.
-
-        Raises UnknownFactCategoryError if the category is not recognized.
-        """
-        canonical = _CATEGORY_ALIASES.get(category, category)
-        if canonical not in _VALID_CATEGORIES:
-            raise UnknownFactCategoryError(category, sorted(_VALID_CATEGORIES))
-        return canonical
+        """Normalize category alias to canonical form."""
+        return normalize_category(category)
 
     # ── Core CRUD ──────────────────────────────────────────────────────────
 
@@ -344,7 +310,7 @@ class WorkspaceFactStore:
         cat_map = category_map or {}
         results: list[KnowledgeFactWriteResponse] = []
         for req in requests:
-            category = cat_map.get(req.category, req.category)
+            category = self._normalize_category(cat_map.get(req.category, req.category))
             result = self._put_fact_internal(
                 workspace_id=workspace_id,
                 fact_key=req.key,

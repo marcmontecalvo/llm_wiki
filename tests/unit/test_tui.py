@@ -84,8 +84,20 @@ class TestCredentials:
     """Test credential loading from .env and credentials file."""
 
     def test_app_context_defaults(self):
+        import os
+
         from llm_wiki.tui.app import AppContext
 
-        ctx = AppContext()
-        assert ctx.username == "admin"
-        assert ctx.password == ""
+        # Ensure env is clean — tests may set these (e.g. integration suite)
+        env_before = {
+            "WIKI_UI_USER": os.environ.pop("WIKI_UI_USER", None),
+            "WIKI_UI_PASSWORD": os.environ.pop("WIKI_UI_PASSWORD", None),
+        }
+        try:
+            ctx = AppContext()
+            assert ctx.username == "admin"
+            assert ctx.password == ""
+        finally:
+            for k, v in env_before.items():
+                if v is not None:
+                    os.environ[k] = v

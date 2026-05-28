@@ -12,9 +12,22 @@ import secrets
 from starlette.requests import HTTPConnection
 
 
+def generate_password() -> str:
+    """Generate a random URL-safe password.
+
+    Uses ``secrets`` for cryptographically secure randomness.
+    """
+    return secrets.token_urlsafe(16)
+
+
 def get_ui_user() -> str:
     """Get the configured UI username."""
     return os.environ.get("WIKI_UI_USER", "admin")
+
+
+def get_ui_password() -> str:
+    """Get the configured UI password from environment."""
+    return os.environ.get("WIKI_UI_PASSWORD", "")
 
 
 def verify_ui_auth(conn: HTTPConnection, ui_password: str) -> bool:

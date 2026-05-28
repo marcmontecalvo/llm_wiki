@@ -1,5 +1,6 @@
 """Command-line interface for llm-wiki."""
 
+import json
 import os
 import subprocess
 from datetime import UTC, datetime
@@ -1805,6 +1806,36 @@ def govern_dashboard(domain: str | None, output_json: bool, wiki_base: Path):
                     )
             else:
                 click.echo("  Recent changes:     none")
+
+
+@main.group()
+def facts():
+    """Manage structured workspace facts."""
+    pass
+
+
+@facts.command("categories")
+@click.option(
+    "--json", "as_json", is_flag=True, default=False, help="Output machine-parseable JSON."
+)
+def llm_wiki_facts_categories(as_json: bool) -> None:
+    """List the canonical category registry with legacy aliases.
+
+    AC: 5
+    """
+    from llm_wiki.knowledge.categories import get_categories_list  # noqa: PLC0415
+
+    data = get_categories_list()
+    if as_json:
+        click.echo(json.dumps(data, indent=2))
+    else:
+        click.echo("Canonical categories:")
+        for cat in data["canonical"]:
+            click.echo(f"  - {cat}")
+        if data["aliases"]:
+            click.echo("\nLegacy aliases (mapped to canonical):")
+            for alias, canonical in sorted(data["aliases"].items()):
+                click.echo(f"  {alias} → {canonical}")
 
 
 @main.group()

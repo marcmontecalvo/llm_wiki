@@ -19,6 +19,7 @@ from llm_wiki.deps import get_knowledge_store
 from llm_wiki.exceptions import (
     UnknownFactCategoryError,
 )
+from llm_wiki.knowledge.categories import get_categories_list
 from llm_wiki.knowledge.models import (
     KnowledgeFactWriteRequest,
     KnowledgeFactWriteResponse,
@@ -29,6 +30,18 @@ from llm_wiki.knowledge.storage import WorkspaceFactStore
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/workspaces/{workspace_id}", tags=["facts"])
+
+
+@router.get("/facts/categories")
+async def categories() -> dict:
+    """Return the canonical category registry with aliases.
+
+    Global registry served regardless of workspace parameter.
+    Must be **before** /facts/{fact_key} to prevent FastAPI from
+    matching "categories" as a fact_key.
+    (AC: 3)
+    """
+    return get_categories_list()
 
 
 @router.get("/facts/{fact_key}")

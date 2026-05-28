@@ -9,6 +9,7 @@ from llm_wiki.exceptions import (
     IngestError,
     InvalidDepthError,
     QueryTimeoutError,
+    UnknownFactCategoryError,
     WikiNotFoundError,
 )
 
@@ -81,6 +82,9 @@ def test_unknown_exception_defaults_to_500():
 def test_rebuild_hint_only_for_index_stale():
     for exc_type, _ in ERROR_MAP.items():
         if exc_type is not IndexStaleError:
+            # UnknownFactCategoryError requires (category, valid) args — skip
+            if exc_type is UnknownFactCategoryError:
+                continue
             http_exc = wiki_error_to_http(exc_type("test"))
             assert http_exc.detail["rebuild_hint"] is False
     # IndexStaleError specifically

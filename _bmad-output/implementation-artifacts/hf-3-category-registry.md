@@ -1,6 +1,6 @@
 # Story HF.3: Category Registry and Aliases
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -37,35 +37,35 @@ so that known categories work and unknown categories return stable errors.
 
 ## Tasks / Subtasks
 
-- [ ] Create category registry module (`src/llm_wiki/knowledge/categories.py` — AC: 1–2, 7)
-  - [ ] `CANONICAL_CATEGORIES: frozenset[str]` — all `workspace.*` names
-  - [ ] `CATEGORY_ALIASES: dict[str, str]` — mapping `household.*` → `workspace.*`
-  - [ ] `normalize_category(raw: str) -> str` — returns canonical form or raises `UnknownFactCategory`
-  - [ ] `is_valid_category(category: str) -> bool` — fast check
-  - [ ] `_build_categories(): frozenset[str]` — reads from shared contract
-- [ ] Update `_validate_category` in `WorkspaceFactStore` (from HF.1—AC: 6, 7)
-  - [ ] Replace hardcoded validation with `normalize_category()` call
-  - [ ] On invalid category: raise `UnknownFactCategory(category)` with error info
-  - [ ] Ensure the exception carries `details.valid_categories` for HTTP response rendering
-- [ ] Create REST category endpoint (`src/llm_wiki/api/routers/facts.py` — AC: 3)
-  - [ ] `GET /v1/workspaces/{workspace_id}/facts/categories` — returns registry
-  - [ ] Response: `{"canonical": [...], "aliases": {...}}` (no `enabled` field in v1; toggle TBD for future)
-  - [ ] Same data served for all workspaces (global registry, not per-workspace)
-  - [ ] Can serve from any workspace or directly from the module
-- [ ] Create MCP categories tool (`src/llm_wiki/mcp/tools.py` — AC: 4)
-  - [ ] `categories_list()` returns the same data structure as REST
-- [ ] Create CLI categories command (`src/llm_wiki/cli.py` — AC: 5)
-  - [ ] `def llm_wiki_facts_categories()` — prints to stdout
-  - [ ] `--json` flag emits machine-parseable output (NFR-I3)
-- [ ] Write tests (`tests/unit/test_category_registry.py` — AC: 1–7)
-  - [ ] Test canonical categories are accepted as-is
-  - [ ] Test each of the 9 aliases maps to its correct canonical form
-  - [ ] Test unknown categories raise `UnknownFactCategory` with valid list
-  - [ ] Test normalization is stable: normalize(normalize(x)) == normalize(x)
-  - [ ] Test case sensitivity: `Workspace.Pets` should not normalize (fail, register exact forms only)
-  - [ ] Test REST endpoint returns correct structure
-  - [ ] Test MCP tool returns same data
-  - [ ] Test CLI command prints correctly
+- [x] Create category registry module (`src/llm_wiki/knowledge/categories.py` — AC: 1–2, 7)
+  - [x] `CANONICAL_CATEGORIES: frozenset[str]` — all `workspace.*` names
+  - [x] `CATEGORY_ALIASES: dict[str, str]` — mapping `household.*` → `workspace.*`
+  - [x] `normalize_category(raw: str) -> str` — returns canonical form or raises `UnknownFactCategory`
+  - [x] `is_valid_category(category: str) -> bool` — fast check
+  - [x] `_build_categories(): frozenset[str]` — reads from shared contract
+- [x] Update `_validate_category` in `WorkspaceFactStore` (from HF.1—AC: 6, 7)
+  - [x] Replace hardcoded validation with `normalize_category()` call
+  - [x] On invalid category: raise `UnknownFactCategory(category)` with error info
+  - [x] Ensure the exception carries `details.valid_categories` for HTTP response rendering
+- [x] Create REST category endpoint (`src/llm_wiki/api/routers/facts.py` — AC: 3)
+  - [x] `GET /v1/workspaces/{workspace_id}/facts/categories` — returns registry
+  - [x] Response: `{"canonical": [...], "aliases": {...}}` (no `enabled` field in v1; toggle TBD for future)
+  - [x] Same data served for all workspaces (global registry, not per-workspace)
+  - [x] Can serve from any workspace or directly from the module
+- [x] Create MCP categories tool (`src/llm_wiki/mcp/tools.py` — AC: 4)
+  - [x] `categories_list()` returns the same data structure as REST
+- [x] Create CLI categories command (`src/llm_wiki/cli.py` — AC: 5)
+  - [x] `def llm_wiki_facts_categories()` — prints to stdout
+  - [x] `--json` flag emits machine-parseable output (NFR-I3)
+- [x] Write tests (`tests/unit/test_category_registry.py` — AC: 1–7)
+  - [x] Test canonical categories are accepted as-is
+  - [x] Test each of the 9 aliases maps to its correct canonical form
+  - [x] Test unknown categories raise `UnknownFactCategory` with valid list
+  - [x] Test normalization is stable: normalize(normalize(x)) == normalize(x)
+  - [x] Test case sensitivity: `Workspace.Pets` should not normalize (fail, register exact forms only)
+  - [x] Test REST endpoint returns correct structure
+  - [x] Test MCP tool returns same data
+  - [x] Test CLI command prints correctly
 
 ## Dev Notes
 
@@ -136,3 +136,41 @@ def get_categories_list() -> dict:
   }
 }
 ```
+
+## Dev Agent Record
+
+### Implementation Plan
+
+Extracted inline category constants from `storage.py` into a dedicated `categories.py` module.
+Storage layer delegates to the new `normalize_category()` function, wrapping `UnknownFactCategory`
+→ `UnknownFactCategoryError` for backward compatibility.
+
+### File List
+
+- `src/llm_wiki/knowledge/categories.py` — **Added**: category registry module
+- `src/llm_wiki/knowledge/storage.py` — **Modified**: replaced inline `_VALID_CATEGORIES`/`_CATEGORY_ALIASES` dicts with `categories.py` imports; `_normalize_category` now delegates to `normalize_category()`
+- `src/llm_wiki/api/routers/facts.py` — **Modified**: added `GET /facts/categories` endpoint (placed before `/facts/{fact_key}` to prevent route clobbering); removed unused `Depends` import
+- `src/llm_wiki/mcp/tools.py` — **Modified**: added `categories_list()` MCP tool in register_tools
+- `src/llm_wiki/cli.py` — **Modified**: added `facts categories` CLI subcommand with `--json` flag; added `json` import
+- `tests/unit/test_category_registry.py` — **Added**: 27 tests covering AC 1–7
+- `tests/unit/test_mcp_tools.py` — **Modified**: updated expected tool count from 11 to 12
+
+### Change Log
+
+- Addressed code review findings - category registry extracted from storage.py into dedicated module; 27 tests pass; 1549/1552 existing tests pass (3 pre-existing failures) (Date: 2026-05-27)
+
+### Completion Notes
+
+Story HF.3 complete. All 7 acceptance criteria satisfied:
+
+- AC1: Canonical `workspace.*` categories accepted as-is (12 categories)
+- AC2: 9 `household.*` aliases map to canonical forms
+- AC3: `GET /v1/workspaces/{workspace_id}/facts/categories` returns `{canonical, aliases}`
+- AC4: `categories_list()` MCP tool returns same data as REST
+- AC5: `llm-wiki facts categories [--json]` CLI command works
+- AC6: Unknown categories return HTTP 422 with `unknown_knowledge_category` error code
+- AC7: Stored facts use `workspace.*` form; aliases normalized on write
+
+Key implementation detail: The `/facts/categories` REST route is registered **before** `/facts/{fact_key}` in the router to prevent FastAPI from matching `categories` as a `fact_key`.
+
+Tests: 27 new (all pass), 1549 existing pass, 3 pre-existing failures (unrelated).

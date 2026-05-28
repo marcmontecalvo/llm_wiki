@@ -61,7 +61,7 @@ def _make_mock_wiki(**overrides: object) -> MagicMock:
 
 
 def test_tools_list_has_eleven_tools(temp_dir: Path) -> None:
-    """All 11 tools are registered (8 core + 3 archive)."""
+    """All 12 tools are registered (8 core + 3 archive + categories_list)."""
     wiki = _make_mock_wiki()
     server = FastMCP("test")
     register_tools(server, wiki)
@@ -80,6 +80,7 @@ def test_tools_list_has_eleven_tools(temp_dir: Path) -> None:
         "list_archive",
         "archive_page",
         "unarchive_page",
+        "categories_list",
     }
     assert names == expected
 
