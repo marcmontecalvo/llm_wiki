@@ -1,6 +1,6 @@
 # Story HF.4: Fact Conflict and Review Queue
 
-Status: backlog
+Status: review
 
 ## Story
 
@@ -30,50 +30,50 @@ so that incompatible facts don't silently overwrite each other.
 
 ## Tasks / Subtasks
 
-- [ ] Implement conflict detection in `WorkspaceFactStore` (AC: 1–3, 7)
-  - [ ] `put_fact()` option: `expected_previous_version: int | None` — when set, compare with current version
-  - [ ] If versions don't match: return `KnowledgeFactWriteResponse(status="conflict_detected", conflict={...})`
-  - [ ] Add `value_conflict_check()`: compares old value vs new value for semantic conflict (not just version)
-  - [ ] If values differ for the same key: create conflict entry in review queue
-  - [ ] `class FactConflict(BaseModel)`: `key`, `category`, `workspace_id`, `candidates` (list), `requires_review: bool`
-  - [ ] Add conflict entries to `wiki_system/workspaces/{workspace_id}/facts/conflicts.jsonl`
-  - [ ] Persist conflict with timestamp, source types, values, and versions
-- [ ] Implement review queue storage (AC: 3–6, 8)
-  - [ ] `ReviewQueue` module at `src/llm_wiki/knowledge/review.py`
-  - [ ] `_conflicts_path(workspace_id) -> str` returns path to `facts/conflicts.jsonl`
-  - [ ] `list_conflicts(workspace_id) -> list[FactConflict]` — reads unresolved conflicts, sorted by timestamp desc
-  - [ ] `resolve_conflict(workspace_id, fact_key, choice: Literal["canonical", "reject", "stale"]) -> KnowledgeFactWriteResponse`
-    - [ ] `canonical`: pick the accepted candidate, write as latest version
-    - [ ] `reject`: reject the new candidate, keep existing
-    - [ ] `stale`: mark existing as stale, write the new value
-  - [ ] Conflict entries: `{"key": "...", "candidates": [...], "resolved": bool, "resolved_at": "..." | null}`
-  - [ ] Mark as resolved: set `resolved: true`, `resolved_at: now`, store resolution choice
-- [ ] Create REST conflict endpoints (AC: 4–5, 8)
-  - [ ] `GET /v1/workspaces/{workspace_id}/facts/conflicts` — list unresolved conflicts
-  - [ ] `POST /v1/workspaces/{workspace_id}/facts/{fact_key}/resolve` — accepts `{"choice": "canonical" | "reject" | "stale", "candidate_index": int | None}`
-  - [ ] Return resolved conflict with updated status
-- [ ] Create MCP conflict tools (AC: 5)
-  - [ ] `conflict_list(workspace_id: str)` — calls review queue
-  - [ ] `conflict_resolve(workspace_id: str, fact_key: str, choice: str, candidate_index: int | None)` — resolves
-- [ ] Create CLI conflict commands (AC: 5)
-  - [ ] `llm-wiki facts review list [--workspace <id>] [--json]`
-  - [ ] `llm-wiki facts review resolve <fact_key> --choice <canonical|reject|stale> [--index <n>] [--workspace <id>] [--json]`
-- [ ] Implement `pending_review` default for honcho sources (AC: 7)
-  - [ ] In `put_fact()`: if `write_req.source.type == "honcho_conclusion"` and workspace policy requires review:
-  - [ ] Set `status: "pending_review"` — the fact is written but not active
-  - [ ] Configurable: `review_policy: {honcho_conclusion: "pending_review", ...}` in `daemon.yaml`
-  - [ ] Non-honcho sources default to `status: "active"` (instant trust for manual/hardware/social/calendars)
-- [ ] Write tests (`tests/unit/test_fact_conflicts.py` — AC: 1–8)
-  - [ ] Test version conflict detection: expected_version mismatches current
-  - [ ] Test value conflict: same version (optimistic concurrency), different value
-  - [ ] Test conflict creation and storage
-  - [ ] Test conflict listing (resolved vs unresolved)
-  - [ ] Test resolution: canonical choice
-  - [ ] Test resolution: reject choice
-  - [ ] Test resolution: stale choice
-  - [ ] Test honcho_conclusion defaults to pending_review
-  - [ ] Test other source types default to active
-  - [ ] Test conflict_delete/cleanup after resolution
+- [x] Implement conflict detection in `WorkspaceFactStore` (AC: 1–3, 7)
+  - [x] `put_fact()` option: `expected_previous_version: int | None` — when set, compare with current version
+  - [x] If versions don't match: return `KnowledgeFactWriteResponse(status="conflict_detected", conflict={...})`
+  - [x] Add `value_conflict_check()`: compares old value vs new value for semantic conflict (not just version)
+  - [x] If values differ for the same key: create conflict entry in review queue
+  - [x] `class FactConflict(BaseModel)`: `key`, `category`, `workspace_id`, `candidates` (list), `requires_review: bool`
+  - [x] Add conflict entries to `wiki_system/workspaces/{workspace_id}/facts/conflicts.jsonl`
+  - [x] Persist conflict with timestamp, source types, values, and versions
+- [x] Implement review queue storage (AC: 3–6, 8)
+  - [x] `ReviewQueue` module at `src/llm_wiki/knowledge/review.py`
+  - [x] `_conflicts_path(workspace_id) -> str` returns path to `facts/conflicts.jsonl`
+  - [x] `list_conflicts(workspace_id) -> list[FactConflict]` — reads unresolved conflicts, sorted by timestamp desc
+  - [x] `resolve_conflict(workspace_id, fact_key, choice: Literal["canonical", "reject", "stale"]) -> KnowledgeFactWriteResponse`
+    - [x] `canonical`: pick the accepted candidate, write as latest version
+    - [x] `reject`: reject the new candidate, keep existing
+    - [x] `stale`: mark existing as stale, write the new value
+  - [x] Conflict entries: `{"key": "...", "candidates": [...], "resolved": bool, "resolved_at": "..." | null}`
+  - [x] Mark as resolved: set `resolved: true`, `resolved_at: now`, store resolution choice
+- [x] Create REST conflict endpoints (AC: 4–5, 8)
+  - [x] `GET /v1/workspaces/{workspace_id}/facts/conflicts` — list unresolved conflicts
+  - [x] `POST /v1/workspaces/{workspace_id}/facts/{fact_key}/resolve` — accepts `{"choice": "canonical" | "reject" | "stale", "candidate_index": int | None}`
+  - [x] Return resolved conflict with updated status
+- [x] Create MCP conflict tools (AC: 5)
+  - [x] `conflict_list(workspace_id: str)` — calls review queue
+  - [x] `conflict_resolve(workspace_id: str, fact_key: str, choice: str, candidate_index: int | None)` — resolves
+- [x] Create CLI conflict commands (AC: 5)
+  - [x] `llm-wiki facts review list [--workspace <id>] [--json]`
+  - [x] `llm-wiki facts review resolve <fact_key> --choice <canonical|reject|stale> [--index <n>] [--workspace <id>] [--json]`
+- [x] Implement `pending_review` default for honcho sources (AC: 7)
+  - [x] In `put_fact()`: if `write_req.source.type == "honcho_conclusion"` and workspace policy requires review:
+  - [x] Set `status: "pending_review"` — the fact is written but not active
+  - [x] Configurable: `review_policy: {honcho_conclusion: "pending_review", ...}` in `daemon.yaml`
+  - [x] Non-honcho sources default to `status: "active"` (instant trust for manual/hardware/social/calendars)
+- [x] Write tests (`tests/unit/test_fact_conflicts.py` — AC: 1–8)
+  - [x] Test version conflict detection: expected_version mismatches current
+  - [x] Test value conflict: same version (optimistic concurrency), different value
+  - [x] Test conflict creation and storage
+  - [x] Test conflict listing (resolved vs unresolved)
+  - [x] Test resolution: canonical choice
+  - [x] Test resolution: reject choice
+  - [x] Test resolution: stale choice
+  - [x] Test honcho_conclusion defaults to pending_review
+  - [x] Test other source types default to active
+  - [x] Test conflict_delete/cleanup after resolution
 
 ## Dev Notes
 
@@ -131,3 +131,59 @@ operator/agent calls POST /facts/{key}/resolve
   → mark conflict as resolved: {resolved: true, resolved_at: now, choice: "canonical"}
   → return updated KnowledgeFactWriteResponse
 ```
+
+## File List
+
+- `src/llm_wiki/knowledge/models.py` — Modified: added `workspace_id`, `resolved`, `resolved_at`, `resolution_choice` to `KnowledgeConflict`; added `KnowledgeConflictResolutionRequest` model
+- `src/llm_wiki/knowledge/review.py` — New: ReviewQueue module with add_conflict, list_conflicts, resolve_conflict
+- `src/llm_wiki/knowledge/storage.py` — Modified: conflict detection in `_put_fact_internal`, `_value_conflict_check` static method, `review_queue` property
+- `src/llm_wiki/api/routers/facts.py` — Modified: added GET /facts/conflicts and POST /facts/{fact_key}/resolve endpoints
+- `src/llm_wiki/mcp/tools.py` — Modified: added `conflict_list` and `conflict_resolve` MCP tools
+- `src/llm_wiki/cli.py` — Modified: added `facts review list` and `facts review resolve` CLI commands
+- `tests/unit/test_fact_conflicts.py` — New: 20 tests covering AC 1–8
+- `tests/unit/test_facts_api.py` — Modified: updated `test_put_returns_stale_rejected_on_version_mismatch` to expect `conflict_detected`
+
+## Change Log
+
+- Addressed fact conflict detection and review queue implementation (Date: 2026-05-28)
+  - Conflict detection: version mismatch and value diff detection in put_fact
+  - Review queue: JSONL-backed storage and resolution (canonical/reject/stale)
+  - REST, MCP, CLI interfaces for conflict listing and resolution
+  - honcho_conclusion sources default to pending_review status
+
+## Dev Agent Record
+
+### Implementation Plan
+
+Implemented conflict detection pipeline across 6 layers:
+1. Models: Extended KnowledgeConflict with workspace_id/resolved fields; added KnowledgeConflictResolutionRequest
+2. ReviewQueue: File-backed module at knowledge/review.py with atomic JSONL writes
+3. Storage: Modified _put_fact_internal to detect version conflicts (expected_previous_version mismatch) and value conflicts (different values for same key), added _value_conflict_check for recursive dict comparison
+4. REST: GET /facts/conflicts and POST /facts/{key}/resolve endpoints
+5. MCP: conflict_list and conflict_resolve tools
+6. CLI: `llm-wiki facts review list` and `llm-wiki facts review resolve`
+
+### Debug Log
+
+- **datetime.UTC bug**: Initially used `datetime.now(tz=datetime.UTC)` but `datetime` is imported as class, not module. Fixed to `from datetime import UTC, datetime` and `datetime.now(tz=UTC)`.
+- **stale_rejected vs conflict_detected**: Existing test expected `stale_rejected` for version mismatch, now correctly expects `conflict_detected` per new contract.
+- **zip B95 lint**: Added `strict=True` to zip() call per ruff B95 rule.
+
+### Completion Notes
+
+- All 20 new conflict tests pass
+- All 58 existing fact tests pass
+- Full unit suite: 1588 passed (1 pre-existing failure in test_observability due to WIKI_UI_PASSWORD env var)
+- Ruff lint: all checks pass on modified files
+
+### Status
+
+Story complete. All acceptance criteria satisfied:
+- AC1: Version conflict detection with conflict_detected response
+- AC2: Value conflict detection without explicit version check
+- AC3: Conflicts tagged with status='conflicted' and added to review queue
+- AC4: Conflict listing with workspace/fact_key/candidates/status
+- AC5: REST/MCP/CLI all surface conflict listing
+- AC6: Resolution with canonical/reject/stale choices
+- AC7: honcho_conclusion defaults to pending_review
+- AC8: Conflict responses include requires_review and structured data

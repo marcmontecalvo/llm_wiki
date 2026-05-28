@@ -815,6 +815,75 @@ def register_tools(
             except WikiError as e:
                 raise _handle_wiki_error(e) from e
 
+        # ── Conflict tools (Epic HF.4) ────────────────────────────────────────
+
+        @server.tool()
+        async def conflict_list(
+            workspace_id: str,
+        ) -> dict:
+            """List unresolved fact conflicts for a workspace.
+
+            Returns a list of pending conflicts with candidate
+            information, workspace, and fact keys.
+
+            Args:
+                workspace_id: The workspace identifier.
+            """
+            try:
+                conflicts = await asyncio.to_thread(
+                    knowledge_store.review_queue.list_conflicts,
+                    workspace_id,
+                )
+                return {"conflicts": conflicts, "total": len(conflicts)}
+            except ToolError:
+                raise
+            except WikiError as e:
+                raise _handle_wiki_error(e) from e
+
+        @server.tool()
+        async def conflict_resolve(
+            workspace_id: str,
+            fact_key: str,
+            choice: str,
+            candidate_index: int | None = None,
+        ) -> dict:
+            """Resolve a fact conflict.
+
+            Args:
+                workspace_id: The workspace identifier.
+                fact_key: The fact key involved in the conflict.
+                choice: One of ``canonical``, ``reject``, ``stale``.
+                candidate_index: Index of the winning candidate
+                    (for ``canonical`` choice).
+            """
+            if choice not in ("canonical", "reject", "stale"):
+                raise ToolError(
+                    f"INVALID_ARGUMENT(1000): choice must be one of "
+                    f"canonical, reject, stale — got {choice!r}"
+                )
+            try:
+                result = await asyncio.to_thread(
+                    knowledge_store.resolve_conflict,
+                    workspace_id,
+                    fact_key,
+                    choice,
+                    candidate_index,
+                )
+                error = result.get("error")
+                if error == "conflict_not_found":
+                    raise ToolError(
+                        f"FACT_CONFLICT(1010): No unresolved conflict found for {fact_key}"
+                    )
+                if error == "INVALID_CANDIDATE_INDEX":
+                    raise ToolError(
+                        f"FACT_CONFLICT(1011): candidate_index must be 0..{result['candidate_count'] - 1}"
+                    )
+                return result  # type: ignore[no-any-return]
+            except ToolError:
+                raise
+            except WikiError as e:
+                raise _handle_wiki_error(e) from e
+
     # ── Category registry tool (Epic HF.3) ────────────────────────────────
 
     @server.tool()

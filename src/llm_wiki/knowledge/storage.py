@@ -21,15 +21,18 @@ import tempfile
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from llm_wiki.knowledge.categories import normalize_category
 from llm_wiki.knowledge.models import (
+    KnowledgeConflict,
     KnowledgeFact,
     KnowledgeFactWriteRequest,
     KnowledgeFactWriteResponse,
     KnowledgeListResponse,
+    KnowledgeSource,
 )
+from llm_wiki.knowledge.review import ReviewQueue
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +57,8 @@ class WorkspaceFactStore:
         self._workspace_locks: dict[str, threading.Lock] = {}
         # Protects dict insertions themselves (thread-safe lazy init)
         self._lock_lock = threading.Lock()
+        # Lazy-initialized review queue
+        self._review_queue: ReviewQueue | None = None
 
     # ── Lock helpers ───────────────────────────────────────────────────────
 
@@ -198,6 +203,15 @@ class WorkspaceFactStore:
         """Normalize category alias to canonical form."""
         return normalize_category(category)
 
+    # ── Review queue access ────────────────────────────────────────────────
+
+    @property
+    def review_queue(self) -> ReviewQueue:
+        """Return the lazy-initialized review-queue helper."""
+        if self._review_queue is None:
+            self._review_queue = ReviewQueue(queue_dir=Path(self._wiki_base) / "workspaces")
+        return self._review_queue
+
     # ── Core CRUD ──────────────────────────────────────────────────────────
 
     def put_fact(
@@ -306,9 +320,16 @@ class WorkspaceFactStore:
         *,
         category_map: dict[str, str] | None = None,
     ) -> list[KnowledgeFactWriteResponse]:
-        """Process writes sequentially, each under its own per-fact lock."""
+        """Process writes sequentially, each under its own per-fact lock.
+
+        Deduplicates conflicts per fact_key within the batch — if a
+        conflict is already recorded for a key in the same batch,
+        subsequent writes for that key don't create duplicate entries.
+        """
         cat_map = category_map or {}
         results: list[KnowledgeFactWriteResponse] = []
+        # Track which fact keys have had a conflict created in this batch
+        conflicts_created: set[str] = set()
         for req in requests:
             category = self._normalize_category(cat_map.get(req.category, req.category))
             result = self._put_fact_internal(
@@ -316,6 +337,7 @@ class WorkspaceFactStore:
                 fact_key=req.key,
                 request=req,
                 category=category,
+                _known_conflicts=conflicts_created,
             )
             results.append(result)
         return results
@@ -323,6 +345,172 @@ class WorkspaceFactStore:
     def get_history(self, workspace_id: str, fact_key: str) -> list[KnowledgeFact]:
         """Return full version history for a fact."""
         return self._read_history(workspace_id, fact_key)
+
+    def resolve_conflict(
+        self,
+        workspace_id: str,
+        fact_key: str,
+        choice: Literal["canonical", "reject", "stale"],
+        candidate_index: int | None = None,
+    ) -> dict[str, Any]:
+        """Resolve a conflict and apply the chosen resolution as a new fact version.
+
+        Resolution strategies:
+        - ``canonical``: Pick the candidate at ``candidate_index``, write its
+          value as the new version.
+        - ``reject``: Reject the new (candidate[1]) value, keep existing fact
+          intact. Mark conflict resolved.
+        - ``stale``: Mark the existing fact as stale and apply the new
+          candidate's value as a new version.
+
+        Returns a dict with conflict entry and optionally the applied fact.
+        """
+        # H3: Read all unresolved conflicts for this key (not just first one)
+        conflicts = self.review_queue.list_conflicts(workspace_id, unresolved_only=False)
+        unresolved = [
+            c for c in conflicts if not c.get("resolved", False) and c.get("key") == fact_key
+        ]
+        if not unresolved:
+            return {"key": fact_key, "resolved": False, "error": "conflict_not_found"}
+
+        conflict_entry = unresolved[0]
+        candidates = conflict_entry["candidates"]
+
+        # H2: Validate candidate_index bounds for canonical choice
+        if choice == "canonical":
+            if candidate_index is None or candidate_index < 0 or candidate_index >= len(candidates):
+                return {
+                    "key": fact_key,
+                    "resolved": False,
+                    "error": "INVALID_CANDIDATE_INDEX",
+                    "candidate_count": len(candidates),
+                }
+
+        # Step 2: Mark ALL unresolved conflicts for this key as resolved
+        resolved_entries: list[dict[str, Any]] = []
+        for _entry in unresolved:
+            resolved_entries.append(
+                self.review_queue.resolve_conflict(workspace_id, fact_key, choice, candidate_index)
+            )
+
+        # Step 3: Apply the resolution by writing a new fact version
+        existing = self.get_fact(workspace_id, fact_key)
+        applied_fact: KnowledgeFact | None = None
+        if choice == "canonical":
+            winner = candidates[candidate_index]
+            new_value: dict[str, Any] = winner["value"]
+            new_source = (
+                KnowledgeSource(**winner["source"]) if winner.get("source") else KnowledgeSource()
+            )
+            new_confidence = winner.get("confidence")
+            applied_fact = self._apply_conflict_write(
+                workspace_id,
+                fact_key,
+                existing,
+                new_value,
+                new_source,
+                new_confidence,
+                fact_status="active",
+            )
+        elif choice == "stale" and existing is not None:
+            # Write the new value (candidates[1]) as replacement, mark existing stale
+            new_value = candidates[1]["value"]
+            new_source = (
+                KnowledgeSource(**candidates[1]["source"])
+                if candidates[1].get("source")
+                else KnowledgeSource()
+            )
+            new_confidence = candidates[1].get("confidence")
+            # Unlike `canonical`, stale resolution first tags old fact as
+            # conflicted, then writes the new value as the active version.
+            now = datetime.now(tz=UTC)
+            new_version = existing.version + 1
+            stale_fact = KnowledgeFact(
+                workspace_id=workspace_id,
+                category=existing.category,
+                key=existing.key,
+                value=existing.value,
+                source=existing.source,
+                provenance=existing.provenance,
+                confidence=existing.confidence,
+                visibility=existing.visibility,
+                valid_from=existing.valid_from,
+                valid_until=existing.valid_until,
+                created_at=existing.created_at,
+                updated_at=now,
+                version=new_version,
+                status="conflicted",
+            )
+            self._append_history(workspace_id, fact=stale_fact)
+            # Then write the new value as active
+            applied_fact = self._apply_conflict_write(
+                workspace_id,
+                fact_key,
+                stale_fact,
+                new_value,
+                new_source,
+                new_confidence,
+                fact_status="active",
+            )
+        elif choice == "reject":
+            # Keep existing fact, no write needed — conflict just marked resolved
+            pass
+
+        result = dict(resolved_entries[0]) if resolved_entries else {}
+        if applied_fact is not None:
+            result["fact"] = applied_fact.model_dump()
+        return result
+
+    def _apply_conflict_write(
+        self,
+        workspace_id: str,
+        fact_key: str,
+        existing: KnowledgeFact | None,
+        value: dict[str, Any],
+        source: KnowledgeSource,
+        confidence: float | None,
+        *,
+        fact_status: str = "active",
+    ) -> KnowledgeFact:
+        """Write a new fact version as part of conflict resolution.
+
+        This bypasses conflict detection to avoid re-triggering conflicts.
+        """
+        now = datetime.now(tz=UTC)
+        new_version = (existing.version + 1) if existing else 1
+        fact = KnowledgeFact(
+            workspace_id=workspace_id,
+            category=(existing.category if existing else "general"),
+            key=fact_key,
+            value=value,
+            source=source,
+            provenance=existing.provenance if existing else [],
+            confidence=confidence,
+            visibility=existing.visibility if existing else "workspace",
+            valid_from=existing.valid_from if existing else None,
+            valid_until=existing.valid_until if existing else None,
+            created_at=existing.created_at if existing else now,
+            updated_at=now,
+            version=new_version,
+            status=fact_status,  # type: ignore[arg-type]
+        )
+        self._append_history(workspace_id, fact=fact)
+
+        # Update index
+        ws_lock = self._get_workspace_lock(workspace_id)
+        with ws_lock:
+            index = self._read_index(workspace_id)
+            hist_path = self._history_path(workspace_id, fact_key)
+            index[fact_key] = {
+                "path": str(hist_path.relative_to(self._workspace_facts_path(workspace_id)))
+                if hist_path.exists()
+                else "",
+                "version": new_version,
+                "updated_at": now.isoformat(),
+                "category": fact.category,
+            }
+            self._write_index(workspace_id, index)
+        return fact
 
     # ── Latest entry helper ────────────────────────────────────────────────
 
@@ -473,26 +661,107 @@ class WorkspaceFactStore:
         fact_key: str,
         request: KnowledgeFactWriteRequest,
         category: str,
+        *,
+        _known_conflicts: set[str] | None = None,
     ) -> KnowledgeFactWriteResponse:
-        """Core write logic, invoked under the per-fact lock."""
+        """Core write logic, invoked under the per-fact lock.
+
+        Conflict detection:
+        - If ``expected_previous_version`` is set and mismatches →
+          returns ``conflict_detected`` with candidate summary.
+        - If no explicit version check but values differ for the same key,
+          records a conflict in the review queue and tags the fact
+          ``status="conflicted"``.
+        - ``honcho_conclusion`` sources default to ``pending_review``.
+        """
         lock = self._get_fact_lock(workspace_id, fact_key)
         with lock:
             # Read existing for optimistic concurrency
             existing = self.get_fact(workspace_id, fact_key)
 
-            # Optimistic concurrency check
-            if existing is not None:
-                if request.expected_previous_version is not None:
-                    if existing.version != request.expected_previous_version:
-                        return KnowledgeFactWriteResponse(key=fact_key, status="stale_rejected")
-                if request.expected_previous_updated_at is not None:
-                    if existing.updated_at != request.expected_previous_updated_at:
-                        return KnowledgeFactWriteResponse(key=fact_key, status="stale_rejected")
+            # ── Version-based conflict detection ───────────────────────────
+            if existing is not None and request.expected_previous_version is not None:
+                if existing.version != request.expected_previous_version:
+                    if _known_conflicts is not None and fact_key in _known_conflicts:
+                        # Skip duplicate conflict within batch
+                        pass  # fall through to normal write below
+                    else:
+                        conflict = KnowledgeConflict(
+                            key=fact_key,
+                            workspace_id=workspace_id,
+                            candidates=[
+                                {
+                                    "value": existing.value,
+                                    "source": existing.source.model_dump(),
+                                    "confidence": existing.confidence,
+                                    "version": existing.version,
+                                },
+                                {
+                                    "value": request.value,
+                                    "source": request.source.model_dump(),
+                                    "confidence": request.confidence,
+                                    "version": existing.version + 1,
+                                },
+                            ],
+                            requires_review=True,
+                        )
+                        # Persist conflict entry
+                        self.review_queue.add_conflict(workspace_id, fact_key, conflict)
+                        if _known_conflicts is not None:
+                            _known_conflicts.add(fact_key)
+                        return KnowledgeFactWriteResponse(
+                            key=fact_key,
+                            status="conflict_detected",
+                            conflict=conflict,
+                        )
 
-            # Unchanged check
+            # ── Timestamp-based concurrency check ──────────────────────────
+            if existing is not None and request.expected_previous_updated_at is not None:
+                if existing.updated_at != request.expected_previous_updated_at:
+                    return KnowledgeFactWriteResponse(key=fact_key, status="stale_rejected")
+
+            # ── Unchanged check ────────────────────────────────────────────
             if existing is not None and existing.value == request.value:
                 return KnowledgeFactWriteResponse(key=fact_key, status="unchanged", fact=existing)
 
+            # ── Value conflict detection (no explicit version check) ───────
+            value_conflict = False
+            if existing is not None and self._value_conflict_check(existing.value, request.value):
+                if _known_conflicts is not None and fact_key in _known_conflicts:
+                    value_conflict = True  # still tag the fact conflicted
+                else:
+                    value_conflict = True
+                    conflict = KnowledgeConflict(
+                        key=fact_key,
+                        workspace_id=workspace_id,
+                        candidates=[
+                            {
+                                "value": existing.value,
+                                "source": existing.source.model_dump(),
+                                "confidence": existing.confidence,
+                                "version": existing.version,
+                            },
+                            {
+                                "value": request.value,
+                                "source": request.source.model_dump(),
+                                "confidence": request.confidence,
+                                "version": existing.version + 1,
+                            },
+                        ],
+                        requires_review=True,
+                    )
+                    self.review_queue.add_conflict(workspace_id, fact_key, conflict)
+                    if _known_conflicts is not None:
+                        _known_conflicts.add(fact_key)
+
+            # ── Determine fact status ──────────────────────────────────────
+            fact_status: str = "active"
+            if request.source.type == "honcho_conclusion":
+                fact_status = "pending_review"
+            if value_conflict:
+                fact_status = "conflicted"
+
+            # ── Write the new fact ─────────────────────────────────────────
             now = datetime.now(tz=UTC)
             new_version = (existing.version + 1) if existing else 1
             fact = KnowledgeFact(
@@ -509,6 +778,7 @@ class WorkspaceFactStore:
                 created_at=existing.created_at if existing else now,
                 updated_at=now,
                 version=new_version,
+                status=fact_status,  # type: ignore[arg-type]
             )
 
             # Append-only history
@@ -530,3 +800,28 @@ class WorkspaceFactStore:
                 self._write_index(workspace_id, index)
 
             return KnowledgeFactWriteResponse(key=fact_key, status="written", fact=fact)
+
+    @staticmethod
+    def _value_conflict_check(old_value: Any, new_value: Any) -> bool:
+        """Return True when two values are materially different.
+
+        Uses simple structural comparison — dicts are compared over
+        shared keys only (extraneous keys added per-source are ignored),
+        lists are compared element-wise.
+        """
+        if type(old_value) is not type(new_value):
+            return True
+        if isinstance(old_value, dict):
+            shared = set(old_value.keys()) & set(new_value.keys())
+            for k in shared:
+                if WorkspaceFactStore._value_conflict_check(old_value[k], new_value[k]):
+                    return True
+            return False
+        if isinstance(old_value, (list, tuple)):
+            if len(old_value) != len(new_value):
+                return True
+            for a, b in zip(old_value, new_value, strict=True):
+                if a != b:
+                    return True
+            return False
+        return bool(old_value != new_value)

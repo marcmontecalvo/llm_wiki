@@ -1838,6 +1838,109 @@ def llm_wiki_facts_categories(as_json: bool) -> None:
                 click.echo(f"  {alias} → {canonical}")
 
 
+@facts.group()
+def review():
+    """Manage fact conflict review queue."""
+    pass
+
+
+@review.command("list")
+@click.option(
+    "--workspace",
+    default=None,
+    help="Workspace ID to filter conflicts.",
+)
+@click.option(
+    "--json", "as_json", is_flag=True, default=False, help="Output machine-parseable JSON."
+)
+def llm_wiki_facts_review_list(workspace: str | None, as_json: bool) -> None:
+    """List pending fact conflicts.
+
+    AC: 5
+    """
+    from llm_wiki.knowledge.review import ReviewQueue  # noqa: PLC0415
+    from llm_wiki.utils.context import resolve_wiki_base  # noqa: PLC0415
+
+    wiki_base = resolve_wiki_base(None)
+    qr = ReviewQueue(queue_dir=Path(wiki_base) / "workspaces")
+
+    if workspace:
+        conflicts = qr.list_conflicts(workspace)
+    else:
+        conflicts = qr.list_conflicts()
+
+    if as_json:
+        click.echo(json.dumps(conflicts, indent=2, default=str))
+    else:
+        if not conflicts:
+            click.echo("No pending conflicts.")
+            return
+        click.echo(f"Pending conflicts ({len(conflicts)}):")
+        for c in conflicts:
+            ws = c.get("workspace_id", "?")
+            key = c.get("key", "?")
+            ts = c.get("created_at", "?")[:19]
+            click.echo(f"  [{ts}] {ws}/{key}  ({len(c.get('candidates', []))} candidates)")
+
+
+@review.command("resolve")
+@click.argument("fact_key")
+@click.option(
+    "--choice",
+    required=True,
+    type=click.Choice(["canonical", "reject", "stale"], case_sensitive=False),
+    help="Resolution choice.",
+)
+@click.option(
+    "--index",
+    "candidate_index",
+    type=int,
+    default=None,
+    help="Index of the winning candidate (for canonical choice).",
+)
+@click.option(
+    "--workspace",
+    default=None,
+    help="Workspace ID.",
+)
+@click.option(
+    "--json", "as_json", is_flag=True, default=False, help="Output machine-parseable JSON."
+)
+def llm_wiki_facts_review_resolve(
+    fact_key: str,
+    choice: str,
+    candidate_index: int | None,
+    workspace: str | None,
+    as_json: bool,
+) -> None:
+    """Resolve a fact conflict.
+
+    AC: 6
+    """
+    from llm_wiki.knowledge.review import ReviewQueue  # noqa: PLC0415
+    from llm_wiki.utils.context import resolve_wiki_base  # noqa: PLC0415
+
+    if workspace is None:
+        click.echo("Error: --workspace is required", err=True)
+        return
+
+    wiki_base = resolve_wiki_base(None)
+    qr = ReviewQueue(queue_dir=Path(wiki_base) / "workspaces")
+
+    result = qr.resolve_conflict(workspace, fact_key, choice, candidate_index)  # type: ignore[arg-type]
+    error = result.get("error")
+    if error:
+        click.echo(f"Error: {error}", err=True)
+        return
+
+    if as_json:
+        click.echo(json.dumps(result, indent=2, default=str))
+    else:
+        click.echo(f"Conflict resolved: {fact_key}")
+        click.echo(f"  Choice: {result.get('resolution_choice')}")
+        click.echo(f"  Reolved at: {result.get('resolved_at')}")
+
+
 @main.group()
 def claims():
     """Extract and query factual claims from wiki pages."""
@@ -2728,12 +2831,12 @@ def changes_stats(wiki_base: Path):
 
 
 @main.group()
-def review():
+def content_review():
     """Manage the review queue."""
     pass
 
 
-@review.command("list")
+@content_review.command("list")
 @click.option(
     "--status",
     type=click.Choice(["pending", "approved", "rejected", "deferred"]),
@@ -2816,7 +2919,7 @@ def review_list(status: str, item_type: str | None, priority: str | None, wiki_b
         click.echo(f"\n... and {len(items) - 50} more items")
 
 
-@review.command("show")
+@content_review.command("show")
 @click.argument("item-id")
 @click.option(
     "--wiki-base",

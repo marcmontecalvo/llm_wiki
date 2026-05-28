@@ -223,7 +223,9 @@ class TestFactStoreCRUD:
                 expected_previous_version=99,
             ),
         )
-        assert result.status == "stale_rejected"
+        assert result.status == "conflict_detected"
+        assert result.conflict is not None
+        assert result.conflict.key == key
 
     def test_version_monotonicity(self, store, source):
         from llm_wiki.knowledge.models import KnowledgeFactWriteRequest

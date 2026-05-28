@@ -21,6 +21,7 @@ from llm_wiki.exceptions import (
 )
 from llm_wiki.knowledge.categories import get_categories_list
 from llm_wiki.knowledge.models import (
+    KnowledgeConflictResolutionRequest,
     KnowledgeFactWriteRequest,
     KnowledgeFactWriteResponse,
     KnowledgeListResponse,
@@ -184,3 +185,66 @@ async def get_fact_history(
     """
     history = await asyncio.to_thread(store.get_history, workspace_id, fact_key)
     return [f.model_dump() for f in history]
+
+
+# ── Conflict endpoints ────────────────────────────────────────────────────
+
+
+@router.get("/facts/conflicts")
+async def list_conflicts(
+    workspace_id: str,
+    store: Annotated[WorkspaceFactStore, Depends(get_knowledge_store)],
+) -> list[dict]:
+    """List unresolved conflicts for a workspace.
+
+    Returns workspace-scoped list of pending conflicts sorted by
+    timestamp descending.
+    (AC: 4, 8)
+    """
+    conflicts = await asyncio.to_thread(store.review_queue.list_conflicts, workspace_id)
+    return conflicts
+
+
+@router.post("/facts/{fact_key}/resolve")
+async def resolve_conflict(
+    workspace_id: str,
+    fact_key: str,
+    body: KnowledgeConflictResolutionRequest,
+    store: Annotated[WorkspaceFactStore, Depends(get_knowledge_store)],
+) -> dict:
+    """Resolve a fact conflict: apply the chosen candidate as a new fact version.
+
+    Args:
+        choice: One of ``canonical``, ``reject``, ``stale``.
+        candidate_index: Index of the winning candidate (for ``canonical``).
+
+    Returns:
+        Dict with conflict resolution result and applied fact.
+    (AC: 6, 8)
+    """
+    result = await asyncio.to_thread(
+        store.resolve_conflict,
+        workspace_id,
+        fact_key,
+        body.choice,
+        body.candidate_index,
+    )
+
+    error = result.get("error")
+    if error == "conflict_not_found":
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error_code": "CONFLICT_NOT_FOUND",
+                "message": f"No unresolved conflict found for fact '{fact_key}'",
+            },
+        )
+    if error == "INVALID_CANDIDATE_INDEX":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "INVALID_CANDIDATE_INDEX",
+                "message": f"candidate_index must be 0..{result['candidate_count'] - 1}",
+            },
+        )
+    return result

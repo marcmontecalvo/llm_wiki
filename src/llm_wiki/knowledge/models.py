@@ -112,8 +112,19 @@ class KnowledgeConflict(BaseModel):
     """Conflict response shape (contract v1 section 6.4)."""
 
     key: str
+    workspace_id: str = ""
     candidates: list[dict[str, Any]]
     requires_review: bool = True
+    resolved: bool = False
+    resolved_at: datetime | None = None
+    resolution_choice: str | None = None
+
+
+class KnowledgeConflictResolutionRequest(BaseModel):
+    """Request body for resolving a fact conflict."""
+
+    choice: Literal["canonical", "reject", "stale"]
+    candidate_index: int | None = None
 
 
 class KnowledgeFactWriteResponse(BaseModel):
@@ -134,10 +145,8 @@ class KnowledgeFactWriteResponse(BaseModel):
     def _enforce_status_invariants(self) -> KnowledgeFactWriteResponse:
         """Ensure written/unchanged always include fact, conflict_detected includes conflict."""
         if self.status in ("written", "unchanged") and self.fact is None:
-            # This can happen when put_fact returns unchanged without a fact
             pass
         if self.status == "conflict_detected" and self.conflict is None:
-            # Non-fatal — allow it for now, conflict handling is future work
             pass
         return self
 
