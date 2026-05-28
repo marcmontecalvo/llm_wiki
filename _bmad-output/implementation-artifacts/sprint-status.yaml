@@ -115,6 +115,6 @@ development_status:
   hf-2-fact-storage-history: complete  # artifact: hf-2-fact-storage-history.md | spec created: file-backed facts storage, atomic writes, append-only history, per-fact locks, startup integrity; 21 new tests + review fixes F1-F7
   hf-3-category-registry: review  # implementation-complete: canonical category registry module, REST endpoint, MCP tool, CLI command, storage refactor; 27 new tests + 1549 existing pass
   hf-4-fact-conflict-review: review  # implementation-complete: conflict detection (version+value), ReviewQueue module, REST/MCP/CLI interfaces, honcho_conclusion pending_review; 20 new tests, 1588 unit tests pass
-  hf-5-contract-test-harness: ready-for-dev  # artifact: hf-5-contract-test-harness.md | spec created: end-to-end contract tests for facts API, conflict, workspace isolation, category aliases, CI integration
+  hf-5-contract-test-harness: review  # implementation-complete: 31 contract tests (CRUD, conflicts, workspace isolation, category aliases, stability, MCP tools); all pass; pyproject.toml marker added
   hf-6-workspace-scoped-knowledge: ready-for-dev  # artifact: hf-6-workspace-scoped-knowledge.md | spec created: workspace-scoped query/search/pages/review/conflicts/export, domain-as-categorization enforcement
   hf-7-export-delete-for-homefront: ready-for-dev  # artifact: hf-7-export-delete-for-homefront.md | spec created: profile-scoped export/delete, provenance in export, tombstone for profile-private facts
