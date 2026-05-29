@@ -227,6 +227,11 @@ def create_app() -> FastAPI:
 
     app.include_router(_facts.router)
 
+    # Mount routers added in Epic HF (Workspace-scoped Knowledge)
+    from llm_wiki.api.routers import knowledge as _knowledge  # noqa: E303
+
+    app.include_router(_knowledge.router)
+
     # Legacy inline health check endpoint removed — use /v1/health and /v1/daemon/status instead
 
     return app

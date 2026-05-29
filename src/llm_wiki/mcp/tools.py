@@ -377,7 +377,9 @@ def register_tools(
             raise _handle_wiki_error(e) from e
 
     @server.tool()
-    async def read_page(page_id: str) -> dict:
+    async def read_page(
+        page_id: str,
+    ) -> dict:
         """Read a single page by ID.
 
         Args:
@@ -477,7 +479,9 @@ def register_tools(
             raise _handle_wiki_error(e) from e
 
     @server.tool()
-    async def export(fmt: str) -> dict:
+    async def export(
+        fmt: str,
+    ) -> dict:
         """Get an exported wiki artifact.
 
         Supported formats: 'llms-txt', 'llms-full-txt', 'json-ld'.
