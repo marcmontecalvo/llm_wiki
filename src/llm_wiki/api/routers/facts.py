@@ -13,13 +13,16 @@ import asyncio
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from llm_wiki.deps import get_knowledge_store
 from llm_wiki.exceptions import (
+    FactExportError,
     UnknownFactCategoryError,
 )
 from llm_wiki.knowledge.categories import get_categories_list
+from llm_wiki.knowledge.export import export_facts as _export_facts
+from llm_wiki.knowledge.export import tombstone_profile_facts as _tombstone
 from llm_wiki.knowledge.models import (
     KnowledgeConflictResolutionRequest,
     KnowledgeFactWriteRequest,
@@ -43,6 +46,67 @@ async def categories() -> dict:
     (AC: 3)
     """
     return get_categories_list()
+
+
+@router.get("/facts/export")
+async def export_facts(
+    workspace_id: str,
+    profile_id: Annotated[str | None, Query()] = None,
+    store: Annotated[WorkspaceFactStore, Depends(get_knowledge_store)] = None,  # noqa: B008
+) -> dict:
+    """Export facts for a workspace.
+
+    Without profile_id returns all active workspace-scoped facts.
+    With profile_id returns profile-private facts matching that profile.
+    (AC: 1-3)
+    """
+    try:
+        result = await asyncio.to_thread(
+            _export_facts,
+            lambda wid: list(store.list_facts(wid).facts),
+            lambda wid, k: store.get_fact(wid, k),
+            workspace_id,
+            profile_id=profile_id,
+        )
+        return result
+    except RuntimeError as e:
+        raise FactExportError(str(e)) from e
+
+
+@router.post("/facts/delete-by-profile")
+async def delete_by_profile(
+    workspace_id: str,
+    body: dict,
+    store: Annotated[WorkspaceFactStore, Depends(get_knowledge_store)],
+) -> dict:
+    """Tombstone profile-private facts for the given profile_id.
+
+    Shared workspace facts are not affected. (AC: 4)
+    """
+    pid = body.get("profile_id")
+    if not pid:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error_code": "INVALID_REQUEST",
+                "message": "Missing required field: profile_id",
+            },
+        )
+    # Validate workspace exists before attempting tombstone
+    index = await asyncio.to_thread(store._read_index, workspace_id)
+    if not index:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error_code": "WIKI_NOT_FOUND",
+                "message": f"Workspace not found: {workspace_id}",
+            },
+        )
+    try:
+        count = await asyncio.to_thread(_tombstone, store, workspace_id, pid)
+        return {"deleted_count": count, "profile_id": pid}
+    except RuntimeError as e:
+        raise FactExportError(str(e)) from e
 
 
 @router.get("/facts/{fact_key}")

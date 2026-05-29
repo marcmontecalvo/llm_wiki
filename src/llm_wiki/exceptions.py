@@ -18,6 +18,7 @@ __all__ = [
     "UnknownFactCategoryError",
     "UnknownFactKeyError",
     "FactConflictError",
+    "FactExportError",
 ]
 
 
@@ -91,3 +92,7 @@ class UnknownFactKeyError(WikiError):
 
 class FactConflictError(WikiError):
     """Raised when two authoritative sources conflict on the same fact."""
+
+
+class FactExportError(WikiError):
+    """Raised when a fact export operation fails due to corrupt or unreadable data."""

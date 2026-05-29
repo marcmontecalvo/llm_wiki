@@ -1,6 +1,6 @@
 # Story HF.7: Export/Delete for Homefront
 
-Status: backlog
+Status: done
 
 ## Story
 
@@ -26,32 +26,34 @@ so that profile data can be exported and deleted per Homefront's privacy contrac
 
 ## Tasks / Subtasks
 
-- [ ] Create export service (`src/llm_wiki/knowledge/export.py` — AC: 1–5)
-  - [ ] `export_facts(workspace_id: str, profile_id: str | None = None) -> dict`
-    - [ ] When `profile_id` given: filter to `visibility == "profile_private"` facts matching that profile (via `provenance[].source_id` == profile_id, or fact `value` containing a tracked profile reference)
-    - [ ] When `profile_id` not given: return all active facts for workspace
-    - [ ] Response includes `schema_version: "homefront-export-v1"`, `workspace_id`, `facts` list, `provenance` list
-    - [ ] Each fact entry includes `provenance` (source references for all facts/pages in export)
-  - [ ] `tombstone_profile_facts(workspace_id: str, profile_id: str) -> int`
-    - [ ] Finds all facts with `visibility == "profile_private"` AND matching the given profile_id (via `provenance[].source_id` == profile_id, or fact `value` containing a profile reference the application tracks)
-    - [ ] Sets `status: "deleted"` on each fact via existing `delete_fact()` method
-    - [ ] Returns count of tombstoned facts
-- [ ] Create REST export/delete routes (`src/llm_wiki/api/routers/facts.py` — AC: 1–5)
-  - [ ] `GET /v1/workspaces/{workspace_id}/facts/export` — workspace facts export (AC: 1)
-  - [ ] `GET /v1/workspaces/{workspace_id}/facts/export?profile_id=<pid>` — profile-scoped export (AC: 2, 3)
-  - [ ] `POST /v1/workspaces/{workspace_id}/facts/delete-by-profile` — body `{"profile_id": str}` → tombstones profile-private facts (AC: 4)
-  - [ ] Error handling: if workspace not found or export fails, raises `FactExportFailed` → HTTP 503 with clear message (AC: 5)
-  - [ ] Note: AC:6 (full Homefront bundle with honcho/homefront sections) is assembled by the caller (Homefront), not by this route.
-- [ ] Wire into FastAPI app
-  - [ ] `app.include_router` adds the export delete router
-- [ ] Write tests (`tests/unit/test_facts_export.py` — AC: 1–6)
-  - [ ] `test_export_workspace_returns_all_active_facts` — no profile_id → all active facts
-  - [ ] `test_export_with_profile_id_returns_only_private` — profile_id → only profile-private facts matching that profile (matched via provenance[] or value)
-  - [ ] `test_export_includes_schema_version` — response has `schema_version == "homefront-export-v1"`
-  - [ ] `test_export_includes_provenance` — each fact has provenance list
-  - [ ] `test_tombstone_profile_private_facts_only` — tombstone doesn't touch `visibility == "workspace"` facts
-  - [ ] `test_error_on_corrupt_data` — corrupted store → HTTP 503 with error code
-  - [ ] `test_full_homefront_export_bundle_structure` — export contains all top-level keys from contract v1 section 9.1
+- [x] Create export service (`src/llm_wiki/knowledge/export.py` — AC: 1–5)
+  - [x] `export_facts(workspace_id: str, profile_id: str | None = None) -> dict`
+    - [x] When `profile_id` given: filter to `visibility == "profile_private"` facts matching that profile (via `provenance[].source_id` == profile_id, or fact `value` containing a tracked profile reference)
+    - [x] When `profile_id` not given: return all active facts for workspace
+    - [x] Response includes `schema_version: "homefront-export-v1"`, `workspace_id`, `facts` list, `provenance` list
+    - [x] Each fact entry includes `provenance` (source references for all facts/pages in export)
+  - [x] `tombstone_profile_facts(workspace_id: str, profile_id: str) -> int`
+    - [x] Finds all facts with `visibility == "profile_private"` AND matching the given profile_id (via `provenance[].source_id` == profile_id, or fact `value` containing a profile reference the application tracks)
+    - [x] Sets `status: "deleted"` on each fact via existing `delete_fact()` method
+    - [x] Returns count of tombstoned facts
+- [x] Create REST export/delete routes (`src/llm_wiki/api/routers/facts.py` — AC: 1–5)
+  - [x] `GET /v1/workspaces/{workspace_id}/facts/export` — workspace facts export (AC: 1)
+  - [x] `GET /v1/workspaces/{workspace_id}/facts/export?profile_id=<pid>` — profile-scoped export (AC: 2, 3)
+  - [x] `POST /v1/workspaces/{workspace_id}/facts/delete-by-profile` — body `{"profile_id": str}` → tombstones profile-private facts (AC: 4)
+  - [x] Error handling: if workspace not found or export fails, raises `FactExportError` → HTTP 503 with clear message (AC: 5)
+  - [x] Note: AC:6 (full Homefront bundle with honcho/homefront sections) is assembled by the caller (Homefront), not by this route.
+- [x] Wire into FastAPI app
+  - [x] Routes wired into existing facts router (already mounted in app.py)
+- [x] Write tests (`tests/unit/test_facts_export.py` — AC: 1–6)
+  - [x] `test_export_workspace_returns_all_active_facts` — no profile_id → all active facts
+  - [x] `test_export_with_profile_id_returns_only_private` — profile_id → only profile-private facts matching that profile (matched via provenance[] or value)
+  - [x] `test_export_includes_schema_version` — response has `schema_version == "homefront-export-v1"`
+  - [x] `test_export_includes_provenance` — each fact has provenance list
+  - [x] `test_tombstone_profile_private_facts_only` — tombstone doesn't touch `visibility == "workspace"` facts
+  - [x] `test_error_on_corrupt_data` — corrupted store → HTTP 503 with error code
+  - [x] `test_full_homefront_export_bundle_structure` — export contains all top-level keys from contract v1 section 9.1
+  - [x] `test_deeply_nested_dict_value` — iterative BFS handles deeply nested dict values
+  - [x] `test_deeply_nested_list_value` — iterative BFS handles deeply nested list values
 
 ## Dev Notes
 
@@ -103,3 +105,35 @@ def get_provenance(workspace_id: str, fact_key: str) -> list[ProvenanceRef]:
         provenance.append(ref)
     return provenance
 ```
+
+## Dev Agent Record
+
+### Implementation Plan
+
+Implemented export and delete-as-sequence:
+1. Created `export.py` service with `export_facts()` and `tombstone_profile_facts()`.
+2. Added `FactExportError` exception (N818-compliant) mapped to HTTP 503/`FACT_EXPORT_FAILED`.
+3. Added `GET /facts/export` (before `{fact_key}` routes to avoid routing collision) and
+   `POST /facts/delete-by-profile` to the existing facts router.
+4. Routes delegate to service layer via `asyncio.to_thread()`.
+5. Wrote 16 unit tests covering all AC.
+
+### Completion Notes
+
+- AC1: `GET /facts/export` without profile_id returns workspace-scoped active facts.
+- AC2-3: `?profile_id=X` filters to profile_private facts matching via provenance.source_id or fact value.
+- AC4: `POST /facts/delete-by-profile` tombstones only profile_private facts for given profile_id.
+- AC5: RuntimeError from store → FactExportError → HTTP 503 with `FACT_EXPORT_FAILED`.
+- AC6: Full Homefront bundle (pages, honcho, homefront sections) remains caller's responsibility. Per story notes.
+- All 16 tests pass. Zero ruff errors. Full regression: 1627 passed, 1 pre-existing failure.
+- Code review fixes applied (2026-05-29):
+  1. **Pagination** — Added `list_all_facts()` to `WorkspaceFactStore`; replaced `list(store.list_facts(wid).facts)` with `store.list_all_facts(wid)` in tombstone so bulk operations see all facts, not just first page.
+  2. **Workspace check** — `delete_by_profile` route validates workspace existence via `_read_index()` before processing, returning 404 if missing.
+  3. **Race condition** — `tombstone_profile_facts()` acquires `store._get_workspace_lock(workspace_id)` before iterative delete to prevent concurrent mutations.
+  4. **Recursion depth** — `_fact_matches_profile()` rewritten `_search_value` as iterative BFS with explicit stack, handling arbitrarily nested dict/list values safely.
+  5. **Type hints** — `export_facts()` fields `list_facts_fn` and `get_fact_fn` typed as `Callable[[str], list[KnowledgeFact]]` and `Callable[[str, str], KnowledgeFact | None]`.
+
+### Change Log
+
+- Addressed story implementation - HF.7 export/delete (2026-05-29)
+- Addressed code review findings — 5 fixes: pagination via `list_all_facts()`, workspace check in delete-by-profile, WS lock in tombstone, iterative BFS, type annotations (2026-05-29) – Story status: done

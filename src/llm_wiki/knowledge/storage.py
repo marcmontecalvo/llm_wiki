@@ -313,6 +313,26 @@ class WorkspaceFactStore:
             total_hint=total_hint,
         )
 
+    def list_all_facts(
+        self, workspace_id: str, *, category: str | None = None
+    ) -> list[KnowledgeFact]:
+        """Return ALL active facts for a workspace (no pagination).
+
+        Used internally by export and tombstone operations where the full
+        fact set must be visible.  Prefer ``list_facts`` for API callers.
+        """
+        index = self._read_index(workspace_id)
+        if not index:
+            return []
+        facts: list[KnowledgeFact] = []
+        for key, meta in index.items():
+            if category and meta.get("category") != category:
+                continue
+            fact = self.get_fact(workspace_id, key)
+            if fact is not None:
+                facts.append(fact)
+        return facts
+
     def batch_put(
         self,
         workspace_id: str,

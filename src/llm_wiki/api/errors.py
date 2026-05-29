@@ -11,6 +11,7 @@ from llm_wiki.exceptions import (
     DomainUnknownError,
     ExportNotReadyError,
     FactConflictError,
+    FactExportError,
     IndexStaleError,
     IngestError,
     InvalidDepthError,
@@ -30,6 +31,7 @@ ERROR_MAP: dict[type, tuple[int, str]] = {
     UnknownFactCategoryError: (422, "UNKNOWN_KNOWLEDGE_CATEGORY"),
     UnknownFactKeyError: (404, "UNKNOWN_FACT_KEY"),
     FactConflictError: (409, "FACT_CONFLICT"),
+    FactExportError: (503, "FACT_EXPORT_FAILED"),
 }
 # QueryTimeoutError is intentionally absent — it is a normal response branch
 
@@ -172,6 +174,14 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(FactConflictError)
     async def fact_conflict_handler(request: Request, exc: FactConflictError) -> JSONResponse:
+        http_exc = wiki_error_to_http(exc)
+        return JSONResponse(
+            status_code=http_exc.status_code,
+            content=http_exc.detail,
+        )
+
+    @app.exception_handler(FactExportError)
+    async def fact_export_failed_handler(request: Request, exc: FactExportError) -> JSONResponse:
         http_exc = wiki_error_to_http(exc)
         return JSONResponse(
             status_code=http_exc.status_code,
