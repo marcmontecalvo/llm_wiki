@@ -51,8 +51,8 @@ async def categories() -> dict:
 @router.get("/facts/export")
 async def export_facts(
     workspace_id: str,
+    store: Annotated[WorkspaceFactStore, Depends(get_knowledge_store)],  # noqa: B008
     profile_id: Annotated[str | None, Query()] = None,
-    store: Annotated[WorkspaceFactStore, Depends(get_knowledge_store)] = None,  # noqa: B008
 ) -> dict:
     """Export facts for a workspace.
 

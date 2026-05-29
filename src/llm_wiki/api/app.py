@@ -132,6 +132,11 @@ async def lifespan(app: FastAPI):
 
     _sdk.shutdown()
 
+    # Close the pooled honcho detector client
+    from llm_wiki.honcho import shutdown_detector_client
+
+    shutdown_detector_client()
+
 
 def create_app() -> FastAPI:
     """Factory function to create the FastAPI application.
