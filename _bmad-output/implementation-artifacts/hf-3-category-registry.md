@@ -1,6 +1,6 @@
 # Story HF.3: Category Registry and Aliases
 
-Status: review
+Status: done
 
 ## Story
 
@@ -158,6 +158,7 @@ Storage layer delegates to the new `normalize_category()` function, wrapping `Un
 ### Change Log
 
 - Addressed code review findings - category registry extracted from storage.py into dedicated module; 27 tests pass; 1549/1552 existing tests pass (3 pre-existing failures) (Date: 2026-05-27)
+- Code review completed 2026-05-29 — all AC satisfied, 27 new tests pass, status updated to done
 
 ### Completion Notes
 

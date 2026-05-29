@@ -1,6 +1,6 @@
 # Story HF.1: Workspace Facts API Foundation
 
-Status: completed
+Status: done
 
 ## Story
 

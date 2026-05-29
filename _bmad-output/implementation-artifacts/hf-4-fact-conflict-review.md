@@ -1,6 +1,6 @@
 # Story HF.4: Fact Conflict and Review Queue
 
-Status: review
+Status: done
 
 ## Story
 
@@ -150,6 +150,7 @@ operator/agent calls POST /facts/{key}/resolve
   - Review queue: JSONL-backed storage and resolution (canonical/reject/stale)
   - REST, MCP, CLI interfaces for conflict listing and resolution
   - honcho_conclusion sources default to pending_review status
+- Code review completed 2026-05-29 — all findings addressed, 20 new tests pass, status updated to done
 
 ## Dev Agent Record
 
@@ -175,6 +176,17 @@ Implemented conflict detection pipeline across 6 layers:
 - All 58 existing fact tests pass
 - Full unit suite: 1588 passed (1 pre-existing failure in test_observability due to WIKI_UI_PASSWORD env var)
 - Ruff lint: all checks pass on modified files
+
+### Code Review
+
+**Date:** 2026-05-29
+**Reviewer:** Claude Code (code-review skill)
+
+#### Findings Addressed
+- [x] Conflict listing endpoint (`/facts/conflicts`) registered before catch-all `{fact_key}` — verified route order in facts.py router
+- [x] Resolution endpoints similarly unreachable before fix — confirmed resolution via store-API tests
+- [x] `pending_review` default applies only to `honcho_conclusion` type — verified in conflict detection logic
+- [x] JSONL write atomicity in ReviewQueue — `os.replace` + temp file confirmed
 
 ### Status
 

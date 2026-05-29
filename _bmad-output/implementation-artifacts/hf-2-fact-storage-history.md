@@ -1,6 +1,6 @@
 # Story HF.2: Workspace Fact Storage and History
 
-Status: backlog
+Status: done
 
 ## Story
 

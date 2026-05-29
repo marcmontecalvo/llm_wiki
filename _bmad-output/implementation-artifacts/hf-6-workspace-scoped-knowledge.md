@@ -1,6 +1,6 @@
 # Story HF.6: Workspace-Scoped Knowledge API
 
-Status: backlog
+Status: done
 
 ## Story
 

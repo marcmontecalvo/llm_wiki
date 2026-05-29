@@ -1,6 +1,6 @@
 # Story HF.5: Homefront Contract Test Harness
 
-Status: review
+Status: done
 
 ## Story
 
@@ -100,8 +100,20 @@ All 31 contract tests pass (100%). Full test suite: 1777 passed, 2 pre-existing 
 - `tests/contract/test_homefront_facts_api.py` — created, 31 test functions
 - `pyproject.toml` — added `contract` pytest marker
 
+### Code Review
+
+**Date:** 2026-05-29
+**Reviewer:** Claude Code (code-review skill)
+
+#### Findings Addressed
+- [x] Mock factory returns deterministic dates (not `datetime.now()` in test fixtures) — confirmed test fixtures use fixed timestamps
+- [x] Routing conflict: `/facts/categories` before catch-all `{fact_key}` — verified correct route ordering in facts router
+- [x] Category quantification negative test: `household.nonexistent` should NOT normalize successfully — confirmed in test
+- [x] `test_put_fact_already_exists` validates conflict detection against confusable store — confirmed test works via store-internal injection
+
 ## Change Log
 - Created contract test harness for Homefront facts API — 31 tests covering CRUD, conflicts, workspace isolation, category aliases, stability, and MCP tools (2026-05-28)
+- Code review completed 2026-05-29 — all findings addressed, 31/31 contract tests pass, status updated to done
 
 ## Dev Notes
 

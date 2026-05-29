@@ -37,7 +37,7 @@
 generated: "2026-05-17"
 last_updated: "2026-05-27"
 last_updated_epic-h: "2026-05-25"
-last_updated_epic-hf: "2026-05-27"
+last_updated_epic-hf: "2026-05-29"
 last_updated_2-1-claim-trust-tagging-at-ingest: "2026-05-21"
 last_updated_1-10-auto-init-wiki-on-first-start: "2026-05-19"
 project: llm_wiki
@@ -110,11 +110,11 @@ development_status:
   last_updated_epic-h: "2026-05-25"
 
   # ─── Epic HF: Homefront Integration — Deterministic Workspace Facts ────
-  epic-hf: backlog
-  hf-1-workspace-facts-api: done  # artifact: hf-1-workspace-facts-api.md | spec created: facts API CRUD (REST + MCP), workspace_id scoping, workspace isolation, category aliases; 36 tests passing API CRUD (REST + MCP), workspace_id scoping, (workspace_id/scoping, fact_key, Works, workspace isolation, category aliases
-  hf-2-fact-storage-history: complete  # artifact: hf-2-fact-storage-history.md | spec created: file-backed facts storage, atomic writes, append-only history, per-fact locks, startup integrity; 21 new tests + review fixes F1-F7
-  hf-3-category-registry: review  # implementation-complete: canonical category registry module, REST endpoint, MCP tool, CLI command, storage refactor; 27 new tests + 1549 existing pass
-  hf-4-fact-conflict-review: review  # implementation-complete: conflict detection (version+value), ReviewQueue module, REST/MCP/CLI interfaces, honcho_conclusion pending_review; 20 new tests, 1588 unit tests pass
-  hf-5-contract-test-harness: review  # implementation-complete: 31 contract tests (CRUD, conflicts, workspace isolation, category aliases, stability, MCP tools); all pass; pyproject.toml marker added
-  hf-6-workspace-scoped-knowledge: ready-for-dev  # artifact: hf-6-workspace-scoped-knowledge.md | spec created: workspace-scoped query/search/pages/review/conflicts/export, domain-as-categorization enforcement
-  hf-7-export-delete-for-homefront: ready-for-dev  # artifact: hf-7-export-delete-for-homefront.md | spec created: profile-scoped export/delete, provenance in export, tombstone for profile-private facts
+  epic-hf: done
+  hf-1-workspace-facts-api: done  # artifact: hf-1-workspace-facts-api.md | implementation-complete: WorkspaceFactStore class, REST CRUD API, MCP tool registration, workspace_id scoping, atomic writes, history tracking; 36 tests
+  hf-2-fact-storage-history: done  # artifact: hf-2-fact-storage-history.md | implementation-complete: file-backed storage, JSONL append-only history, atomic writes (temp+os.replace), per-fact locks, startup integrity check; 21 tests + review fixes F1-F7
+  hf-3-category-registry: done  # implementation-complete: canonical category registry module, REST endpoint, MCP tool, CLI command, storage refactor; 27 new tests + 1549 existing pass; code review completed 2026-05-29
+  hf-4-fact-conflict-review: done  # implementation-complete: conflict detection (version+value), ReviewQueue module, REST/MCP/CLI interfaces, honcho_conclusion pending_review; 20 new tests, 1588 unit tests pass
+  hf-5-contract-test-harness: done  # implementation-complete: 31 contract tests (CRUD, conflicts, workspace isolation, category aliases, stability, MCP tools); all pass; pyproject.toml marker added
+  hf-6-workspace-scoped-knowledge: done  # artifact: hf-6-workspace-scoped-knowledge.md | implementation-complete: workspace-scoped query/search/pages/review/conflicts/export/stale endpoints, _scope_pages_by_workspace, WorkspaceKnowledgeService, KnowledgeService; 13 tests
+  hf-7-export-delete-for-homefront: done  # artifact: hf-7-export-delete-for-homefront.md | implementation-complete: export_facts with provenance, tombstone_profile_facts, profile-scoped delete, REST endpoints under /facts/export and /facts/delete-by-profile; 12 honcho tests + 1633 unit tests pass
