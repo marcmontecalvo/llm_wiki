@@ -230,7 +230,11 @@ class WikiDaemon:
             self.scheduler.add_job(
                 func=run_honcho_push_job,
                 job_name="honcho_push",
-                interval_seconds=self.config.daemon.daemon.export_every_minutes * 60,
+                interval_seconds=(
+                    self.config.daemon.daemon.export_every_minutes
+                    + self.config.daemon.daemon.honcho_push_offset_minutes
+                )
+                * 60,
                 wiki_base=wiki_base,
                 honcho_base_url=os.environ.get("HONCHO_URL"),
                 honcho_workspace_id=honcho_cfg.workspace_id,

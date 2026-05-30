@@ -6,6 +6,7 @@ daemon:
   lint_every_minutes: 60
   stale_check_every_hours: 24
   export_every_minutes: 60
+  honcho_push_offset_minutes: 5
   duplicates_check_every_hours: 24
   review_queue_every_minutes: 60
   review_queue_min_page_quality: 0.4
@@ -27,6 +28,9 @@ daemon:
     llm_extraction: false
     synthesis_cache: false
     cross_domain_promotion: false
+    honcho_push: true
+    webui_enabled: true
+    tui_enabled: true
 
 duplicates:
   enabled: true

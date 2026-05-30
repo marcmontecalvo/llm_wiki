@@ -287,6 +287,37 @@ Rough estimates at steady state:
 | `wiki_system/exports/` | Generated exports | ~2MB per 1,000 pages |
 | `sentence-transformers` model | `all-MiniLM-L6-v2` | ~80MB (one-time download) |
 
+## Multi-container deployment (Honcho + LLM-Wiki)
+
+When running Honcho and LLM-Wiki as separate containers, they communicate over Docker's default bridge network. Each component is independently deployable and the wiki works perfectly without Honcho.
+
+### Environment variables for integration
+
+| Variable | Purpose | Required if |
+|----------|---------|-------------|
+| `HONCHO_URL` | Base URL for the Honcho service (e.g. `http://honcho:8000`) | Honcho is in a separate container |
+| `WIKI_HONCHO_PUSH: true` | Enables the daemon job that pushes wiki exports to Honcho | You want auto-sync |
+| `HONCHO_API_KEY` | API key passed as `Authorization: Bearer` header when pushing to remote Honcho | Remote push with auth |
+
+### How it works
+
+1. **Export job** runs every 60 minutes and writes `llms.txt` + `graph.json` to `wiki_system/exports/`
+2. **Honcho push job** runs 5 minutes after export (configurable via `honcho_push_offset_minutes`) and reads those files
+3. Push is HTTP POST to `{push_url}/v1/honcho/wiki-bundle` (remote mode) or honcho SDK (local mode)
+
+### Network topology
+
+```
+[Docker network "default"]
+  honcho:8000 <-- HTTP POST --> llm-wiki:3050
+  llm-wiki:3050 <-- HTTP GET --> honcho:8000 (/health)
+```
+
+The wiki can run standalone — without Honcho configured:
+- `/v1/honcho/status` returns `available: false` (no error)
+- Honcho push daemon job logs `"skipped"` and continues
+- All wiki, MCP, and facts API functionality works independently
+
 ## Security Notes
 
 - **No authentication by default** — the daemon is local-only, binds to `0.0.0.0` inside the container with port exposure controlled by docker-compose. For network exposure, use a reverse proxy with TLS or tunnel via Tailscale/SSH.

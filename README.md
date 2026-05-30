@@ -18,13 +18,14 @@ Honcho answers "what were we just talking about?" — LLM Wiki answers "what do 
 
 ## Quick start
 
-### Docker (recommended)
+### Docker (standalone wiki only)
 
 ```bash
-# Build and start the full stack
-docker-compose up --build -d
+# Build and start the wiki container
+# WIKI_UI_PASSWORD is required — omit for auto-generation or set explicitly
+WIKI_UI_PASSWORD=wikitest2026 docker-compose up --build -d
 
-# Wait for both services to become healthy
+# Wait for the service to become healthy
 until curl -sf http://localhost:3050/v1/health; do sleep 2; done
 
 # Point your MCP client at:
@@ -42,6 +43,63 @@ Before first use, ensure `wiki_system` is owned by uid 1000:
 ```bash
 mkdir -p wiki_system && sudo chown -R 1000:1000 wiki_system
 ```
+
+### Docker (all three services)
+
+Each component runs in its own container and connects over a shared Docker network:
+
+```yaml
+# docker-compose.combined.yml
+version: "3.9"
+services:
+  honcho:
+    image: ${HONCHO_IMAGE:-honcho:latest}
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - honcho_data:/app/data
+    restart: unless-stopped
+
+  llm-wiki:
+    build: .
+    ports:
+      - "127.0.0.1:3050:3050"
+    volumes:
+      - wiki_data:/wiki_system
+      - ./config:/config:ro
+    environment:
+      WIKI_UI_PASSWORD: ${WIKI_UI_PASSWORD:-wikitest2026}
+      HONCHO_URL: http://honcho:8000
+      WIKI_HONCHO_PUSH: true
+    depends_on:
+      - honcho
+    restart: unless-stopped
+
+  homefront:
+    image: ${HOMEFRONT_IMAGE:-homefront:latest}
+    ports:
+      - "127.0.0.1:80:80"
+    volumes:
+      - homefront_data:/app/data
+    environment:
+      HOMEFRONT_BASE_URL: http://localhost
+    depends_on:
+      - honcho
+      - llm-wiki
+    restart: unless-stopped
+
+volumes:
+  honcho_data:
+  wiki_data:
+  homefront_data:
+```
+
+In this setup:
+- **Honcho** (`:8000`) — Conversational memory, peer representations, session context
+- **LLM-Wiki** (`:3050`) — MCP and REST endpoints (Homefront facts API + honcho push)
+- **Homefront** (`:80`) — agent harness consuming wiki facts and honcho memory
+
+The `HONCHO_URL` env var tells the wiki where to reach Honcho (the docker-compose service name `honcho` resolves via the shared network). `WIKI_HONCHO_PUSH=true` enables the daemon job that pushes wiki exports into Honcho sessions.
 
 ### Local development
 
@@ -130,7 +188,7 @@ extraction:
   base_url: null             # null = provider default; set for openrouter or local vLLM
 ```
 
-## Multi-user households
+## Multi-user workspaces
 
 Domains carry a `scope` field:
 
@@ -160,7 +218,7 @@ Queries default to household + the requesting user's personal domain merged. Pas
 | Staleness      | 24h      | Flag outdated pages                               |
 | Duplicates     | 24h      | Near-duplicate detection                          |
 | Promotion      | 24h      | Score pages for cross-domain promotion            |
-| Honcho push    | 60min* | Push wiki export bundle to Honcho (if `honcho_push: true`) |
+| Honcho push    | 65min* | Push wiki export bundle to Honcho (runs 5min after export job; requires `honcho_push: true`) |
 
 ## Configuration files
 

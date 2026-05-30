@@ -221,6 +221,9 @@ class DaemonConfig(BaseModel):
     review_queue_max_pending: int = Field(
         default=1000, ge=1, description="Maximum pending items in review queue"
     )
+    honcho_push_offset_minutes: int = Field(
+        default=5, ge=1, description="Minutes delay after export before honcho push runs"
+    )
     review_queue_retention_days: int = Field(
         default=30, ge=1, description="Days to keep resolved review items"
     )
